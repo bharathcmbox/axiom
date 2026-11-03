@@ -1,4 +1,4 @@
-.PHONY: db up down logs test lint fmt migrate seed smoke
+.PHONY: db up down logs test lint fmt migrate seed smoke demo-restart
 
 db:
 	docker compose up -d --wait db
@@ -32,3 +32,6 @@ seed: migrate
 
 smoke:
 	scripts/compose_smoke.sh
+
+demo-restart: up
+	scripts/demo_restart.sh
