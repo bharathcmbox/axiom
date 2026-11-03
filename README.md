@@ -38,6 +38,7 @@ Configuration is through environment variables (`AXIOM_*`, see `src/axiom/config
 
 ## Documentation
 
+- **[docs/guide/](docs/guide/README.md): start here to learn how Axiom is built and how it works (10 chapters, about 60 diagrams)**
 - [SPEC.md](SPEC.md): what Axiom is and the phases
 - [docs/state-machines.md](docs/state-machines.md): task and execution state machines (diagrams + tables)
 - [docs/architecture.md](docs/architecture.md): components, command pattern, concurrency, recovery

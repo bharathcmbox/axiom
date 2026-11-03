@@ -146,15 +146,16 @@ around $200/month for the prototype.
    event log, REST API, Docker Compose, tests. *Exit:* drive tasks through every state by hand;
    kill and restart; state intact.
 2. **First worker.** Claude Code runtime adapter, worktree + container per execution, result
-   contract, PR creation, GitHub integration (Issues mirror), budget cap. *Exit:* one real task
-   goes from READY to an open PR with no human input.
+   contract, PR creation, GitHub integration (Issues mirror), budget cap. Target: a small,
+   well-scoped task in the Agentic SOC repository (ADR-006). *Exit:* one real task goes from
+   READY to an open PR with no human input.
 3. **Quality organization.** QA, security and code reviewers; review contracts; changes-requested
    loop; CI results; human merge approval. *Exit:* a deliberately buggy task is caught and sent back.
 4. **Engineering management.** Spec decomposition with human approval, automatic assignment,
    cost accounting, dashboard (Streamlit) and daily report. *Exit:* a multi-task spec delivered
    end to end.
-5. **Scale and diversify.** Codex runtime (cross-model review), more developers, Agentic SOC as
-   the first real customer project, continuous operation.
+5. **Scale and diversify.** Codex runtime (cross-model review), more developers, Agentic SOC
+   delivered end to end, continuous operation.
 
 ## 11. Out of scope for now
 
