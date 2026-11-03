@@ -39,3 +39,7 @@ class LeaseExpired(AxiomError):
 
 class LeaseNotExpired(AxiomError):
     """time_out was requested for an execution whose lease is still live."""
+
+
+class NoActiveExecution(AxiomError):
+    """The task has no active execution (e.g. heartbeat on a task that is not executing)."""

@@ -12,7 +12,7 @@ from psycopg.types.json import Jsonb
 
 from axiom.config import get_settings
 from axiom.domain import execution_machine as em
-from axiom.domain.roles import Actor, ActorKind
+from axiom.domain.roles import Actor, ActorKind, Role
 from axiom.domain.task_machine import (
     EXECUTING_STATES,
     TaskCommand,
@@ -36,6 +36,7 @@ from axiom.registry.agents import Agent, get_agent
 from axiom.state.db import Conn
 
 SYSTEM_DEPENDENCIES = Actor(ActorKind.SYSTEM, "dependencies")
+DEVELOPER_CAP_LOCK_ID = 7_351_002  # advisory lock guarding the global developer cap
 
 
 def apply_command(
@@ -183,7 +184,30 @@ def _resolve_assignee(
         raise AssignmentRejected(
             f"agent {key} is a {agent.role}; task {row['key']} needs a {row['assigned_role']}"
         )
+    if _active_executions(conn, agent_id=agent.id) >= agent.max_concurrent:
+        raise AssignmentRejected(
+            f"agent {key} is at capacity ({agent.max_concurrent} active executions)"
+        )
+    if agent.role == Role.DEVELOPER:
+        # Serialize developer assignments so the global cap holds under concurrency. Lock order
+        # everywhere: task row -> agent row -> this advisory lock.
+        conn.execute("SELECT pg_advisory_xact_lock(%s)", (DEVELOPER_CAP_LOCK_ID,))
+        cap = get_settings().max_concurrent_developers
+        if _active_executions(conn, role=Role.DEVELOPER) >= cap:
+            raise AssignmentRejected(f"global cap reached: {cap} developers already active")
     return agent
+
+
+def _active_executions(conn: Conn, *, agent_id: int | None = None, role: Role | None = None) -> int:
+    row = conn.execute(
+        """SELECT count(*) AS n FROM executions e JOIN agents a ON a.id = e.agent_id
+           WHERE e.status IN ('STARTING', 'RUNNING')
+             AND (%(agent)s::bigint IS NULL OR e.agent_id = %(agent)s)
+             AND (%(role)s::text IS NULL OR a.role = %(role)s)""",
+        {"agent": agent_id, "role": role},
+    ).fetchone()
+    assert row is not None
+    return int(row["n"])
 
 
 def _create_execution(conn: Conn, task_id: int, agent_id: int, lease_seconds: int) -> int:

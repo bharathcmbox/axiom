@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # Lease granted on claim/assign/start and extended by heartbeats. Generous by default so
     # tasks can be driven by hand with curl in Phase 1.
     lease_seconds: int = 300
+    # How often the reaper looks for expired leases.
+    reaper_interval_seconds: float = 5.0
+    # Global cap on concurrently active developer executions (SPEC: 2 concurrent developers).
+    max_concurrent_developers: int = 2
 
 
 @lru_cache

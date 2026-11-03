@@ -6,6 +6,7 @@ integration test and once at application startup.
 
 from collections import defaultdict
 
+from axiom.config import get_settings
 from axiom.domain.task_machine import EXECUTING_STATES, TaskState
 from axiom.state.db import Conn
 
@@ -103,4 +104,11 @@ def _agent_assignments(conn: Conn) -> list[str]:
         out.append(
             f"{r['key']}: executed by {r['agent']} ({r['role']}), needs {r['assigned_role']}"
         )
+    cap = get_settings().max_concurrent_developers
+    row = conn.execute(
+        """SELECT count(*) AS n FROM executions e JOIN agents a ON a.id = e.agent_id
+           WHERE e.status IN ('STARTING', 'RUNNING') AND a.role = 'developer'"""
+    ).fetchone()
+    if row is not None and row["n"] > cap:
+        out.append(f"{row['n']} active developer executions > global cap {cap}")
     return out
