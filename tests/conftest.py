@@ -11,7 +11,11 @@ import pytest
 
 from axiom.config import get_settings
 from axiom.domain.roles import Actor, ActorKind
+from axiom.registry.agents import seed_agents
+from axiom.registry.projects import create_project
+from axiom.registry.seed import DEFAULT_CONFIG
 from axiom.state.db import Conn, connect
+from axiom.state.invariants import check_invariants
 from axiom.state.migrate import migrate
 
 APP_TABLES = ("events", "executions", "task_dependencies", "tasks", "agents", "projects")
@@ -55,11 +59,24 @@ def conn(db_url: str) -> Iterator[psycopg.Connection]:
 
 @pytest.fixture
 def db(db_url: str) -> Iterator[Conn]:
-    """Dict-row autocommit connection, as used by the services."""
+    """Dict-row autocommit connection, as used by the services.
+
+    On teardown, asserts the cross-table invariants still hold.
+    """
     with connect(db_url) as c:
         yield c
+    with connect(db_url) as c:
+        assert check_invariants(c) == []
 
 
 @pytest.fixture
 def human() -> Actor:
     return Actor(ActorKind.HUMAN, "tester")
+
+
+@pytest.fixture
+def org(db: Conn, human: Actor) -> Conn:
+    """Project AX plus the 7-agent organization from config/agents.toml."""
+    create_project(db, human, key="AX", name="Axiom")
+    seed_agents(db, human, DEFAULT_CONFIG)
+    return db

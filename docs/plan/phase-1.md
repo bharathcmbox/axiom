@@ -1,6 +1,7 @@
 # Phase 1 plan — control plane skeleton
 
-Status: **approved 2026-11-02**. Source: the original ChatGPT design conversation, distilled into
+Status: **approved 2026-11-02**. Revised during T4: execution side effects moved from T5 into T4
+(needed to reach every state through real commands); T5 keeps caps, heartbeats and the reaper. Source: the original ChatGPT design conversation, distilled into
 [SPEC.md](../../SPEC.md). State machine diagrams: [docs/state-machines.md](../state-machines.md).
 
 Scope: control plane only. No worker runtimes, no LLM calls, no GitHub integration.
@@ -76,8 +77,8 @@ Every task ends with `make lint && make test` (results shown) and one commit.
 | T1 Schema | `migrate.py`, `0001_init.sql` | Applies to empty DB; rerun is a no-op; constraints hold | rerun no-op; lease on ended execution rejected; second active execution per task rejected; UPDATE/DELETE on `events` raises |
 | T2 State tables | `task_machine.py`, `execution_machine.py` | Match docs/state-machines.md exactly | every (command × state) pair checked; terminal states have no exits; cancel from every non-terminal; every state reachable |
 | T3 Registry | projects + agents services, 7-agent seed config | Register/list/enable/disable agents; create projects; events written | CRUD; duplicate key rejected; invalid role/runtime rejected; event written |
-| T4 Command engine + dependencies | `apply_command`, event log, non-execution commands | Atomic; one event per hop; illegal commands write nothing | one test per legal row, one per illegal pair (generated from table); forced event-insert failure rolls back; dependency promotion; cancelled dependency keeps task PENDING |
-| T5 Assignment, executions, leases | claim/assign, start, submit, ask_human, fail, heartbeat, reaper, retry counting | Exclusive claims; role/concurrency/global caps; lease expiry → retry or FAILED | 10 threads × 3 tasks never double-claim; role mismatch rejected; third developer rejected; heartbeat extends; wrong agent rejected; timeout → READY, at limit → FAILED; reaper idempotent |
+| T4 Command engine + dependencies | `apply_command`, event log, all 15 commands incl. execution side effects, owner and lease-live guards, basic `claim_next`, `check_invariants` | Atomic; one event per hop; illegal commands write nothing | one test per legal row, one per illegal pair, one per wrong actor kind (generated from table); forced event-insert failure rolls back; dependency promotion incl. concurrent merges; cancelled dependency keeps task PENDING; invariant checker detects corruption |
+| T5 Concurrency, leases, reaper | per-agent and global developer caps, heartbeat, reaper loop | Exclusive claims under contention; caps hold under contention; lease expiry → retry or FAILED | 10 threads × 3 tasks never double-claim; third developer rejected; heartbeat extends; heartbeat by wrong agent / after expiry rejected; reaper times out only expired leases; reaper idempotent |
 | T6 REST API | routes, schemas, error mapping, OpenAPI | Every command drivable over HTTP | PENDING→DONE over HTTP; illegal → 409 with allowed commands, state unchanged; malformed → 422; events endpoint matches path |
 | T7 Compose | Dockerfile, `api` service, reaper in lifespan, `compose_smoke.sh` | Clean checkout → `docker compose up` → `/healthz` 200 | script: clone to temp → up → health → create task → down -v |
 | T8 Restart durability | `demo_restart.sh` | Tasks in many states + one in-flight execution survive SIGKILL of api and db; snapshots identical; orphaned execution times out and retries | before/after diff of tasks, executions, events; pytest that rebuilds app + pool |
