@@ -1,0 +1,22 @@
+.PHONY: db up down test lint fmt migrate
+
+db:
+	docker compose up -d --wait db
+
+up:
+	docker compose up -d --build --wait
+
+down:
+	docker compose down
+
+test: db
+	uv run pytest
+
+lint:
+	uv run ruff check .
+	uv run ruff format --check .
+	uv run mypy
+
+fmt:
+	uv run ruff format .
+	uv run ruff check --fix .
