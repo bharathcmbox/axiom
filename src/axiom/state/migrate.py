@@ -8,8 +8,10 @@ concurrent starters (several API processes, tests) cannot apply the same migrati
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import psycopg
+from psycopg.rows import tuple_row
 
 from axiom.config import get_settings
 
@@ -36,7 +38,7 @@ def discover(migrations_dir: Path) -> list[Path]:
     return files
 
 
-def migrate(conn: psycopg.Connection, migrations_dir: Path | None = None) -> list[str]:
+def migrate(conn: psycopg.Connection[Any], migrations_dir: Path | None = None) -> list[str]:
     """Apply pending migrations. Returns the names applied (empty when up to date)."""
     files = discover(migrations_dir or default_migrations_dir())
     applied_now: list[str] = []
@@ -48,7 +50,8 @@ def migrate(conn: psycopg.Connection, migrations_dir: Path | None = None) -> lis
                  applied_at timestamptz NOT NULL DEFAULT now()
                )"""
         )
-        done = {row[0] for row in conn.execute("SELECT name FROM schema_migrations")}
+        with conn.cursor(row_factory=tuple_row) as cur:  # works for any connection row type
+            done = {row[0] for row in cur.execute("SELECT name FROM schema_migrations")}
         for path in files:
             name = path.stem
             if name in done:

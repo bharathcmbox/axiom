@@ -142,3 +142,11 @@ def test_events_are_append_only(conn: psycopg.Connection) -> None:
     with pytest.raises(errors.RaiseException, match="append-only"):
         conn.execute("DELETE FROM events")
     assert conn.execute("SELECT type FROM events").fetchall() == [("TEST",)]
+
+
+def test_migrate_accepts_dict_row_connections(db_url: str) -> None:
+    """Regression: the app passes dict-row connections; migrate must not index rows by [0]."""
+    from axiom.state.db import connect
+
+    with connect(db_url) as c:
+        assert migrate(c) == []

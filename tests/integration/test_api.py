@@ -1,0 +1,212 @@
+"""T6: the REST API drives everything; domain errors map to the right HTTP status."""
+
+from collections.abc import Iterator
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from axiom.api.app import create_app
+from axiom.config import Settings
+from axiom.state.db import Conn
+
+H = {"X-Axiom-Actor": "human:bharath"}
+DEV1 = {"X-Axiom-Actor": "agent:DEV-01"}
+DEV2 = {"X-Axiom-Actor": "agent:DEV-02"}
+
+
+@pytest.fixture
+def client(org: Conn, db_url: str) -> Iterator[TestClient]:
+    """API over the test DB, with project AX and the 7 seeded agents already present."""
+    app = create_app(Settings(database_url=db_url), start_reaper=False)
+    with TestClient(app) as c:
+        yield c
+
+
+def _task(client: TestClient, **overrides: Any) -> dict[str, Any]:
+    body = {"title": "Implement POST /alerts", "specification": "spec"} | overrides
+    r = client.post("/projects/AX/tasks", json=body, headers=H)
+    assert r.status_code == 201, r.text
+    return dict(r.json())
+
+
+def _cmd(client: TestClient, key: str, command: str, headers: dict[str, str], **body: Any) -> Any:
+    return client.post(f"/tasks/{key}/commands/{command}", json=body, headers=headers)
+
+
+def test_healthz_and_invariants(client: TestClient) -> None:
+    assert client.get("/healthz").json() == {"status": "ok", "database": "ok"}
+    assert client.get("/invariants").json() == {"violations": []}
+
+
+def test_openapi_lists_the_routes(client: TestClient) -> None:
+    paths = client.get("/openapi.json").json()["paths"]
+    assert {"/claims", "/tasks/{key}/commands/{command}", "/tasks/{key}/heartbeat"} <= set(paths)
+
+
+# ---- projects and agents --------------------------------------------------------------------
+
+
+def test_projects(client: TestClient) -> None:
+    r = client.post("/projects", json={"key": "SOC", "name": "Agentic SOC"}, headers=H)
+    assert r.status_code == 201 and r.json()["key"] == "SOC"
+    assert client.post("/projects", json={"key": "SOC", "name": "x"}, headers=H).status_code == 409
+    r = client.post("/projects", json={"key": "bad key", "name": "x"}, headers=H)
+    assert (r.status_code, r.json()["error"]) == (422, "invalid_input")
+    assert [p["key"] for p in client.get("/projects").json()] == ["AX", "SOC"]
+    assert client.get("/projects/NOPE").status_code == 404
+
+
+def test_agents(client: TestClient) -> None:
+    assert len(client.get("/agents").json()) == 7
+    assert [a["key"] for a in client.get("/agents", params={"role": "developer"}).json()] == [
+        "DEV-01", "DEV-02",
+    ]  # fmt: skip
+    r = client.post(
+        "/agents", json={"key": "REV-02", "role": "code_reviewer", "runtime": "codex"}, headers=H
+    )
+    assert r.status_code == 201 and r.json()["runtime"] == "codex"
+    bad = {"key": "X-01", "role": "cto", "runtime": "codex"}
+    assert client.post("/agents", json=bad, headers=H).status_code == 422
+    assert client.post("/agents/DEV-02/disable", headers=H).json()["enabled"] is False
+    assert client.post("/agents/DEV-02/enable", headers=H).json()["enabled"] is True
+    assert client.get("/agents/NOPE-01").status_code == 404
+
+
+# ---- the whole lifecycle over HTTP ----------------------------------------------------------
+
+
+def test_full_lifecycle_over_http(client: TestClient) -> None:
+    dep = _task(client, title="dependency", priority="P1")
+    task = _task(client, dependencies=[dep["key"]], acceptance_criteria=["returns 201"])
+    assert (dep["state"], task["state"]) == ("READY", "PENDING")
+
+    r = client.post("/claims", headers=DEV1)
+    assert r.status_code == 200 and r.json()["key"] == dep["key"]
+    assert r.json()["state"] == "ASSIGNED"
+    assert client.post("/claims", headers=DEV2).status_code == 204  # nothing else READY
+
+    key = dep["key"]
+    assert _cmd(client, key, "start", DEV1).json()["state"] == "IN_PROGRESS"
+    r = client.post(f"/tasks/{key}/heartbeat", json={"lease_seconds": 120}, headers=DEV1)
+    assert r.status_code == 200 and r.json()["task_key"] == key
+    result = {"summary": "done", "files_changed": ["src/a.py"], "cost_usd": 1.84}
+    assert _cmd(client, key, "submit", DEV1, payload=result).json()["state"] == "IN_REVIEW"
+    assert _cmd(client, key, "approve", H).json()["state"] == "AWAITING_MERGE"
+    assert _cmd(client, key, "merge", H).json()["state"] == "DONE"
+
+    assert client.get(f"/tasks/{task['key']}").json()["state"] == "READY"  # promoted
+    executions = client.get(f"/tasks/{key}/executions").json()
+    assert [(e["status"], e["result"]) for e in executions] == [("COMPLETED", result)]
+    events = client.get(f"/tasks/{key}/events").json()
+    assert [(e["type"], e["from_state"], e["to_state"]) for e in events] == [
+        ("TASK_CREATED", None, "PENDING"),
+        ("TASK_READY", "PENDING", "READY"),
+        ("TASK_ASSIGNED", "READY", "ASSIGNED"),
+        ("AGENT_STARTED", "ASSIGNED", "IN_PROGRESS"),
+        ("TASK_SUBMITTED", "IN_PROGRESS", "IN_REVIEW"),
+        ("REVIEW_APPROVED", "IN_REVIEW", "AWAITING_MERGE"),
+        ("TASK_DONE", "AWAITING_MERGE", "DONE"),
+    ]
+    assert events[-1]["actor"] == "human:bharath"
+    all_events = client.get("/events", params={"after_id": events[0]["id"], "limit": 3}).json()
+    assert [e["id"] for e in all_events] == [events[0]["id"] + i for i in (1, 2, 3)]
+
+
+def test_rework_and_human_input_over_http(client: TestClient) -> None:
+    key = _task(client)["key"]
+    _cmd(client, key, "assign", H, agent_key="DEV-02")
+    _cmd(client, key, "start", DEV2)
+    r = _cmd(client, key, "ask_human", DEV2, payload={"question": "REST or gRPC?"})
+    assert r.json()["state"] == "WAITING_FOR_HUMAN"
+    assert _cmd(client, key, "answer", H, payload={"answer": "REST"}).json()["state"] == "READY"
+    client.post("/claims", headers=DEV1)
+    _cmd(client, key, "start", DEV1)
+    _cmd(client, key, "submit", DEV1)
+    r = _cmd(client, key, "request_changes", H, payload={"findings": [{"severity": "high"}]})
+    assert (r.json()["state"], r.json()["review_rounds"]) == ("READY", 1)
+
+
+# ---- errors ---------------------------------------------------------------------------------
+
+
+def test_illegal_command_is_409_with_allowed_commands(client: TestClient) -> None:
+    key = _task(client)["key"]
+    r = _cmd(client, key, "merge", H)
+    assert r.status_code == 409
+    assert r.json() == {
+        "error": "illegal_transition",
+        "detail": r.json()["detail"],
+        "state": "READY",
+        "command": "merge",
+        "allowed": ["claim", "assign", "cancel"],
+    }
+    assert client.get(f"/tasks/{key}").json()["state"] == "READY"
+    assert len(client.get(f"/tasks/{key}/events").json()) == 2  # created + ready only
+
+
+def test_agents_cannot_merge(client: TestClient) -> None:
+    key = _task(client)["key"]
+    r = _cmd(client, key, "cancel", DEV1)
+    assert (r.status_code, r.json()["error"]) == (403, "actor_not_permitted")
+
+
+def test_actor_header_is_required_and_validated(client: TestClient) -> None:
+    body = {"title": "t", "specification": "s"}
+    assert client.post("/projects/AX/tasks", json=body).status_code == 422
+    r = client.post("/projects/AX/tasks", json=body, headers={"X-Axiom-Actor": "bharath"})
+    assert r.status_code == 400
+
+
+def test_unknown_and_internal_commands_rejected(client: TestClient) -> None:
+    key = _task(client)["key"]
+    for command in ("deploy", "claim", "promote"):
+        assert _cmd(client, key, command, H).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"specification": "s"},
+        {"title": "", "specification": "s"},
+        {"title": "t", "specification": "s", "priority": "urgent"},
+        {"title": "t", "specification": "s", "max_retries": -1},
+        {"title": "t", "specification": "s", "assigned_role": "cto"},
+        {"title": "t", "specification": "s", "dependencies": ["AX-999"]},
+    ],
+)
+def test_malformed_task_is_422(client: TestClient, body: dict[str, Any]) -> None:
+    assert client.post("/projects/AX/tasks", json=body, headers=H).status_code == 422
+    assert client.get("/tasks").json() == []
+
+
+def test_not_found(client: TestClient) -> None:
+    assert client.get("/tasks/AX-999").status_code == 404
+    assert _cmd(client, "AX-999", "cancel", H).status_code == 404
+    assert client.post("/projects/NOPE/tasks", json={"title": "t", "specification": "s"},
+                       headers=H).status_code == 404  # fmt: skip
+
+
+def test_lease_and_ownership_errors(client: TestClient) -> None:
+    key = _task(client)["key"]
+    client.post("/claims", headers=DEV1)
+    r = client.post(f"/tasks/{key}/heartbeat", headers=DEV2)
+    assert (r.status_code, r.json()["error"]) == (403, "not_execution_owner")
+    r = _cmd(client, key, "start", DEV2)
+    assert (r.status_code, r.json()["error"]) == (403, "not_execution_owner")
+    r = _cmd(client, key, "time_out", {"X-Axiom-Actor": "system:reaper"})
+    assert (r.status_code, r.json()["error"]) == (409, "lease_not_expired")
+    _task(client)  # another READY task, but DEV-01 is already at capacity
+    r = client.post("/claims", headers=DEV1)
+    assert (r.status_code, r.json()["error"]) == (409, "assignment_rejected")
+
+
+def test_task_filters(client: TestClient) -> None:
+    a = _task(client)
+    _task(client, dependencies=[a["key"]])
+    assert [t["state"] for t in client.get("/tasks").json()] == ["READY", "PENDING"]
+    assert [t["key"] for t in client.get("/tasks", params={"state": "PENDING"}).json()] == [
+        "AX-002"
+    ]
+    assert client.get("/tasks", params={"state": "BOGUS"}).status_code == 422
+    assert len(client.get("/tasks", params={"project": "AX"}).json()) == 2
