@@ -133,11 +133,54 @@ where marked **LIVE**, and I announce them before running.
 | T10 First real task **LIVE** | register the SOC project, create task P9, run the worker | a real PR on tiny-agenticsoc, no human input between READY and PR | recorded run: events, cost, PR link, verified tests |
 | T11 Guide + exit check | guide chapters on workers, sandboxing and budgets (with diagrams); Phase 2 exit evidence | — | — |
 
-## 6. Phase 2 exit criteria
+## 6. Phase 2 exit criteria: met (2026-11-03)
 
-- [ ] One real task goes from READY to an open PR with no human input (T10).
-- [ ] The budget cap stops a run and fails the task cleanly, with a test (T3, T6, T9).
-- [ ] The LLM sandbox holds no GitHub or Axiom credentials, demonstrated by a test (T6).
-- [ ] Edits outside `allowed_paths` and secrets in diffs are blocked, with tests (T6, T7).
-- [ ] Killing a worker mid-run leads to a retry by another worker, with a test (T9).
-- [ ] The Axiom API rejects unauthenticated writes (T2).
+| Criterion | Evidence |
+|---|---|
+| One real task goes from READY to an open PR with no human input | **SOC-001**, [tiny-agenticsoc PR #1](https://github.com/bharathcmbox/tiny-agenticsoc/pull/1). Claimed by DEV-02, IN_PROGRESS → IN_REVIEW in **51 s** for **$0.146** (104,910 input / 2,481 output tokens, `claude-opus-5-5`, effort high). Diff limited to the 3 allowed files; verified tests passed in a fresh sandbox; independently re-checked (`uv run pytest`: 8 passed). `main` untouched |
+| The budget cap stops a run and fails the task cleanly | `test_budgets.py` (claims refused when task or day budget is spent; exhausted budget → FAILED), `test_worker.py::test_budget_exceeded_fails_the_task`, `test_sandbox.py::test_budget_stop_yields_result_then_raises`; live spike: `error_max_budget_usd` |
+| The LLM sandbox holds no GitHub or Axiom credentials | `tests/docker/test_sandbox_container.py::test_sandbox_receives_no_credentials_but_the_anthropic_key` (the worker env holds every secret; the sandbox sees only `ANTHROPIC_API_KEY`); verification sandboxes get no key at all; egress allowlist test |
+| Edits outside `allowed_paths` and secrets in diffs are blocked | Hook: `test_sandbox.py::test_hook_decisions` + live spike; harness: `test_verify.py` (paths, renames, secret files, symlinks, credential patterns); end to end: `test_worker.py::test_bad_runs_fail_without_publishing` |
+| Killing a worker mid-run leads to a retry by another worker | `test_worker.py::test_killed_worker_process_is_recovered_by_another_worker` (a real worker process SIGKILLed; lease expires; DEV-02 completes; executions TIMED_OUT → COMPLETED) |
+| The API rejects unauthenticated writes | `test_api.py::test_every_route_but_healthz_requires_a_token` and token tests; smoke test shows 401 |
+
+Totals: 812 default tests + 7 Docker tests + 1 live test, all passing; ruff and mypy (strict)
+clean. API spend during Phase 2 development: ≈ $0.23 (spike $0.02, sandbox live test $0.06,
+SOC-001 $0.15).
+
+## 7. Changes from the plan
+
+- T4/T6 split: T6a (in-sandbox runner, hooks, path rules) and T6b (containers, proxy, live).
+- Budget exhaustion sends a task to FAILED (otherwise it would be unclaimable in READY); humans
+  can raise a budget (`POST /tasks/{key}/budget`).
+- The worker validates the repository URL before any work (found by the Compose dry run: a bad
+  URL was only discovered after the agent ran).
+- The worker uses `claude-opus-5-5` when an agent row has no model.
+
+## 8. Findings worth remembering (learning log)
+
+- **Repository settings are an attack surface.** The SDK can load a repo's
+  `.claude/settings.json`; the runner uses `setting_sources=[]` and passes CLAUDE.md as
+  untrusted text.
+- **Your own credentials leak in through global config.** `gh` installs a github.com
+  credential helper in `~/.gitconfig` that `-c credential.helper=` does not clear; the worker
+  ignores global git config entirely.
+- **Lax validation hides agent mistakes.** Pydantic coerced `"yes"` to `True`; contracts are
+  now strict.
+- **Budget stops overshoot.** A $0.0001 cap spent $0.0034 (the first turn always completes);
+  the runner passes 80% of the remaining budget.
+- **Agents report scope honestly when asked to.** SOC-001's agent noted the OpenRouter
+  references left in `llm.py`/`config.py` because they were outside its allowed paths. That is
+  the natural next task.
+
+## 9. Known limitations / next steps
+
+- No GitHub branch protection (free private repo): "never push main / never merge" is enforced
+  by the harness only (ADR-007). Upgrade to GitHub Pro or use a GitHub App before Phase 3.
+- PRs are authored by the token owner, so the owner cannot formally approve them on GitHub.
+- The daily budget check is not serialized: two simultaneous claims can both pass when the day
+  is nearly spent (per-run caps still apply).
+- `uv` output noise fills the verified-test tail; record the test summary line separately.
+- Issues mirror deferred to Phase 3.
+- Phase 3: reviewer agents (a different model), review contracts, CI on GitHub Actions,
+  human merge approval, changes-requested loop.

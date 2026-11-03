@@ -1,9 +1,10 @@
 # Axiom — an AI engineering organization (control plane)
 
 Axiom coordinates coding agents (Claude Code first, Codex later) through a backlog, state machines,
-leases, and an event log. See SPEC.md and docs/plan/phase-1.md. Current phase: **1 — control plane
-skeleton** (no runtimes, no LLM calls, no GitHub integration yet). Axiom is product-agnostic: no
-SOC/security-product concepts in this repo; customer projects live in their own repos.
+leases, and an event log. See SPEC.md and docs/plan/. Phase 1 (control plane) and Phase 2
+(first worker: Claude Agent SDK in a sandbox, verification, PRs) are done; next is Phase 3
+(review + CI gate). Axiom is product-agnostic: no SOC/security-product concepts in this repo;
+customer projects live in their own repos.
 
 ## Commands
 - `make db` — start Postgres only (needed for tests)
@@ -13,6 +14,8 @@ SOC/security-product concepts in this repo; customer projects live in their own 
 - `make fmt` — ruff format + ruff check --fix
 - `make migrate` — apply migrations/*.sql (also runs on API startup)
 - `make demo-restart` — kill/restart durability demo
+- `make worker-tokens` / `make workers` / `make workers-down` — developer workers (Compose)
+- `make test-docker` — sandbox isolation tests; `make test-live` — real API (announce first, costs money)
 - Use `uv run …`; never pip install globally.
 
 ## Architecture rules
@@ -24,7 +27,14 @@ SOC/security-product concepts in this repo; customer projects live in their own 
 - Leases live on executions; all time math uses the DB clock (`now()`). The reaper issues
   `time_out` for expired leases; it runs in the API process and once at startup.
 - `events` is append-only (DB trigger). Heartbeats are not events.
-- Postgres is the source of truth. GitHub (Phase 2+) mirrors it.
+- Postgres is the source of truth. GitHub mirrors it (PRs now; Issues later).
+- Auth: every route but /healthz needs a bearer token; the actor comes from the token.
+  `system:` actors never authenticate over HTTP.
+- Workers (ADR-008): `worker/` is deterministic harness code holding the GitHub and agent
+  tokens; the LLM runs only in `sandbox/` containers with just the Anthropic key, no settings
+  from the repo (`setting_sources=[]`), egress via the allowlist proxy. Never pass other
+  credentials into a sandbox. Pushes only to `axiom/*`; no merge code path (ADR-007).
+- Budgets are enforced at claim time and per run (`orchestrator/budgets.py`).
 - Raw SQL with psycopg 3, no ORM. Schema change = new numbered migration; never edit an applied one.
 
 ## Conventions
