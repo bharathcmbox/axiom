@@ -166,16 +166,19 @@ flowchart LR
     subgraph system["system only"]
         promote
         time_out
+        escalate
     end
-    subgraph either["agent or human"]
+    subgraph either["system (aggregator) or human override"]
         approve
         request_changes
     end
 ```
-
 The most important line in that picture is **`merge` is human only**. It is how the principle
-"agents never merge their own work" is enforced in code. In Phase 3, `approve` will
-additionally require a *different* agent from the one that did the work.
+"agents never merge their own work" is enforced in code.
+
+Since Phase 3, **no agent can `approve` or `request_changes` at all.** Those decisions are made
+by the aggregator (deterministic code) from independent reviews and CI, with a human able to
+override. See [chapter 12](12-reviews-and-ci.md).
 
 ## How the rules are written down in code
 

@@ -46,6 +46,7 @@ class TaskCommand(StrEnum):
     MERGE = "merge"
     RETRY = "retry"
     CANCEL = "cancel"
+    ESCALATE = "escalate"
 
 
 @dataclass(frozen=True)
@@ -66,7 +67,7 @@ class Rule:
 _H = frozenset({ActorKind.HUMAN})
 _A = frozenset({ActorKind.AGENT})
 _S = frozenset({ActorKind.SYSTEM})
-_AH = frozenset({ActorKind.AGENT, ActorKind.HUMAN})
+_SH = frozenset({ActorKind.SYSTEM, ActorKind.HUMAN})  # aggregator, or a human override
 S = TaskState
 
 RULES: dict[TaskCommand, Rule] = {
@@ -109,15 +110,22 @@ RULES: dict[TaskCommand, Rule] = {
             TaskCommand.APPROVE,
             frozenset({S.IN_REVIEW}),
             (S.AWAITING_MERGE,),
-            _AH,
+            _SH,
             "REVIEW_APPROVED",
         ),
         Rule(
             TaskCommand.REQUEST_CHANGES,
             frozenset({S.IN_REVIEW}),
             (S.READY,),
-            _AH,
+            _SH,
             "TASK_REOPENED",
+        ),
+        Rule(
+            TaskCommand.ESCALATE,
+            frozenset({S.IN_REVIEW}),
+            (S.WAITING_FOR_HUMAN,),
+            _S,
+            "TASK_ESCALATED",
         ),
         Rule(
             TaskCommand.REJECT_MERGE,

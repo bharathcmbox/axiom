@@ -30,7 +30,7 @@ DOC: dict[str, tuple[frozenset[str], tuple[str, ...], str]] = {
 
 
 def test_doc_table_was_parsed() -> None:
-    assert len(DOC_ROWS) == 15
+    assert len(DOC_ROWS) == 16
     assert DOC["create"] == (frozenset(), ("PENDING",), "TASK_CREATED")
 
 
@@ -162,7 +162,8 @@ def test_executing_states_are_exactly_where_executions_live() -> None:
 
 
 def test_illegal_transition_message_lists_allowed_commands() -> None:
-    with pytest.raises(IllegalTransition, match="allowed: approve, request_changes, cancel"):
+    allowed = "allowed: approve, request_changes, escalate, cancel"
+    with pytest.raises(IllegalTransition, match=allowed):
         check(TaskCommand.MERGE, TaskState.IN_REVIEW, ActorKind.HUMAN)
     with pytest.raises(IllegalTransition, match="none \\(terminal state\\)"):
         check(TaskCommand.CANCEL, TaskState.DONE, ActorKind.HUMAN)

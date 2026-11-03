@@ -63,3 +63,22 @@ def execution_rows() -> list[tuple[str, frozenset[str], str, tuple[str, ...]]]:
             name, src, dst, cmds = _cells(line)
             rows.append((name, _states(src), dst, tuple(re.findall(r"`(\w+)`", cmds))))
     return rows
+
+
+def review_rows() -> list[tuple[str, frozenset[str], tuple[str, ...], str, str]]:
+    """(command, sources, targets, actor, event) from the review table."""
+    rows, in_table = [], False
+    for line in DOC.read_text().splitlines():
+        if line.startswith("| Review command"):
+            in_table = True
+            continue
+        if in_table:
+            if not line.startswith("|"):
+                break
+            if line.startswith("|---"):
+                continue
+            cmd, src, dst, actor, event = _cells(line)
+            sources = frozenset(x.strip() for x in src.split(","))
+            targets = tuple(t.strip() for t in dst.split("/"))
+            rows.append((cmd.strip("`"), sources, targets, actor, event))
+    return rows

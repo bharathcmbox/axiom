@@ -14,6 +14,7 @@ DEV1 = Actor(ActorKind.AGENT, "DEV-01")
 DEV2 = Actor(ActorKind.AGENT, "DEV-02")
 REAPER = Actor(ActorKind.SYSTEM, "reaper")
 SYSTEM_DEPS = Actor(ActorKind.SYSTEM, "dependencies")
+SYSTEM_AGG = Actor(ActorKind.SYSTEM, "aggregator")
 
 C = TaskCommand
 DEFAULT_ACTOR: dict[TaskCommand, Actor] = {
@@ -32,6 +33,7 @@ DEFAULT_ACTOR: dict[TaskCommand, Actor] = {
     C.MERGE: HUMAN,
     C.RETRY: HUMAN,
     C.CANCEL: HUMAN,
+    C.ESCALATE: SYSTEM_AGG,
 }
 DEFAULT_PAYLOAD: dict[TaskCommand, dict[str, Any]] = {
     C.SUBMIT: {"summary": "done", "files_changed": ["a.py"]},

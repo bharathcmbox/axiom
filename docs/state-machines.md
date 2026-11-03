@@ -27,8 +27,9 @@ stateDiagram-v2
     ASSIGNED --> FAILED: fail / time_out<br/>(retries used up)
     IN_PROGRESS --> FAILED: fail / time_out<br/>(retries used up)
     FAILED --> READY: retry (human)
-    IN_REVIEW --> AWAITING_MERGE: approve
-    IN_REVIEW --> READY: request_changes
+    IN_REVIEW --> AWAITING_MERGE: approve<br/>(all reviews PASS + CI green)
+    IN_REVIEW --> READY: request_changes<br/>(a review FAILs or CI red)
+    IN_REVIEW --> WAITING_FOR_HUMAN: escalate<br/>(round cap, review ERROR)
     AWAITING_MERGE --> READY: reject_merge (human)
     AWAITING_MERGE --> DONE: merge (human)
     DONE --> [*]
@@ -60,12 +61,13 @@ Terminal states: **DONE**, **CANCELLED**. FAILED is not terminal; a human can `r
 | 7 | `answer` → HUMAN_INPUT_PROVIDED | WAITING_FOR_HUMAN | READY | human | — | answer stored |
 | 8 | `fail` → EXECUTION_FAILED | ASSIGNED, IN_PROGRESS | READY / FAILED | agent | lease live | execution → FAILED; `attempt_count += 1` |
 | 9 | `time_out` → EXECUTION_TIMED_OUT | ASSIGNED, IN_PROGRESS | READY / FAILED | system:reaper | lease expired (DB clock) | execution → TIMED_OUT; `attempt_count += 1` |
-| 10 | `approve` → REVIEW_APPROVED | IN_REVIEW | AWAITING_MERGE | reviewer / human | — (CI gate in Phase 3) | — |
-| 11 | `request_changes` → TASK_REOPENED | IN_REVIEW | READY | reviewer / human | — | `review_rounds += 1`; findings stored |
+| 10 | `approve` → REVIEW_APPROVED | IN_REVIEW | AWAITING_MERGE | system (aggregator) / human override | aggregator: all required reviews PASS and CI success | open reviews superseded |
+| 11 | `request_changes` → TASK_REOPENED | IN_REVIEW | READY | system (aggregator) / human override | aggregator: a review FAIL or CI failure | `review_rounds += 1`; findings stored as feedback; open reviews superseded |
 | 12 | `reject_merge` → TASK_REOPENED | AWAITING_MERGE | READY | human | — | `review_rounds += 1` |
 | 13 | `merge` → TASK_DONE | AWAITING_MERGE | DONE | human | — | #2 on dependents |
 | 14 | `retry` → TASK_RETRIED | FAILED | READY | human | — | `attempt_count = 0` |
-| 15 | `cancel` → TASK_CANCELLED | any non-terminal | CANCELLED | human | — | active execution → CANCELLED |
+| 15 | `cancel` → TASK_CANCELLED | any non-terminal | CANCELLED | human | — | active execution → CANCELLED; open reviews superseded |
+| 16 | `escalate` → TASK_ESCALATED | IN_REVIEW | WAITING_FOR_HUMAN | system (aggregator) | review round cap reached, or a review ERROR | open reviews superseded; reason stored |
 
 For `fail` and `time_out`, the target is READY while `attempt_count` (after the increment) is
 ≤ `max_retries` **and** the task's budget is not exhausted (summed execution cost < `budget_usd`);
@@ -106,6 +108,40 @@ stateDiagram-v2
 
 Active states: STARTING, RUNNING. Only active executions hold a lease. Heartbeats extend the
 lease and write no event.
+
+## Review (Phase 3, ADR-009)
+
+When a task is submitted, one review per required role (`code_reviewer`, `security_reviewer`)
+is created for the new round. Reviewer agents claim reviews with a lease, like developers
+claim tasks.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PENDING: task submitted
+    PENDING --> CLAIMED: claim (reviewer agent, lease)
+    CLAIMED --> PASS: submit (verdict PASS)
+    CLAIMED --> FAIL: submit (verdict FAIL)
+    CLAIMED --> PENDING: fail_run / time_out<br/>(attempts left)
+    CLAIMED --> ERROR: fail_run / time_out<br/>(3 attempts used)
+    PENDING --> SUPERSEDED: supersede<br/>(task left IN_REVIEW)
+    CLAIMED --> SUPERSEDED: supersede
+    PASS --> [*]
+    FAIL --> [*]
+    ERROR --> [*]
+    SUPERSEDED --> [*]
+```
+
+| Review command | From | To | Actor | Event |
+|---|---|---|---|---|
+| `claim` | PENDING | CLAIMED | agent | REVIEW_CLAIMED |
+| `submit` | CLAIMED | PASS / FAIL | agent | REVIEW_SUBMITTED |
+| `fail_run` | CLAIMED | PENDING / ERROR | agent | REVIEW_RUN_FAILED |
+| `time_out` | CLAIMED | PENDING / ERROR | system | REVIEW_TIMED_OUT |
+| `supersede` | PENDING, CLAIMED | SUPERSEDED | system | REVIEW_SUPERSEDED |
+
+Review events carry `review_id` and keep the task's `from_state`/`to_state` empty: they do not
+move the task. The aggregator moves the task, using rows 10, 11 and 16 above.
 
 ## Invariants
 

@@ -22,6 +22,7 @@ Doing them is the fastest way to make the ideas stick.
 | 9 | [How it is tested](09-testing.md) | Tests generated from the transition table, invariants, race tests |
 | 10 | [Code tour and how to extend it](10-code-tour.md) | Where everything lives, and a worked example of adding a feature |
 | 11 | [Workers, the sandbox and verification](11-workers-and-sandbox.md) | Phase 2: how a real agent runs safely, end to end, up to a pull request |
+| 12 | [Independent review and the CI gate](12-reviews-and-ci.md) | Phase 3: reviewers on a different model, the aggregator, CI, merging on GitHub |
 
 The reference documents sit next to this guide:
 - [state-machines.md](../state-machines.md): the transition tables;
