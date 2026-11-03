@@ -20,3 +20,6 @@ lint:
 fmt:
 	uv run ruff format .
 	uv run ruff check --fix .
+
+migrate: db
+	uv run python -m axiom.state.migrate

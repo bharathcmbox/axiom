@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://axiom:axiom@127.0.0.1:5432/axiom"
     test_database_url: str = "postgresql://axiom:axiom@127.0.0.1:5432/axiom_test"
+    migrations_dir: str | None = None  # default: <repo>/migrations
 
 
 def get_settings() -> Settings:
