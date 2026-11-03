@@ -1,6 +1,16 @@
 # Phase 3 plan: independent review and the CI gate
 
-Status: **proposed, awaiting approval** (2026-11-03).
+Status: **approved 2026-11-03** with these decisions:
+- Q1: **no GitHub Pro for now.** The "no direct push to main / merge only by a human" guarantee
+  stays harness-enforced (ADR-007) plus convention; revisit before relying on Axiom for real work.
+- Q2: **keep the existing fine-grained token** (no GitHub App). PRs keep showing the token owner
+  as author.
+- Q3: reviewers on **Claude Fable 5.1** (`claude-fable-5-1`).
+- Q8: Claude commits the CI workflow to tiny-agenticsoc.
+- Q4–Q7, Q9: defaults (code + security reviewers; merge on GitHub observed by sync; 3 rounds;
+  PASS with high/critical findings becomes FAIL; Issues mirror in Phase 4).
+- Documentation is a deliverable of every task: guide chapter 12 grows with each task, and
+  every scenario gets a diagram.
 Goal (SPEC.md): reviewer roles, review contracts, a changes-requested loop, results read from CI,
 human merge approval. *Exit:* a deliberately buggy task is caught and sent back at least once.
 
@@ -133,13 +143,13 @@ Every task: lint, the full suite, one commit. **LIVE** steps are announced befor
 
 | Task | Deliverable | Acceptance | Proving tests |
 |---|---|---|---|
-| T0 | This plan approved; ADR-009 (reviews + aggregation), ADR-010 (GitHub App + ruleset), ADR-011 (merge on GitHub, observed by sync) | — | — |
-| T1 GitHub setup *(you, guided)* | Pro + ruleset on `main`; GitHub App installed on tiny-agenticsoc; `ci.yml` committed | A direct push to `main` is refused by GitHub; CI runs on a test PR | a scripted check of the ruleset and App permissions |
+| T0 | This plan approved; ADR-009 (reviews + aggregation), ADR-010 (merge on GitHub, observed by sync; no Pro yet) | — | — |
+| T1 CI | `.github/workflows/ci.yml` in tiny-agenticsoc (committed by Claude); the token gets **Actions: read** (you edit the token) so the sync can read CI results | CI runs on push to `main` and on PRs | CI run visible; token can list workflow runs |
 | T2 Review domain | migration (reviews), pure review state machine, task-machine changes (system approve/request_changes, escalate), docs + diagrams | the tables match the docs; every pair tested | generated legal/illegal tests (as in Phase 1); doc-sync test |
 | T3 Review API + aggregation | auto-create reviews on submit, review claims (SKIP LOCKED + lease + heartbeat), submit review, aggregator, round cap | reviews never double-claimed; aggregator outcomes exact | race test; aggregation table tests; developer agents cannot claim reviews; nobody approves their own work |
 | T4 Reviewer runtime | ReviewContract, reviewer prompt, read-only hooks, sandbox review mode, FakeReviewer | reviewer cannot edit anything | hook tests; contract tests; docker test |
 | T5 Rework on the same PR | workspace from the task branch, feedback in the prompt, fast-forward push, PR round comment | round 2 updates PR #N, not a new PR | E2E with a bare remote + fake GitHub |
-| T6 GitHub App auth + sync | App installation tokens replace the PAT; sync service (CI, merged, closed, changes requested) | Axiom state follows GitHub; still no merge path | fake GitHub server: CI red/green, merged by user, closed, review changes; token refresh |
+| T6 GitHub sync | sync service: CI conclusion for the PR head, merged (by whom), closed, "changes requested" reviews | Axiom state follows GitHub; still no merge path | fake GitHub server: CI red/green, merged by user, closed, review changes |
 | T7 Reviewer workers | compose services for REV-01 and SEC-01; reviewer worker loop | full loop with fakes: buggy → FAIL → rework → PASS → CI → merge → DONE | E2E with fake runtimes + fake GitHub |
 | T8 **LIVE** exit demo | a planted-bug task on tiny-agenticsoc: a scripted developer submits a subtle bug that the tests don't catch; real reviewers (Q3) must FAIL it; a real developer reworks; reviewers PASS; CI green; **you** merge | sent back at least once, then DONE after your merge | recorded run: events, review contracts, PR conversation, costs |
 | T9 | Guide chapter 12 (reviews, aggregation, GitHub sync) + exit check | — | — |
@@ -149,9 +159,9 @@ Every task: lint, the full suite, one commit. **LIVE** steps are announced befor
 - [ ] A deliberately buggy change is caught by an independent reviewer and sent back at least once; the reworked change passes (T8, live).
 - [ ] CI results gate AWAITING_MERGE: CI red sends the task back (T3, T6).
 - [ ] Nobody approves their own work: reviewers use a different model; agents cannot approve, merge or review their own task (T2, T3).
-- [ ] Merging happens only on GitHub by a human, enforced by the ruleset, and Axiom records it as DONE (T1, T6, T8).
+- [ ] Merging happens only on GitHub by a human and Axiom records it as DONE (T6, T8). (Without GitHub Pro this is enforced by Axiom having no merge path plus convention, not by GitHub.)
 - [ ] Every review is stored as a validated contract with events (T3).
 - [ ] Rework updates the same PR (T5).
 
 **Estimated API spend:** T4 docker/live check under $1; T8 roughly $2–6 (two developer runs plus
-four reviews on Fable 5.1). Recurring cost: GitHub Pro $4/month.
+four reviews on Fable 5.1). No recurring cost (GitHub Pro deferred).
