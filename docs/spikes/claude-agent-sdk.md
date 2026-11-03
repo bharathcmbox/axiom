@@ -34,11 +34,30 @@ Sources: the installed package `claude-agent-sdk` **0.2.177** (bundled Claude Co
   own Console workspace with a spend limit, egress restricted to `api.anthropic.com`, and a
   per-run `max_budget_usd`.
 
-## Still to verify live (needs `ANTHROPIC_API_KEY` in `.env`; estimated cost under $0.25)
+## Live verification (2026-11-02, `claude-opus-5-5`, effort low, total spend ≈ $0.02)
 
-1. A `PreToolUse` hook denies an `Edit` outside `allowed_paths` even when `Edit` is in
-   `allowed_tools`, and the agent sees the denial message.
-2. `total_cost_usd` and `usage` are populated for `claude-opus-5-5`.
-3. `max_budget_usd` with a tiny value (e.g. $0.01) ends with `error_max_budget_usd`.
+Output of `scripts/spike_agent_sdk.py`:
 
-Script: `scripts/spike_agent_sdk.py`.
+```text
+== check 1+2: hook denial, cost reporting
+subtype: success | is_error: False | turns: 5
+total_cost_usd: 0.0163236
+usage: {'input_tokens': 6, 'cache_creation_input_tokens': 1009, 'cache_read_input_tokens': 6173, 'output_tokens': 501, ...}
+ok.txt: after
+forbidden.txt: before
+agent said: I changed 'before' to 'after' in ok.txt, but the same edit to forbidden.txt was refused.
+            A hook that checks edits before they run blocked it with the message:
+            "forbidden.txt is outside allowed_paths ['ok.txt']" ...
+
+== check 3: tiny budget
+ResultError raised: subtype='error_max_budget_usd' errors=['Reached maximum budget ($0.0001)']
+subtype: error_max_budget_usd | is_error: True | cost: 0.003358
+```
+
+| Check | Result | Consequence |
+|---|---|---|
+| PreToolUse hook denies an edit outside `allowed_paths` while `Edit` is in `allowed_tools` | ✅ The file was unchanged, and the agent saw and reported the reason | `allowed_paths` enforcement can rely on the hook. The harness still re-checks the diff afterwards (defence in depth) |
+| Cost and usage reported | ✅ `total_cost_usd`, plus input/output/cache tokens | Recorded on the execution |
+| Budget stop | ✅ `error_max_budget_usd`, **but** the SDK yields the error `ResultMessage` *and then raises `ResultError`* | The runtime keeps the last `ResultMessage` and catches `ResultError`. Docs implied no exception |
+| Budget overshoot | A $0.0001 cap spent $0.0034: the first turn always completes | Pass ~80% of the remaining budget; the harness records the real cost |
+| Host login leakage | On the host, the CLI noticed the user's claude.ai login (`~/.claude`) | The sandbox runs with an empty `HOME`, so no user logins or settings are visible |

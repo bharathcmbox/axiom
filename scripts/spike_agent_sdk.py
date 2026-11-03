@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, ResultMessage, query
+from claude_agent_sdk._errors import ResultError
 
 MODEL = "claude-opus-5-5"
 
@@ -55,10 +56,14 @@ async def run(prompt: str, root: Path, budget: float) -> ResultMessage | None:
         },
         env={"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_TELEMETRY": "1"},
     )
+    # On an error result the SDK first yields the ResultMessage, then raises ResultError.
     result = None
-    async for message in query(prompt=prompt, options=options):
-        if isinstance(message, ResultMessage):
-            result = message
+    try:
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, ResultMessage):
+                result = message
+    except ResultError as e:
+        print(f"ResultError raised: subtype={e.subtype!r} errors={e.errors!r}")
     return result
 
 
