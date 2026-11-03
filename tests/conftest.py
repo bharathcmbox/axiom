@@ -10,6 +10,8 @@ import psycopg
 import pytest
 
 from axiom.config import get_settings
+from axiom.domain.roles import Actor, ActorKind
+from axiom.state.db import Conn, connect
 from axiom.state.migrate import migrate
 
 APP_TABLES = ("events", "executions", "task_dependencies", "tasks", "agents", "projects")
@@ -49,3 +51,15 @@ def conn(db_url: str) -> Iterator[psycopg.Connection]:
     """Autocommit connection: each statement commits, so constraint errors don't poison it."""
     with psycopg.connect(db_url, autocommit=True) as c:
         yield c
+
+
+@pytest.fixture
+def db(db_url: str) -> Iterator[Conn]:
+    """Dict-row autocommit connection, as used by the services."""
+    with connect(db_url) as c:
+        yield c
+
+
+@pytest.fixture
+def human() -> Actor:
+    return Actor(ActorKind.HUMAN, "tester")

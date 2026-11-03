@@ -1,0 +1,37 @@
+# The initial organization: 7 logical agents, 2 developers (SPEC.md section 4).
+# Seed with `make seed`. Runtimes take effect from Phase 2; Codex review comes later (ADR-003).
+
+[[agents]]
+key = "EM-01"
+role = "engineering_manager"
+runtime = "claude_code"
+
+[[agents]]
+key = "ARCH-01"
+role = "architect"
+runtime = "claude_code"
+
+[[agents]]
+key = "DEV-01"
+role = "developer"
+runtime = "claude_code"
+
+[[agents]]
+key = "DEV-02"
+role = "developer"
+runtime = "claude_code"
+
+[[agents]]
+key = "QA-01"
+role = "qa"
+runtime = "claude_code"
+
+[[agents]]
+key = "SEC-01"
+role = "security_reviewer"
+runtime = "claude_code"
+
+[[agents]]
+key = "REV-01"
+role = "code_reviewer"
+runtime = "claude_code"

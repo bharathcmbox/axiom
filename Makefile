@@ -1,4 +1,4 @@
-.PHONY: db up down test lint fmt migrate
+.PHONY: db up down test lint fmt migrate seed
 
 db:
 	docker compose up -d --wait db
@@ -23,3 +23,6 @@ fmt:
 
 migrate: db
 	uv run python -m axiom.state.migrate
+
+seed: migrate
+	uv run python -m axiom.registry.seed
