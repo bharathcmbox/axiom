@@ -84,10 +84,55 @@ Every task ends with `make lint && make test` (results shown) and one commit.
 | T8 Restart durability | `demo_restart.sh` | Tasks in many states + one in-flight execution survive SIGKILL of api and db; snapshots identical; orphaned execution times out and retries | before/after diff of tasks, executions, events; pytest that rebuilds app + pool |
 | T9 Docs + exit check | architecture.md, api.md, README install, known limitations, next phase | Every exit criterion mapped to evidence | summary table |
 
-## 6. Phase 1 exit criteria
+## 6. Phase 1 exit criteria: met (2026-11-02)
 
-- [ ] Every legal transition has a test; every illegal transition is rejected with a test (T4, T5).
-- [ ] Lease expiry returns a task to READY (or FAILED at the retry limit), with a test (T5).
-- [ ] The event log records every transition (T4, T8).
-- [ ] Killing and restarting the service preserves all state, demonstrated (T8).
-- [ ] `docker compose up` brings up the API and Postgres from a clean checkout (T7).
+| Criterion | Evidence |
+|---|---|
+| Every legal transition has a test | `tests/integration/test_transitions.py::test_legal_transition`: 27 cases generated from the table (every command × source state; fail/time_out in both the retry and exhausted branches), each asserting target state, exactly one event and the execution side effect. `promote` is covered by the dependency tests in `test_tasks.py`. `test_legal_cases_cover_every_rule` fails if a rule is left untested. |
+| Every illegal transition is rejected, with a test | `test_illegal_transition_rejected`: 108 (command, state) pairs, each asserting `IllegalTransition`, state unchanged, no execution change and no event. Also: 24 wrong-actor-kind cases, 9 "claim ignores non-READY" cases, guard tests (owner, lease, role, capacity, dependencies), 150 + 90 pure-table pairs in `tests/unit/`, and HTTP 409 in `test_api.py`. |
+| Lease expiry returns a task to READY, with a test | `test_leases.py`: `test_reaper_times_out_only_expired_leases`, `test_lease_expires_on_the_real_clock` (real 1s lease), `test_reaper_fails_task_once_retries_are_used_up`, `test_background_reaper_thread`; `test_restart.py::test_startup_times_out_executions_orphaned_while_down`. |
+| The event log records every transition | Every command appends its event in the same transaction (`test_event_write_failure_rolls_back_the_transition`). `check_invariants` replays each task's events into a chain ending at its current state; it runs after every integration test, and `test_invariants.py` proves it catches a state change made without an event. |
+| Killing and restarting preserves all state | `test_restart.py::test_restart_preserves_all_state`, plus `scripts/demo_restart.sh`: 9 tasks in 9 states and 39 events; SIGKILL of api and db (exit 137); full before/after snapshot diff identical; the orphaned in-flight task is then timed out by the reaper. |
+| `docker compose up` from a clean checkout | `scripts/compose_smoke.sh` clones HEAD into a temp dir and runs `docker compose up --build --wait` under its own project and ports: both containers healthy, 7 agents seeded, task created and claimed, invariants empty. |
+
+Final run: 634 tests passing; ruff and mypy (strict) clean.
+
+## 7. Known limitations
+
+- **No authentication.** The `X-Axiom-Actor` header is trusted, so anyone who can reach the API
+  can act as `human:` or `system:`. Mitigation for now: bound to 127.0.0.1. Must be fixed
+  before workers run unattended (Phase 2: per-agent tokens).
+- **Dependencies are immutable, and a CANCELLED dependency leaves its dependents PENDING** until
+  a human cancels them. There is no re-planning or task editing yet.
+- **`budget_usd`, `branch`, `pull_request_url`** and execution cost/token columns are stored
+  but not used until Phase 2.
+- **Reviews are commands only.** Findings live in event payloads; there is no `reviews` table or
+  review contract validation until Phase 3. Role checks such as "a reviewer, not the author,
+  approves" are not enforced yet (only actor kind is).
+- **The global developer cap uses one advisory lock,** which serializes developer assignments.
+  That is fine at 2 developers; revisit if the cap grows.
+- **`check_invariants` scans all events.** Cheap now; at startup it will need bounding as the
+  log grows.
+- **Event `occurred_at` is per transaction** (`now()`). Order events by `id`.
+- **No pagination on `/tasks`.** `/events` pages via `after_id`.
+- **The default lease (300s) suits driving tasks by hand.** Workers should use shorter leases
+  plus heartbeats.
+- Running several API instances should be safe (all coordination is in Postgres locks) but
+  has not been tested.
+
+## 8. Recommended next phase: Phase 2, the first worker
+
+1. **Worker loop** (a separate process, not the API): `POST /claims` → `start` → heartbeat
+   thread → run → `submit`, `ask_human` or `fail`. Uses only the existing API.
+2. **Claude Code runtime adapter** (Claude Agent SDK) behind `runtimes/base.py`
+   (`start`, stream events, `cancel`, collect result) per ADR-003.
+3. **Workspace isolation:** a git worktree plus container per execution; scoped GitHub token.
+4. **Result contract:** a JSON schema validated on `submit`; cost and tokens written to
+   `executions`; budget cap enforced (stop the run, then `fail`).
+5. **GitHub integration:** branch and PR creation; mirror tasks to Issues (ADR-001).
+6. **Auth:** per-agent API tokens replace the trusted header for agents.
+
+Decisions needed before Phase 2:
+- the first target repository (something small, not Agentic SOC);
+- API-key billing for unattended runs;
+- the model choice for developers.
