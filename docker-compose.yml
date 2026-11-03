@@ -30,5 +30,25 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  egress-proxy:
+    build: docker/egress-proxy
+    networks: [default, sandbox]
+    restart: unless-stopped
+
+  # Built, never started by `up`: `docker compose --profile tools build sandbox`.
+  sandbox:
+    build:
+      context: .
+      dockerfile: docker/sandbox/Dockerfile
+    image: axiom-sandbox:latest
+    profiles: [tools]
+
+networks:
+  default:
+  # No route to the outside world: sandboxes reach the internet only via egress-proxy.
+  sandbox:
+    name: ${AXIOM_SANDBOX_NETWORK:-axiom_sandbox}
+    internal: true
+
 volumes:
   pgdata:

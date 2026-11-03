@@ -6,7 +6,7 @@ set -euo pipefail
 repo=$(git rev-parse --show-toplevel)
 work=$(mktemp -d)
 project="axiom-smoke-$$"
-export AXIOM_API_PORT=18000 AXIOM_DB_PORT=15432
+export AXIOM_API_PORT=18000 AXIOM_DB_PORT=15432 AXIOM_SANDBOX_NETWORK="axiom_smoke_sandbox_$$"
 api="http://127.0.0.1:${AXIOM_API_PORT}"
 
 cleanup() {

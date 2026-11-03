@@ -40,7 +40,11 @@ packages = ["axiom"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not docker and not live'"
+markers = [
+    "docker: needs Docker and the axiom-sandbox / egress-proxy images (make test-docker)",
+    "live: calls the real Anthropic API and costs money (make test-live, announced first)",
+]
 
 [dependency-groups]
 dev = [
