@@ -1,4 +1,4 @@
-.PHONY: db up down test lint fmt migrate seed
+.PHONY: db up down logs test lint fmt migrate seed smoke
 
 db:
 	docker compose up -d --wait db
@@ -8,6 +8,9 @@ up:
 
 down:
 	docker compose down
+
+logs:
+	docker compose logs -f api
 
 test: db
 	uv run pytest
@@ -26,3 +29,6 @@ migrate: db
 
 seed: migrate
 	uv run python -m axiom.registry.seed
+
+smoke:
+	scripts/compose_smoke.sh

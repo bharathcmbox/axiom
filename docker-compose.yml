@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: axiom
       POSTGRES_DB: axiom
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${AXIOM_DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres:/docker-entrypoint-initdb.d:ro
@@ -15,6 +15,20 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+    restart: unless-stopped
+
+  api:
+    build: .
+    environment:
+      AXIOM_DATABASE_URL: postgresql://axiom:axiom@db:5432/axiom
+      AXIOM_LEASE_SECONDS: ${AXIOM_LEASE_SECONDS:-300}
+      AXIOM_REAPER_INTERVAL_SECONDS: ${AXIOM_REAPER_INTERVAL_SECONDS:-5}
+    ports:
+      - "127.0.0.1:${AXIOM_API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:
