@@ -35,6 +35,44 @@ services:
     networks: [default, sandbox]
     restart: unless-stopped
 
+  # Workers (profile "workers"): `make workers`. One service per agent identity.
+  # The workspaces directory is mounted at the SAME absolute path as on the host, because the
+  # Docker daemon resolves sandbox bind mounts on the host.
+  worker-dev-01: &worker
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile
+    profiles: [workers]
+    user: "${AXIOM_UID:-1000}:${AXIOM_GID:-1000}"
+    group_add: ["${DOCKER_GID:-999}"]
+    environment: &worker-env
+      AXIOM_API_URL: http://api:8000
+      AXIOM_AGENT_KEY: DEV-01
+      AXIOM_AGENT_TOKEN: ${AXIOM_DEV01_TOKEN:-}
+      AXIOM_GITHUB_TOKEN: ${AXIOM_GITHUB_TOKEN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AXIOM_WORKSPACES_DIR: ${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}
+      AXIOM_SANDBOX_NETWORK: ${AXIOM_SANDBOX_NETWORK:-axiom_sandbox}
+      AXIOM_PROJECT_KEY: ${AXIOM_PROJECT_KEY:-}
+      AXIOM_FAKE_SCENARIO: ${AXIOM_FAKE_SCENARIO:-}
+      AXIOM_KEEP_WORKSPACES: ${AXIOM_KEEP_WORKSPACES:-0}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}:${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}
+    depends_on:
+      api:
+        condition: service_healthy
+      egress-proxy:
+        condition: service_started
+    restart: unless-stopped
+
+  worker-dev-02:
+    <<: *worker
+    environment:
+      <<: *worker-env
+      AXIOM_AGENT_KEY: DEV-02
+      AXIOM_AGENT_TOKEN: ${AXIOM_DEV02_TOKEN:-}
+
   # Built, never started by `up`: `docker compose --profile tools build sandbox`.
   sandbox:
     build:
