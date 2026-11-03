@@ -100,7 +100,7 @@ Most of the interesting behaviour lives in the loops back to READY.
 ```mermaid
 flowchart LR
     R[READY] --> W["ASSIGNED /<br/>IN_PROGRESS"]
-    W -->|"fail or time_out<br/>attempt_count += 1"| C{"attempt_count<br/>≤ max_retries?"}
+    W -->|"fail or time_out<br/>attempt_count += 1"| C{"attempt_count ≤ max_retries<br/>and budget left?"}
     C -->|yes| R
     C -->|no| F[FAILED]
     F -->|"retry (human)<br/>attempt_count = 0"| R
@@ -109,6 +109,11 @@ flowchart LR
 With the default `max_retries = 2`, a task gets **3 attempts**. A lease timeout counts as an
 attempt (decision D7). Without that rule, a task that crashes its worker every time would loop
 forever and burn money.
+
+Since Phase 2 the loop also stops when the task's **budget** is spent: the summed cost of its
+executions reaches `budget_usd` (default $3). Re-queuing such a task would be pointless, since
+claims are refused once the budget is spent. A human can raise the budget
+(`POST /tasks/{key}/budget`) and `retry`.
 
 ### Rework loop: review says no
 

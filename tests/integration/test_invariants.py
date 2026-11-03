@@ -55,7 +55,7 @@ def test_detects_pending_task_with_done_dependencies(raw: Conn) -> None:
 def test_detects_failed_task_with_retries_left(raw: Conn) -> None:
     key = new_task(raw).key
     raw.execute("UPDATE tasks SET state = 'FAILED' WHERE key = %s", (key,))
-    assert any("FAILED with retries left" in v for v in check_invariants(raw))
+    assert any("FAILED with retries and budget left" in v for v in check_invariants(raw))
 
 
 def test_detects_agent_over_capacity(raw: Conn) -> None:

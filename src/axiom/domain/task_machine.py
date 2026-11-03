@@ -175,14 +175,17 @@ def next_state(
     *,
     attempts_after: int = 0,
     max_retries: int = 0,
+    budget_exhausted: bool = False,
 ) -> TaskState:
     """Target state for a legal command.
 
     For retry-dependent commands (`fail`, `time_out`) pass the attempt count *after* this
-    failure; the task goes back to READY while attempts_after <= max_retries, else FAILED.
+    failure; the task goes back to READY while attempts_after <= max_retries and its budget is
+    not exhausted, else FAILED.
     """
     rule = check(command, state, actor_kind)
     if rule.retry_dependent:
         retry_target, exhausted_target = rule.targets
-        return retry_target if attempts_after <= max_retries else exhausted_target
+        can_retry = attempts_after <= max_retries and not budget_exhausted
+        return retry_target if can_retry else exhausted_target
     return rule.targets[0]

@@ -7,10 +7,12 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
+from axiom.config import get_settings
 from axiom.domain.roles import Actor, ActorKind, Role
 from axiom.domain.task_machine import INITIAL_STATE, TaskState
 from axiom.errors import Forbidden, InvalidInput, NotFound
 from axiom.events.log import append_event
+from axiom.orchestrator import budgets
 from axiom.state.db import Conn
 
 PRIORITIES = ("P0", "P1", "P2", "P3")
@@ -35,7 +37,10 @@ class Task:
     pull_request_url: str | None
     created_at: datetime
     updated_at: datetime
+    allowed_paths: list[str]
     dependencies: tuple[str, ...]
+    budget_spent_usd: Decimal
+    run_budget_usd: Decimal
 
 
 def _dependency_keys(conn: Conn, task_id: int) -> tuple[str, ...]:
@@ -47,14 +52,19 @@ def _dependency_keys(conn: Conn, task_id: int) -> tuple[str, ...]:
     return tuple(r["key"] for r in rows)
 
 
+_COMPUTED = ("dependencies", "budget_spent_usd", "run_budget_usd")
+
+
 def task_from_row(conn: Conn, row: dict[str, Any]) -> Task:
-    fields = {f: row[f] for f in Task.__dataclass_fields__ if f != "dependencies"}
+    fields = {f: row[f] for f in Task.__dataclass_fields__ if f not in _COMPUTED}
     return Task(
         **fields
         | {
             "assigned_role": Role(row["assigned_role"]),
             "state": TaskState(row["state"]),
             "dependencies": _dependency_keys(conn, row["id"]),
+            "budget_spent_usd": budgets.task_spent(conn, row["id"]),
+            "run_budget_usd": budgets.run_budget(conn, row["id"], row["budget_usd"]),
         }
     )
 
@@ -107,6 +117,16 @@ def _validate(
     return role
 
 
+def validate_allowed_paths(paths: list[str]) -> list[str]:
+    """Repository-relative paths or glob patterns (`agent/**`); never absolute or escaping."""
+    for p in paths:
+        if not isinstance(p, str) or not p.strip():
+            raise InvalidInput("allowed_paths entries must be non-empty strings")
+        if p.startswith(("/", "~")) or "\\" in p or ".." in p.split("/"):
+            raise InvalidInput(f"allowed_paths must be repository-relative: {p!r}")
+    return list(dict.fromkeys(paths))
+
+
 def create_task(
     conn: Conn,
     actor: Actor,
@@ -120,6 +140,7 @@ def create_task(
     max_retries: int = 2,
     budget_usd: Decimal | None = None,
     dependencies: list[str] | None = None,
+    allowed_paths: list[str] | None = None,
 ) -> Task:
     """Create a task in PENDING; promote it to READY at once if its dependencies are DONE."""
     from axiom.orchestrator.commands import promote_if_ready  # avoid import cycle
@@ -131,6 +152,9 @@ def create_task(
         title, specification, criteria, assigned_role, priority, max_retries, budget_usd
     )
     dep_keys = list(dict.fromkeys(dependencies or []))  # dedupe, keep order
+    paths = validate_allowed_paths(allowed_paths or [])
+    if budget_usd is None:
+        budget_usd = get_settings().default_task_budget_usd
 
     with conn.transaction():
         project = conn.execute(
@@ -154,8 +178,9 @@ def create_task(
 
         row = conn.execute(
             """INSERT INTO tasks (project_id, key, title, specification, acceptance_criteria,
-                                  assigned_role, priority, state, max_retries, budget_usd)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                                  assigned_role, priority, state, max_retries, budget_usd,
+                                  allowed_paths)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
             (
                 project["id"],
                 key,
@@ -167,6 +192,7 @@ def create_task(
                 INITIAL_STATE,
                 max_retries,
                 budget_usd,
+                Jsonb(paths),
             ),
         ).fetchone()
         assert row is not None
@@ -185,4 +211,29 @@ def create_task(
             payload={"title": title, "dependencies": dep_keys},
         )
         promote_if_ready(conn, row["id"])
+        return get_task(conn, key)
+
+
+def set_task_budget(conn: Conn, actor: Actor, key: str, budget_usd: Decimal) -> Task:
+    """Change a task's budget (humans only). Not a state transition, but always an event."""
+    if actor.kind != ActorKind.HUMAN:
+        raise Forbidden("only humans change budgets")
+    if budget_usd < 0:
+        raise InvalidInput("budget_usd must be >= 0")
+    with conn.transaction():
+        row = conn.execute("SELECT * FROM tasks WHERE key = %s FOR UPDATE", (key,)).fetchone()
+        if row is None:
+            raise NotFound(f"task {key} not found")
+        conn.execute(
+            "UPDATE tasks SET budget_usd = %s, updated_at = now() WHERE id = %s",
+            (budget_usd, row["id"]),
+        )
+        append_event(
+            conn,
+            actor=actor,
+            type="TASK_BUDGET_CHANGED",
+            project_id=row["project_id"],
+            task_id=row["id"],
+            payload={"from": str(row["budget_usd"]), "to": str(budget_usd)},
+        )
         return get_task(conn, key)

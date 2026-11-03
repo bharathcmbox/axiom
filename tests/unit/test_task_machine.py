@@ -182,3 +182,13 @@ def test_actor_parse(raw: str, kind: str, name: str) -> None:
 def test_actor_parse_rejects_malformed(raw: str) -> None:
     with pytest.raises(ValueError):
         Actor.parse(raw)
+
+
+@pytest.mark.parametrize("command", [TaskCommand.FAIL, TaskCommand.TIME_OUT])
+def test_exhausted_budget_fails_even_with_retries_left(command: TaskCommand) -> None:
+    actor = _permitted_actor(command)
+    got = next_state(
+        command, TaskState.IN_PROGRESS, actor, attempts_after=1, max_retries=2,
+        budget_exhausted=True,
+    )  # fmt: skip
+    assert got == TaskState.FAILED

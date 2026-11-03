@@ -30,6 +30,7 @@ from axiom.errors import (
     NotFound,
 )
 from axiom.events.log import append_event
+from axiom.orchestrator import budgets
 from axiom.orchestrator.dependencies import dependencies_satisfied, pending_dependents
 from axiom.orchestrator.tasks import Task, get_task
 from axiom.registry.agents import Agent, get_agent
@@ -115,9 +116,14 @@ def apply_locked(
 
     if command in em.CREATED_BY:
         agent = _resolve_assignee(conn, command, actor, agent_key, row)
+        run_budget = budgets.check_can_start(conn, row)
         agent_id = agent.id
         execution_id = _create_execution(conn, task_id, agent.id, lease)
-        event_payload |= {"agent": agent.key, "execution_status": em.INITIAL_STATE}
+        event_payload |= {
+            "agent": agent.key,
+            "execution_status": em.INITIAL_STATE,
+            "run_budget_usd": str(run_budget),
+        }
 
     elif command in em.TRANSITIONS and state in EXECUTING_STATES:
         execution = _lock_active_execution(conn, task_id)
@@ -127,7 +133,12 @@ def apply_locked(
         _update_execution(conn, execution["id"], new_status, command, payload, lease)
         event_payload |= {"agent": execution["agent_key"], "execution_status": new_status}
 
+    if command == TaskCommand.SUBMIT:
+        _record_delivery(conn, task_id, payload)
+
+    budget_exhausted = False
     if command in (TaskCommand.FAIL, TaskCommand.TIME_OUT):
+        budget_exhausted = budgets.task_budget_exhausted(conn, task_id, row["budget_usd"])
         attempt_count += 1
     elif command in (TaskCommand.REQUEST_CHANGES, TaskCommand.REJECT_MERGE):
         review_rounds += 1
@@ -136,8 +147,15 @@ def apply_locked(
 
     # ---- task update + event ------------------------------------------------------------
     target = next_state(
-        command, state, actor.kind, attempts_after=attempt_count, max_retries=row["max_retries"]
+        command,
+        state,
+        actor.kind,
+        attempts_after=attempt_count,
+        max_retries=row["max_retries"],
+        budget_exhausted=budget_exhausted,
     )
+    if budget_exhausted:
+        event_payload["budget_exhausted"] = True
     conn.execute(
         """UPDATE tasks SET state = %s, attempt_count = %s, review_rounds = %s, updated_at = now()
            WHERE id = %s""",
@@ -257,6 +275,7 @@ def _update_execution(
     lease_seconds: int,
 ) -> None:
     terminal = status in em.TERMINAL_STATES
+    cost_usd, tokens_in, tokens_out = budgets.parse_cost(payload)
     result = Jsonb(payload) if command in (TaskCommand.SUBMIT, TaskCommand.ASK_HUMAN) else None
     error = payload.get("error") if command == TaskCommand.FAIL else None
     if command == TaskCommand.TIME_OUT:
@@ -269,7 +288,11 @@ def _update_execution(
                WHEN %(terminal)s THEN NULL
                ELSE now() + make_interval(secs => %(lease)s) END,
              result = COALESCE(%(result)s, result),
-             error = COALESCE(%(error)s, error)
+             error = COALESCE(%(error)s, error),
+             cost_usd = COALESCE(%(cost_usd)s, cost_usd),
+             input_tokens = COALESCE(%(tokens_in)s, input_tokens),
+             output_tokens = COALESCE(%(tokens_out)s, output_tokens),
+             transcript_uri = COALESCE(%(transcript_uri)s, transcript_uri)
            WHERE id = %(id)s""",
         {
             "status": status,
@@ -277,6 +300,24 @@ def _update_execution(
             "lease": lease_seconds,
             "result": result,
             "error": str(error) if error is not None else None,
+            "cost_usd": cost_usd,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "transcript_uri": payload.get("transcript_uri"),
             "id": execution_id,
         },
+    )
+
+
+def _record_delivery(conn: Conn, task_id: int, payload: dict[str, Any]) -> None:
+    """On submit, remember the branch and pull request the worker produced."""
+    branch, pr_url = payload.get("branch"), payload.get("pr_url")
+    for name, value in (("branch", branch), ("pr_url", pr_url)):
+        if value is not None and not isinstance(value, str):
+            raise InvalidInput(f"{name} must be a string")
+    conn.execute(
+        """UPDATE tasks SET branch = COALESCE(%s, branch),
+                            pull_request_url = COALESCE(%s, pull_request_url)
+           WHERE id = %s""",
+        (branch, pr_url, task_id),
     )

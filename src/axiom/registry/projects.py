@@ -25,6 +25,8 @@ class Project:
     repo_url: str | None
     specification: str | None
     settings: dict[str, Any]
+    default_branch: str
+    test_command: str | None
     created_at: datetime
 
     @classmethod
@@ -41,6 +43,8 @@ def create_project(
     repo_url: str | None = None,
     specification: str | None = None,
     settings: dict[str, Any] | None = None,
+    default_branch: str = "main",
+    test_command: str | None = None,
 ) -> Project:
     require_not_agent(actor)
     if not PROJECT_KEY.match(key):
@@ -50,9 +54,18 @@ def create_project(
     with conn.transaction():
         try:
             row = conn.execute(
-                """INSERT INTO projects (key, name, repo_url, specification, settings)
-                   VALUES (%s, %s, %s, %s, %s) RETURNING *""",
-                (key, name, repo_url, specification, Jsonb(settings or {})),
+                """INSERT INTO projects (key, name, repo_url, specification, settings,
+                                        default_branch, test_command)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                (
+                    key,
+                    name,
+                    repo_url,
+                    specification,
+                    Jsonb(settings or {}),
+                    default_branch,
+                    test_command,
+                ),
             ).fetchone()
         except errors.UniqueViolation as e:
             raise AlreadyExists(f"project {key} already exists") from e

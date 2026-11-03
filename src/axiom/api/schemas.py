@@ -20,6 +20,10 @@ class ProjectIn(BaseModel):
     repo_url: str | None = None
     specification: str | None = None
     settings: dict[str, Any] = Field(default_factory=dict)
+    default_branch: str = "main"
+    test_command: str | None = Field(
+        default=None, examples=["cd agent && uv run --with pytest pytest -q"]
+    )
 
 
 class ProjectOut(_Out):
@@ -29,6 +33,8 @@ class ProjectOut(_Out):
     repo_url: str | None
     specification: str | None
     settings: dict[str, Any]
+    default_branch: str
+    test_command: str | None
     created_at: datetime
 
 
@@ -62,8 +68,15 @@ class TaskIn(BaseModel):
     assigned_role: Role = Role.DEVELOPER
     priority: str = Field(default="P2", pattern=r"^P[0-3]$")
     max_retries: int = Field(default=2, ge=0)
-    budget_usd: Decimal | None = Field(default=None, ge=0)
+    budget_usd: Decimal | None = Field(
+        default=None, ge=0, description="Defaults to AXIOM_DEFAULT_TASK_BUDGET_USD."
+    )
     dependencies: list[str] = Field(default_factory=list)
+    allowed_paths: list[str] = Field(
+        default_factory=list,
+        description="Repository-relative paths or globs the developer may change.",
+        examples=[["agent/pyproject.toml", "agent/uv.lock", "CLAUDE.md"]],
+    )
 
 
 class TaskOut(_Out):
@@ -83,8 +96,17 @@ class TaskOut(_Out):
     branch: str | None
     pull_request_url: str | None
     dependencies: list[str]
+    allowed_paths: list[str]
+    budget_spent_usd: Decimal
+    run_budget_usd: Decimal = Field(
+        description="What a new execution may spend now: min(task remaining, day remaining)."
+    )
     created_at: datetime
     updated_at: datetime
+
+
+class BudgetIn(BaseModel):
+    budget_usd: Decimal = Field(ge=0)
 
 
 class CommandIn(BaseModel):

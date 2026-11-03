@@ -79,11 +79,19 @@ def _dependencies_consistent(conn: Conn) -> list[str]:
 
 def _retry_counters(conn: Conn) -> list[str]:
     out = []
-    for r in conn.execute("SELECT key, state, attempt_count, max_retries FROM tasks"):
+    rows = conn.execute(
+        """SELECT t.key, t.state, t.attempt_count, t.max_retries, t.budget_usd,
+                  coalesce(sum(e.cost_usd), 0) AS spent
+           FROM tasks t LEFT JOIN executions e ON e.task_id = t.id
+           GROUP BY t.id"""
+    )
+    for r in rows:
         if r["attempt_count"] > r["max_retries"] + 1:
             out.append(f"{r['key']}: attempt_count {r['attempt_count']} > max_retries + 1")
-        if r["state"] == TaskState.FAILED and r["attempt_count"] <= r["max_retries"]:
-            out.append(f"{r['key']}: FAILED with retries left")
+        retries_left = r["attempt_count"] <= r["max_retries"]
+        budget_left = r["budget_usd"] is None or r["spent"] < r["budget_usd"]
+        if r["state"] == TaskState.FAILED and retries_left and budget_left:
+            out.append(f"{r['key']}: FAILED with retries and budget left")
     return out
 
 

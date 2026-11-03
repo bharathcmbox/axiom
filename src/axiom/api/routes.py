@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, R
 from axiom.api.schemas import (
     AgentIn,
     AgentOut,
+    BudgetIn,
     ClaimIn,
     CommandIn,
     EventOut,
@@ -26,7 +27,7 @@ from axiom.events.log import list_events
 from axiom.orchestrator.assignment import claim_next
 from axiom.orchestrator.commands import apply_command
 from axiom.orchestrator.leases import heartbeat
-from axiom.orchestrator.tasks import Task, create_task, get_task, list_tasks
+from axiom.orchestrator.tasks import Task, create_task, get_task, list_tasks, set_task_budget
 from axiom.registry import agents, projects
 from axiom.registry.tokens import authenticate
 from axiom.state.db import Conn
@@ -200,6 +201,12 @@ def command_route(
         lease_seconds=body.lease_seconds,
     )
     return _task_out(task)
+
+
+@router.post("/tasks/{key}/budget", tags=["tasks"])
+def budget_route(key: str, body: BudgetIn, conn: ConnDep, actor: ActorDep) -> TaskOut:
+    """Change a task's budget (humans only), e.g. before retrying a task that ran out."""
+    return _task_out(set_task_budget(conn, actor, key, body.budget_usd))
 
 
 @router.post("/claims", tags=["tasks"], responses={204: {"description": "No READY task"}})

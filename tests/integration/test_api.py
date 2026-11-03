@@ -252,3 +252,20 @@ def test_task_filters(client: TestClient) -> None:
     ]
     assert client.get("/tasks", params={"state": "BOGUS"}).status_code == 422
     assert len(client.get("/tasks", params={"project": "AX"}).json()) == 2
+
+
+def test_budget_fields_and_route(client: TestClient) -> None:
+    task = _task(client, budget_usd=2.5, allowed_paths=["CLAUDE.md"])
+    assert (task["budget_usd"], task["budget_spent_usd"], task["run_budget_usd"]) == (
+        "2.50", "0", "2.50",
+    )  # fmt: skip
+    assert task["allowed_paths"] == ["CLAUDE.md"]
+    r = client.post(f"/tasks/{task['key']}/budget", json={"budget_usd": 5}, headers=H)
+    assert r.status_code == 200 and r.json()["budget_usd"] == "5.00"
+    assert client.post(f"/tasks/{task['key']}/budget", json={"budget_usd": 5},
+                       headers=DEV1).status_code == 403  # fmt: skip
+    r = client.post(
+        "/projects",
+        json={"key": "SOC", "name": "soc", "test_command": "cd agent && uv run pytest -q"},
+    )
+    assert r.json()["default_branch"] == "main"

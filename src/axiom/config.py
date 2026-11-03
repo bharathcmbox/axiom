@@ -1,5 +1,6 @@
 """Runtime configuration, read from environment variables prefixed with AXIOM_."""
 
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,6 +19,9 @@ class Settings(BaseSettings):
     reaper_interval_seconds: float = 5.0
     # Global cap on concurrently active developer executions (SPEC: 2 concurrent developers).
     max_concurrent_developers: int = 2
+    # Budgets (SPEC principle 8): default per-task budget, and the daily cap across all work.
+    default_task_budget_usd: Decimal = Decimal("3.00")
+    daily_budget_usd: Decimal = Decimal("15.00")
 
 
 @lru_cache

@@ -68,8 +68,12 @@ Terminal states: **DONE**, **CANCELLED**. FAILED is not terminal; a human can `r
 | 15 | `cancel` → TASK_CANCELLED | any non-terminal | CANCELLED | human | — | active execution → CANCELLED |
 
 For `fail` and `time_out`, the target is READY while `attempt_count` (after the increment) is
-≤ `max_retries`, and FAILED once it exceeds it. With the default `max_retries = 2`, a task gets
-3 attempts.
+≤ `max_retries` **and** the task's budget is not exhausted (summed execution cost < `budget_usd`);
+otherwise FAILED. With the default `max_retries = 2`, a task gets 3 attempts. A human can raise
+the budget (`POST /tasks/{key}/budget`) and then `retry`.
+
+`claim` / `assign` are also refused (409 `assignment_rejected`) when the task's budget or the
+daily budget is spent.
 
 ## Execution
 
