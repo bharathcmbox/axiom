@@ -1,6 +1,7 @@
 # Phase 2 plan: the first worker
 
-Status: **proposed, awaiting approval** (2026-11-02).
+Status: **approved 2026-11-02** with defaults (P1: proceed without GitHub Pro for now, revisit
+before Phase 3; P5 budgets $3/task, $15/day; P9 first task as proposed; P10 live runs announced).
 Goal (SPEC.md): *one real task goes from READY to an open PR with no input from me.*
 Target repository: `bharathcmbox/tiny-agenticsoc` (private), local checkout
 `~/githubcode/tiny-agenticsoc`. Workers run locally in Docker.
