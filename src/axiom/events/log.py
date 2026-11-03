@@ -17,6 +17,7 @@ def append_event(
     task_id: int | None = None,
     execution_id: int | None = None,
     agent_id: int | None = None,
+    review_id: int | None = None,
     from_state: str | None = None,
     to_state: str | None = None,
     payload: dict[str, Any] | None = None,
@@ -24,8 +25,8 @@ def append_event(
     """Insert one event and return its id. Call inside the transaction that made the change."""
     row = conn.execute(
         """INSERT INTO events (actor, type, project_id, task_id, execution_id, agent_id,
-                               from_state, to_state, payload)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                               review_id, from_state, to_state, payload)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            RETURNING id""",
         (
             str(actor),
@@ -34,6 +35,7 @@ def append_event(
             task_id,
             execution_id,
             agent_id,
+            review_id,
             from_state,
             to_state,
             Jsonb(payload or {}),

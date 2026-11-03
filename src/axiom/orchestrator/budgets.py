@@ -21,8 +21,11 @@ CENT = Decimal("0.01")
 
 
 def task_spent(conn: Conn, task_id: int) -> Decimal:
+    """Developer executions plus reviews: the full cost of delivering the task."""
     row = conn.execute(
-        "SELECT coalesce(sum(cost_usd), 0) AS s FROM executions WHERE task_id = %s", (task_id,)
+        """SELECT (SELECT coalesce(sum(cost_usd), 0) FROM executions WHERE task_id = %(t)s)
+                + (SELECT coalesce(sum(cost_usd), 0) FROM reviews WHERE task_id = %(t)s) AS s""",
+        {"t": task_id},
     ).fetchone()
     assert row is not None
     return Decimal(row["s"])
@@ -30,8 +33,10 @@ def task_spent(conn: Conn, task_id: int) -> Decimal:
 
 def daily_spent(conn: Conn) -> Decimal:
     row = conn.execute(
-        """SELECT coalesce(sum(cost_usd), 0) AS s FROM executions
-           WHERE started_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'"""
+        """WITH day AS (SELECT date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS d)
+           SELECT (SELECT coalesce(sum(cost_usd), 0) FROM executions, day WHERE started_at >= day.d)
+                + (SELECT coalesce(sum(cost_usd), 0) FROM reviews, day WHERE created_at >= day.d)
+                  AS s"""
     ).fetchone()
     assert row is not None
     return Decimal(row["s"])

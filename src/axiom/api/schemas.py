@@ -24,6 +24,9 @@ class ProjectIn(BaseModel):
     test_command: str | None = Field(
         default=None, examples=["cd agent && uv run --with pytest pytest -q"]
     )
+    require_ci: bool = Field(
+        default=False, description="Gate AWAITING_MERGE on a green CI run for the head commit."
+    )
 
 
 class ProjectOut(_Out):
@@ -35,6 +38,7 @@ class ProjectOut(_Out):
     settings: dict[str, Any]
     default_branch: str
     test_command: str | None
+    require_ci: bool
     created_at: datetime
 
 
@@ -97,6 +101,9 @@ class TaskOut(_Out):
     pull_request_url: str | None
     dependencies: list[str]
     allowed_paths: list[str]
+    head_sha: str | None
+    ci_status: str | None
+    ci_sha: str | None
     budget_spent_usd: Decimal
     run_budget_usd: Decimal = Field(
         description="What a new execution may spend now: min(task remaining, day remaining)."
@@ -161,3 +168,54 @@ class EventOut(BaseModel):
     from_state: str | None
     to_state: str | None
     payload: dict[str, Any]
+
+
+# ---- reviews (Phase 3) ---------------------------------------------------------------------
+
+
+class ReviewClaimIn(BaseModel):
+    lease_seconds: int | None = Field(default=None, ge=1)
+
+
+class ReviewAssignmentOut(BaseModel):
+    review_id: int
+    role: str
+    round: int
+    head_sha: str | None
+    lease_expires_at: datetime
+    run_budget_usd: Decimal
+    task: dict[str, Any]
+    developer_result: dict[str, Any] | None
+
+
+class ReviewSubmitIn(BaseModel):
+    contract: dict[str, Any] = Field(description="Review contract: verdict, summary, findings.")
+    cost: dict[str, Any] | None = None
+
+
+class ReviewFailIn(BaseModel):
+    error: str = Field(min_length=1)
+    cost: dict[str, Any] | None = None
+
+
+class ReviewOut(BaseModel):
+    id: int
+    round: int
+    role: str
+    status: str
+    head_sha: str | None
+    reviewer_key: str | None
+    attempt_count: int
+    verdict: str | None
+    contract: dict[str, Any] | None
+    error: str | None
+    cost_usd: Decimal | None
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class DecisionOut(BaseModel):
+    review_id: int
+    decision: str = Field(
+        description="Aggregator decision: wait, approve, request_changes, escalate."
+    )

@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from axiom import errors as e
+from axiom.domain.review_machine import IllegalReviewTransition, ReviewActorNotPermitted
 from axiom.domain.task_machine import ActorNotPermitted, IllegalTransition
 
 STATUS: dict[type[Exception], int] = {
@@ -19,6 +20,8 @@ STATUS: dict[type[Exception], int] = {
     e.LeaseExpired: 409,
     e.LeaseNotExpired: 409,
     e.NoActiveExecution: 409,
+    IllegalReviewTransition: 409,
+    ReviewActorNotPermitted: 403,
 }
 
 

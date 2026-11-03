@@ -30,7 +30,7 @@ from axiom.errors import (
     NotFound,
 )
 from axiom.events.log import append_event
-from axiom.orchestrator import budgets
+from axiom.orchestrator import budgets, review_store
 from axiom.orchestrator.dependencies import dependencies_satisfied, pending_dependents
 from axiom.orchestrator.tasks import Task, get_task
 from axiom.registry.agents import Agent, get_agent
@@ -174,6 +174,11 @@ def apply_locked(
         payload=event_payload | {"command": command},
     )
 
+    # Consequences, logged after the transition that caused them.
+    if command == TaskCommand.SUBMIT:
+        review_store.request_reviews(conn, row, payload.get("commit"))
+    elif state == TaskState.IN_REVIEW:  # approve / request_changes / escalate / cancel
+        review_store.supersede_open_reviews(conn, task_id, reason=str(command))
     if command == TaskCommand.MERGE:
         for dependent_id in pending_dependents(conn, task_id):
             promote_if_ready(conn, dependent_id)
@@ -315,9 +320,14 @@ def _record_delivery(conn: Conn, task_id: int, payload: dict[str, Any]) -> None:
     for name, value in (("branch", branch), ("pr_url", pr_url)):
         if value is not None and not isinstance(value, str):
             raise InvalidInput(f"{name} must be a string")
+    commit = payload.get("commit")
+    if commit is not None and not isinstance(commit, str):
+        raise InvalidInput("commit must be a string")
     conn.execute(
         """UPDATE tasks SET branch = COALESCE(%s, branch),
-                            pull_request_url = COALESCE(%s, pull_request_url)
+                            pull_request_url = COALESCE(%s, pull_request_url),
+                            head_sha = COALESCE(%s, head_sha),
+                            ci_status = NULL, ci_sha = NULL, ci_details = NULL
            WHERE id = %s""",
-        (branch, pr_url, task_id),
+        (branch, pr_url, commit, task_id),
     )

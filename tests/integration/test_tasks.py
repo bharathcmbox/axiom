@@ -226,7 +226,8 @@ def test_payloads_are_stored_on_executions_and_events(org: Conn) -> None:
     assert execution["result"] == {"summary": "implemented", "cost_usd": 1.2}
     assert execution["ended_at"] is not None and execution["lease_expires_at"] is None
     do(org, key, C.REQUEST_CHANGES, payload={"findings": ["x"]})
-    assert events_for(org, key)[-1]["payload"]["findings"] == ["x"]
+    [reopened] = [e for e in events_for(org, key) if e["type"] == "TASK_REOPENED"]
+    assert reopened["payload"]["findings"] == ["x"]
 
 
 def test_ask_human_and_answer(org: Conn) -> None:
@@ -252,5 +253,6 @@ def test_full_happy_path_event_history(org: Conn) -> None:
         do(org, key, command)
     assert [e["type"] for e in events_for(org, key)] == [
         "TASK_CREATED", "TASK_READY", "TASK_ASSIGNED", "AGENT_STARTED",
-        "TASK_SUBMITTED", "REVIEW_APPROVED", "TASK_DONE",
+        "TASK_SUBMITTED", "REVIEW_REQUESTED", "REVIEW_REQUESTED",
+        "REVIEW_APPROVED", "REVIEW_SUPERSEDED", "REVIEW_SUPERSEDED", "TASK_DONE",
     ]  # fmt: skip

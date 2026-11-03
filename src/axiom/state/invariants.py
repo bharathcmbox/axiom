@@ -18,7 +18,18 @@ def check_invariants(conn: Conn) -> list[str]:
     violations += _dependencies_consistent(conn)
     violations += _retry_counters(conn)
     violations += _agent_assignments(conn)
+    violations += _reviews(conn)
     return violations
+
+
+def _reviews(conn: Conn) -> list[str]:
+    out = []
+    for r in conn.execute(
+        """SELECT t.key, t.state, r.id, r.status FROM reviews r JOIN tasks t ON t.id = r.task_id
+           WHERE r.status IN ('PENDING', 'CLAIMED') AND t.state <> 'IN_REVIEW'"""
+    ):
+        out.append(f"{r['key']}: review {r['id']} is {r['status']} but the task is {r['state']}")
+    return out
 
 
 def _executing_iff_one_active_execution(conn: Conn) -> list[str]:

@@ -84,8 +84,17 @@ def test_legal_transition(org: Conn, case: tuple[TaskCommand, TaskState, int, Ta
 
     assert task.state == expected
     new_events = events_for(org, key)[len(before) :]
-    assert len(new_events) == 1
-    [event] = new_events
+    # Exactly one task transition; review bookkeeping events (Phase 3) do not move the task.
+    transitions = [e for e in new_events if e["to_state"] is not None]
+    assert len(transitions) == 1
+    [event] = transitions
+    review_types = sorted(e["type"] for e in new_events if e["review_id"] is not None)
+    if command == C.SUBMIT:
+        assert review_types == ["REVIEW_REQUESTED", "REVIEW_REQUESTED"]  # code + security
+    elif source == S.IN_REVIEW:
+        assert review_types == ["REVIEW_SUPERSEDED", "REVIEW_SUPERSEDED"]
+    else:
+        assert review_types == []
     assert (event["type"], event["from_state"], event["to_state"]) == (
         RULES[command].event, source, expected,
     )  # fmt: skip

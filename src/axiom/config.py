@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     # Budgets (SPEC principle 8): default per-task budget, and the daily cap across all work.
     default_task_budget_usd: Decimal = Decimal("3.00")
     daily_budget_usd: Decimal = Decimal("15.00")
+    # Reviews (ADR-009): roles required for every round, per-review cost cap, round cap.
+    required_review_roles: tuple[str, ...] = ("code_reviewer", "security_reviewer")
+    review_budget_usd: Decimal = Decimal("1.00")
+    max_review_rounds: int = 3
+    review_lease_seconds: int = 300
 
 
 @lru_cache

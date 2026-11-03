@@ -65,3 +65,43 @@ def parse_result(data: Any) -> ResultContract:
 
 def result_json_schema() -> dict[str, Any]:
     return ResultContract.model_json_schema()
+
+
+# ---- review contract (SPEC section 6, ADR-009) --------------------------------------------
+
+BLOCKING_SEVERITIES = ("high", "critical")
+
+
+class Finding(_Strict):
+    severity: Literal["low", "medium", "high", "critical"]
+    file: str | None = None
+    line: int | None = Field(default=None, ge=1)
+    issue: str = Field(min_length=1)
+    required_change: str = Field(min_length=1)
+
+
+class ReviewContract(_Strict):
+    """A reviewer's verdict on one round of work."""
+
+    verdict: Literal["PASS", "FAIL"]
+    summary: str = Field(min_length=1, max_length=4000)
+    findings: list[Finding] = Field(default_factory=list)
+
+    @property
+    def blocking(self) -> list[Finding]:
+        return [f for f in self.findings if f.severity in BLOCKING_SEVERITIES]
+
+
+def parse_review(data: Any) -> ReviewContract:
+    try:
+        return ReviewContract.model_validate(data)
+    except ValidationError as e:
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc']) or '<root>'}: {err['msg']}"
+            for err in e.errors()
+        )
+        raise InvalidResult(problems) from None
+
+
+def review_json_schema() -> dict[str, Any]:
+    return ReviewContract.model_json_schema()

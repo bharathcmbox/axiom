@@ -12,18 +12,25 @@ from axiom.api.schemas import (
     BudgetIn,
     ClaimIn,
     CommandIn,
+    DecisionOut,
     EventOut,
     ExecutionOut,
     HeartbeatIn,
     HeartbeatOut,
     ProjectIn,
     ProjectOut,
+    ReviewAssignmentOut,
+    ReviewClaimIn,
+    ReviewFailIn,
+    ReviewOut,
+    ReviewSubmitIn,
     TaskIn,
     TaskOut,
 )
 from axiom.domain.roles import Actor
 from axiom.domain.task_machine import TaskCommand, TaskState
 from axiom.events.log import list_events
+from axiom.orchestrator import reviews
 from axiom.orchestrator.assignment import claim_next
 from axiom.orchestrator.commands import apply_command
 from axiom.orchestrator.leases import heartbeat
@@ -256,3 +263,54 @@ def events(
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
 ) -> list[EventOut]:
     return [EventOut.model_validate(e) for e in list_events(conn, after_id=after_id, limit=limit)]
+
+
+# ---- reviews (Phase 3) ---------------------------------------------------------------------
+
+
+@router.post("/reviews/claim", tags=["reviews"], responses={204: {"description": "No review"}})
+def claim_review_route(
+    conn: ConnDep, actor: ActorDep, response: Response, body: ReviewClaimIn | None = None
+) -> ReviewAssignmentOut | None:
+    """A reviewer agent claims the oldest pending review for its role."""
+    body = body or ReviewClaimIn()
+    assignment = reviews.claim_review(conn, actor, lease_seconds=body.lease_seconds)
+    if assignment is None:
+        response.status_code = 204
+        return None
+    return ReviewAssignmentOut.model_validate(assignment, from_attributes=True)
+
+
+@router.post("/reviews/{review_id}/heartbeat", tags=["reviews"])
+def review_heartbeat_route(
+    review_id: int, conn: ConnDep, actor: ActorDep, body: ReviewClaimIn | None = None
+) -> dict[str, Any]:
+    expires = reviews.review_heartbeat(
+        conn, actor, review_id, lease_seconds=(body or ReviewClaimIn()).lease_seconds
+    )
+    return {"review_id": review_id, "lease_expires_at": expires}
+
+
+@router.post("/reviews/{review_id}/submit", tags=["reviews"])
+def submit_review_route(
+    review_id: int, body: ReviewSubmitIn, conn: ConnDep, actor: ActorDep
+) -> DecisionOut:
+    """Submit a verdict. The response says what the aggregator did with the task."""
+    payload = {"cost": body.cost} if body.cost else None
+    decision = reviews.submit_review(conn, actor, review_id, body.contract, payload)
+    return DecisionOut(review_id=review_id, decision=decision)
+
+
+@router.post("/reviews/{review_id}/fail", tags=["reviews"])
+def fail_review_route(
+    review_id: int, body: ReviewFailIn, conn: ConnDep, actor: ActorDep
+) -> DecisionOut:
+    payload = {"cost": body.cost} if body.cost else None
+    decision = reviews.fail_review_run(conn, actor, review_id, body.error, payload)
+    return DecisionOut(review_id=review_id, decision=decision)
+
+
+@router.get("/tasks/{key}/reviews", tags=["reviews"])
+def task_reviews_route(key: str, conn: ConnDep) -> list[ReviewOut]:
+    task = get_task(conn, key)
+    return [ReviewOut.model_validate(r) for r in reviews.list_reviews(conn, task.id)]

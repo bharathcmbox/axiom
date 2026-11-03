@@ -114,7 +114,11 @@ def test_full_lifecycle_over_http(client: TestClient) -> None:
         ("TASK_ASSIGNED", "READY", "ASSIGNED"),
         ("AGENT_STARTED", "ASSIGNED", "IN_PROGRESS"),
         ("TASK_SUBMITTED", "IN_PROGRESS", "IN_REVIEW"),
-        ("REVIEW_APPROVED", "IN_REVIEW", "AWAITING_MERGE"),
+        ("REVIEW_REQUESTED", None, None),  # code review   (Phase 3)
+        ("REVIEW_REQUESTED", None, None),  # security review
+        ("REVIEW_APPROVED", "IN_REVIEW", "AWAITING_MERGE"),  # a human override...
+        ("REVIEW_SUPERSEDED", None, None),  # ...closes the open reviews
+        ("REVIEW_SUPERSEDED", None, None),
         ("TASK_DONE", "AWAITING_MERGE", "DONE"),
     ]
     assert events[-1]["actor"] == "human:bharath"
@@ -269,3 +273,44 @@ def test_budget_fields_and_route(client: TestClient) -> None:
         json={"key": "SOC", "name": "soc", "test_command": "cd agent && uv run pytest -q"},
     )
     assert r.json()["default_branch"] == "main"
+
+
+def test_review_flow_over_http(client: TestClient) -> None:
+    rev, sec = bearer("agent:REV-01"), bearer("agent:SEC-01")
+    key = _task(client)["key"]
+    assert client.post("/reviews/claim", headers=rev).status_code == 204  # nothing to review
+    client.post("/claims", headers=DEV1)
+    _cmd(client, key, "start", DEV1)
+    _cmd(client, key, "submit", DEV1, payload={"summary": "done", "commit": "abc123"})
+
+    assert client.post("/reviews/claim", headers=DEV1).status_code == 403  # not a reviewer
+    code = client.post("/reviews/claim", headers=rev).json()
+    assert (code["role"], code["task"]["key"], code["head_sha"]) == ("code_reviewer", key, "abc123")
+    security = client.post("/reviews/claim", headers=sec).json()
+
+    passed = {"verdict": "PASS", "summary": "fine", "findings": []}
+    r = client.post(f"/reviews/{code['review_id']}/submit", headers=sec, json={"contract": passed})
+    assert (r.status_code, r.json()["error"]) == (403, "not_execution_owner")
+    bad = client.post(f"/reviews/{code['review_id']}/submit", headers=rev,
+                      json={"contract": {"verdict": "OK"}})  # fmt: skip
+    assert bad.status_code == 422
+    r = client.post(f"/reviews/{code['review_id']}/submit", headers=rev,
+                    json={"contract": passed, "cost": {"usd": "0.30"}})  # fmt: skip
+    assert r.json() == {"review_id": code["review_id"], "decision": "wait"}
+    r = client.post(f"/reviews/{security['review_id']}/submit", headers=sec,
+                    json={"contract": passed})  # fmt: skip
+    assert r.json()["decision"] == "approve"
+    assert client.get(f"/tasks/{key}").json()["state"] == "AWAITING_MERGE"
+    reviews = client.get(f"/tasks/{key}/reviews").json()
+    assert [(x["role"], x["status"], x["reviewer_key"]) for x in reviews] == [
+        ("code_reviewer", "PASS", "REV-01"), ("security_reviewer", "PASS", "SEC-01"),
+    ]  # fmt: skip
+
+
+def test_agents_cannot_approve_over_http(client: TestClient) -> None:
+    key = _task(client)["key"]
+    client.post("/claims", headers=DEV1)
+    _cmd(client, key, "start", DEV1)
+    _cmd(client, key, "submit", DEV1)
+    r = _cmd(client, key, "approve", DEV1)
+    assert (r.status_code, r.json()["error"]) == (403, "actor_not_permitted")

@@ -38,6 +38,9 @@ class Task:
     created_at: datetime
     updated_at: datetime
     allowed_paths: list[str]
+    head_sha: str | None
+    ci_status: str | None
+    ci_sha: str | None
     dependencies: tuple[str, ...]
     budget_spent_usd: Decimal
     run_budget_usd: Decimal

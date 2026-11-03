@@ -27,6 +27,7 @@ class Project:
     settings: dict[str, Any]
     default_branch: str
     test_command: str | None
+    require_ci: bool
     created_at: datetime
 
     @classmethod
@@ -45,6 +46,7 @@ def create_project(
     settings: dict[str, Any] | None = None,
     default_branch: str = "main",
     test_command: str | None = None,
+    require_ci: bool = False,
 ) -> Project:
     require_not_agent(actor)
     if not PROJECT_KEY.match(key):
@@ -55,8 +57,8 @@ def create_project(
         try:
             row = conn.execute(
                 """INSERT INTO projects (key, name, repo_url, specification, settings,
-                                        default_branch, test_command)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                                        default_branch, test_command, require_ci)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
                 (
                     key,
                     name,
@@ -65,6 +67,7 @@ def create_project(
                     Jsonb(settings or {}),
                     default_branch,
                     test_command,
+                    require_ci,
                 ),
             ).fetchone()
         except errors.UniqueViolation as e:
