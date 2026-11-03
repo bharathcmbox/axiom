@@ -22,6 +22,13 @@ COMMITTER_NAME = "Axiom"
 COMMITTER_EMAIL = "axiom@localhost"
 _SAFE = re.compile(r"^[A-Z][A-Z0-9]*-[0-9]+$")
 
+# Tool caches an agent's test runs create. Excluded locally (.git/info/exclude, never committed
+# to the repo) so they are neither staged nor counted as changes outside allowed_paths.
+LOCAL_EXCLUDES = (
+    ".pytest_cache/", "__pycache__/", "*.pyc", ".mypy_cache/", ".ruff_cache/", ".venv/",
+    "node_modules/", ".coverage", "htmlcov/",
+)  # fmt: skip
+
 
 @dataclass(frozen=True)
 class Workspace:
@@ -60,6 +67,10 @@ def prepare_workspace(
     git(["checkout", "--quiet", "-b", branch], cwd=repo)
     git(["config", "user.name", COMMITTER_NAME], cwd=repo)
     git(["config", "user.email", COMMITTER_EMAIL], cwd=repo)
+    exclude = repo / ".git" / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    with exclude.open("a") as f:
+        f.write("\n# added by Axiom: tool caches\n" + "\n".join(LOCAL_EXCLUDES) + "\n")
     base_sha = git(["rev-parse", "HEAD"], cwd=repo)
     return Workspace(root=root, repo=repo, out=out, branch=branch, base_sha=base_sha)
 

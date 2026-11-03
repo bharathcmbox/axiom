@@ -61,6 +61,18 @@ class RunOutcome:
 EventCallback = Callable[[dict[str, Any]], None]
 
 
+@dataclass(frozen=True)
+class CommandResult:
+    exit_code: int
+    output: str
+
+
+class CommandRunner(Protocol):
+    """Runs a shell command in a checkout. Production: a fresh sandbox (SandboxRuntime.exec)."""
+
+    def exec(self, workdir: Path, outdir: Path, command: str, timeout: int) -> CommandResult: ...
+
+
 class Runtime(Protocol):
     """Runs one agent execution. `run` blocks until the agent finishes or is cancelled."""
 

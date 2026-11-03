@@ -132,3 +132,15 @@ def test_cancel_kills_the_container(request_: RunRequest) -> None:
 def test_timeout_fails_the_run(request_: RunRequest) -> None:
     outcome = SandboxRuntime(fake_scenario="hang", timeout_seconds=5).run(request_)
     assert outcome.outcome == Outcome.FAILED and "timed out" in (outcome.error or "")
+
+
+def test_exec_runs_commands_without_any_credentials(
+    request_: RunRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-dummy")
+    rt = SandboxRuntime()
+    ok = rt.exec(request_.workspace, request_.output_dir, "env; echo marker; exit 3", 120)
+    assert ok.exit_code == 3 and "marker" in ok.output
+    assert "ANTHROPIC_API_KEY" not in ok.output  # verification needs no API key
+    slow = rt.exec(request_.workspace, request_.output_dir, "sleep 30", 3)
+    assert slow.exit_code == 124 and "timed out" in slow.output

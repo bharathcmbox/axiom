@@ -15,9 +15,11 @@ import secrets
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from threading import Lock
 
 from axiom.runtimes.base import (
+    CommandResult,
     EventCallback,
     Outcome,
     RunOutcome,
@@ -46,9 +48,24 @@ class SandboxRuntime:
     _cancelled: bool = False
 
     def docker_args(
-        self, request: RunRequest, container: str, entrypoint: list[str] | None = None
+        self,
+        request: RunRequest,
+        container: str,
+        entrypoint: list[str] | None = None,
+        *,
+        pass_env: bool = True,
     ) -> list[str]:
-        st = request.workspace.stat()
+        return self._args(request.workspace, request.output_dir, container, entrypoint, pass_env)
+
+    def _args(
+        self,
+        workspace: Path,
+        output_dir: Path,
+        container: str,
+        entrypoint: list[str] | None,
+        pass_env: bool,
+    ) -> list[str]:
+        st = workspace.stat()
         args = [
             self.docker, "run", "--rm", "--name", container,
             "--network", self.network,
@@ -65,10 +82,10 @@ class SandboxRuntime:
             "-e", f"HTTPS_PROXY={self.proxy_url}",
             "-e", f"HTTP_PROXY={self.proxy_url}",
             "-e", "NO_PROXY=",
-            "-v", f"{request.workspace}:/workspace/repo:rw",
-            "-v", f"{request.output_dir}:/workspace/out:rw",
+            "-v", f"{workspace}:/workspace/repo:rw",
+            "-v", f"{output_dir}:/workspace/out:rw",
         ]  # fmt: skip
-        for var in PASSTHROUGH_ENV:
+        for var in PASSTHROUGH_ENV if pass_env else ():
             if var in os.environ:
                 args += ["-e", var]  # name only: the value is read from our env, not argv
         if self.fake_scenario:
@@ -110,6 +127,18 @@ class SandboxRuntime:
                 Outcome.FAILED, error=f"sandbox exited {code} without outcome: {tail}"
             )
         return outcome_from_dict(json.loads(outcome_file.read_text()), request.output_dir)
+
+    def exec(self, workdir: Path, outdir: Path, command: str, timeout: int) -> CommandResult:
+        """Run a shell command (e.g. the project's tests) in a fresh sandbox, without any
+        credentials at all: verification needs no API key."""
+        container = f"axiom-verify-{secrets.token_hex(4)}"
+        args = self._args(workdir, outdir, container, ["sh", "-c", command], pass_env=False)
+        try:
+            proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self._kill(container)
+            return CommandResult(exit_code=124, output=f"timed out after {timeout}s")
+        return CommandResult(exit_code=proc.returncode, output=proc.stdout + proc.stderr)
 
     def cancel(self) -> None:
         with self._lock:
