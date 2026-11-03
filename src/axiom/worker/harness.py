@@ -37,6 +37,7 @@ class WorkerConfig:
     poll_seconds: float = 10.0
     project_key: str | None = None
     effort: str = "high"
+    default_model: str = "claude-opus-5-5"  # ADR-006; used when the agent row has no model
     test_timeout_seconds: int = 900
     keep_workspaces: bool = False
 
@@ -136,7 +137,7 @@ class Worker:
             workspace=ws.repo,
             output_dir=ws.out,
             budget_usd=Decimal(str(task["run_budget_usd"])),
-            model=agent.get("model"),
+            model=agent.get("model") or self.config.default_model,
             effort=self.config.effort,
         )
 

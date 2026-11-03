@@ -45,6 +45,8 @@ def build_worker() -> Worker:
         poll_seconds=float(env.get("AXIOM_POLL_SECONDS", "10")),
         project_key=env.get("AXIOM_PROJECT_KEY") or None,
         keep_workspaces=env.get("AXIOM_KEEP_WORKSPACES") == "1",
+        default_model=env.get("AXIOM_DEFAULT_MODEL") or "claude-opus-5-5",
+        effort=env.get("AXIOM_EFFORT") or "high",
     )
     scenario = env.get("AXIOM_FAKE_SCENARIO")
     sandbox = SandboxRuntime(

@@ -298,3 +298,20 @@ def test_bad_repository_fails_fast_before_the_agent_runs(
     )
     assert _remote_branches(remote) == ["main"]  # nothing cloned, run or pushed
     assert not (tmp_path / "work").exists()
+
+
+def test_agents_without_a_model_use_the_default(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    _project(api_tokens, remote)
+    _task(api_tokens)
+    seen: list[str | None] = []
+
+    class Recording(FakeRuntime):
+        def run(self, request: Any, on_event: Any = None) -> Any:
+            seen.append(request.model)
+            return super().run(request, on_event)
+
+    api_tokens.execute("UPDATE agents SET model = NULL WHERE key = 'DEV-01'")
+    _worker(api_url, tmp_path, Recording(edits=GOOD_EDIT), FakePrOpener()).run_once()
+    assert seen == ["claude-opus-5-5"]

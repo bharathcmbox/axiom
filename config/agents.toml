@@ -5,33 +5,40 @@
 key = "EM-01"
 role = "engineering_manager"
 runtime = "claude_code"
+model = "claude-opus-5-5"
 
 [[agents]]
 key = "ARCH-01"
 role = "architect"
 runtime = "claude_code"
+model = "claude-opus-5-5"
 
 [[agents]]
 key = "DEV-01"
 role = "developer"
 runtime = "claude_code"
+model = "claude-opus-5-5"
 
 [[agents]]
 key = "DEV-02"
 role = "developer"
 runtime = "claude_code"
+model = "claude-opus-5-5"
 
 [[agents]]
 key = "QA-01"
 role = "qa"
 runtime = "claude_code"
+model = "claude-opus-5-5"
 
 [[agents]]
 key = "SEC-01"
 role = "security_reviewer"
 runtime = "claude_code"
+model = "claude-opus-5-5"
 
 [[agents]]
 key = "REV-01"
 role = "code_reviewer"
 runtime = "claude_code"
+model = "claude-opus-5-5"
