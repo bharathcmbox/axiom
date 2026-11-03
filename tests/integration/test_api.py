@@ -9,15 +9,24 @@ from fastapi.testclient import TestClient
 from axiom.api.app import create_app
 from axiom.config import Settings
 from axiom.state.db import Conn
+from tests.conftest import bearer
 
-H = {"X-Axiom-Actor": "human:bharath"}
-DEV1 = {"X-Axiom-Actor": "agent:DEV-01"}
-DEV2 = {"X-Axiom-Actor": "agent:DEV-02"}
+H = bearer("human:bharath")
+DEV1 = bearer("agent:DEV-01")
+DEV2 = bearer("agent:DEV-02")
 
 
 @pytest.fixture
-def client(org: Conn, db_url: str) -> Iterator[TestClient]:
+def client(api_tokens: Conn, db_url: str) -> Iterator[TestClient]:
     """API over the test DB, with project AX and the 7 seeded agents already present."""
+    app = create_app(Settings(database_url=db_url), start_reaper=False)
+    with TestClient(app, headers=H) as c:  # human token by default; requests may override
+        yield c
+
+
+@pytest.fixture
+def anon(api_tokens: Conn, db_url: str) -> Iterator[TestClient]:
+    """A client that sends no token."""
     app = create_app(Settings(database_url=db_url), start_reaper=False)
     with TestClient(app) as c:
         yield c
@@ -151,16 +160,51 @@ def test_agents_cannot_merge(client: TestClient) -> None:
     assert (r.status_code, r.json()["error"]) == (403, "actor_not_permitted")
 
 
-def test_actor_header_is_required_and_validated(client: TestClient) -> None:
-    body = {"title": "t", "specification": "s"}
-    assert client.post("/projects/AX/tasks", json=body).status_code == 422
-    r = client.post("/projects/AX/tasks", json=body, headers={"X-Axiom-Actor": "bharath"})
-    assert r.status_code == 400
+def test_every_route_but_healthz_requires_a_token(anon: TestClient) -> None:
+    assert anon.get("/healthz").status_code == 200
+    for method, path in [
+        ("GET", "/tasks"), ("GET", "/agents"), ("GET", "/events"), ("GET", "/invariants"),
+        ("POST", "/projects/AX/tasks"), ("POST", "/claims"),
+        ("POST", "/tasks/AX-001/commands/cancel"), ("POST", "/tasks/AX-001/heartbeat"),
+    ]:  # fmt: skip
+        r = anon.request(method, path)
+        assert r.status_code == 401, (method, path)
+        assert r.headers["www-authenticate"] == "Bearer"
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["Bearer axm_not-a-real-token", "Bearer ", "Basic dXNlcjpwYXNz", "axm_test-human-bharath"],
+)
+def test_bad_tokens_are_401(anon: TestClient, header: str) -> None:
+    assert anon.get("/tasks", headers={"Authorization": header}).status_code == 401
+
+
+def test_revoked_token_is_401(client: TestClient, api_tokens: Conn) -> None:
+    api_tokens.execute("UPDATE api_tokens SET revoked_at = now() WHERE actor = 'agent:DEV-01'")
+    assert client.post("/claims", headers=DEV1).status_code == 401
+
+
+def test_actor_comes_from_the_token_not_the_client(client: TestClient) -> None:
+    key = _task(client)["key"]
+    # A spoofed X-Axiom-Actor header is ignored: DEV-01's token still acts as DEV-01.
+    r = _cmd(client, key, "cancel", DEV1 | {"X-Axiom-Actor": "human:bharath"})
+    assert (r.status_code, r.json()["error"]) == (403, "actor_not_permitted")
+    events = client.get(f"/tasks/{key}/events").json()
+    assert {e["actor"] for e in events} <= {"human:bharath", "system:dependencies"}
+
+
+def test_agents_cannot_change_the_registry(client: TestClient) -> None:
+    r = client.post("/projects", json={"key": "EVIL", "name": "x"}, headers=DEV1)
+    assert (r.status_code, r.json()["error"]) == (403, "forbidden")
+    agent = {"key": "DEV-09", "role": "developer", "runtime": "claude_code"}
+    assert client.post("/agents", json=agent, headers=DEV1).status_code == 403
+    assert client.post("/agents/DEV-02/disable", headers=DEV1).status_code == 403
 
 
 def test_unknown_and_internal_commands_rejected(client: TestClient) -> None:
     key = _task(client)["key"]
-    for command in ("deploy", "claim", "promote"):
+    for command in ("deploy", "claim", "promote", "time_out"):
         assert _cmd(client, key, command, H).status_code == 422
 
 
@@ -194,8 +238,6 @@ def test_lease_and_ownership_errors(client: TestClient) -> None:
     assert (r.status_code, r.json()["error"]) == (403, "not_execution_owner")
     r = _cmd(client, key, "start", DEV2)
     assert (r.status_code, r.json()["error"]) == (403, "not_execution_owner")
-    r = _cmd(client, key, "time_out", {"X-Axiom-Actor": "system:reaper"})
-    assert (r.status_code, r.json()["error"]) == (409, "lease_not_expired")
     _task(client)  # another READY task, but DEV-01 is already at capacity
     r = client.post("/claims", headers=DEV1)
     assert (r.status_code, r.json()["error"]) == (409, "assignment_rejected")

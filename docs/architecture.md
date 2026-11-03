@@ -5,7 +5,7 @@ Postgres; the process keeps nothing in memory that matters, so it can be killed 
 Decisions behind this design: [docs/decisions/](decisions/).
 
 ```
-            HTTP (X-Axiom-Actor: human:… | agent:DEV-01 | system:…)
+            HTTP (Authorization: Bearer <token> → human:… | agent:DEV-01)
                 │
 ┌───────────────▼────────────────────────────────────────────────┐
 │ api/            routes.py (thin) · schemas.py · errors.py       │

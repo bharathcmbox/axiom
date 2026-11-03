@@ -28,10 +28,12 @@ from axiom.orchestrator.commands import apply_command
 from axiom.orchestrator.leases import heartbeat
 from axiom.orchestrator.tasks import Task, create_task, get_task, list_tasks
 from axiom.registry import agents, projects
+from axiom.registry.tokens import authenticate
 from axiom.state.db import Conn
 from axiom.state.invariants import check_invariants
 
-router = APIRouter()
+# /healthz is the only unauthenticated route; everything on `router` needs a valid token.
+public_router = APIRouter()
 
 
 def get_conn(request: Request) -> Iterator[Conn]:
@@ -40,23 +42,40 @@ def get_conn(request: Request) -> Iterator[Conn]:
 
 
 def get_actor(
-    x_axiom_actor: Annotated[
-        str,
-        Header(description="Who is acting: human:<name>, agent:<AGENT-KEY> or system:<name>"),
-    ],
+    request: Request,
+    authorization: Annotated[
+        str | None,
+        Header(description="Bearer token issued with `python -m axiom.registry.tokens issue`"),
+    ] = None,
 ) -> Actor:
-    try:
-        return Actor.parse(x_axiom_actor)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+    """Authenticate the request. The actor comes from the token, never from the client."""
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(
+            status_code=401,
+            detail="missing bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    with request.app.state.pool.connection() as conn:
+        actor = authenticate(conn, token.strip())
+    if actor is None:
+        raise HTTPException(
+            status_code=401,
+            detail="invalid or revoked token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return actor
 
 
 ConnDep = Annotated[Conn, Depends(get_conn)]
 ActorDep = Annotated[Actor, Depends(get_actor)]
+router = APIRouter(dependencies=[Depends(get_actor)])
 
-# Commands exposed on /tasks/{key}/commands/{command}. `claim` is POST /claims; `promote` is
-# only ever issued internally when dependencies finish.
-PUBLIC_COMMANDS = [c for c in TaskCommand if c not in (TaskCommand.CLAIM, TaskCommand.PROMOTE)]
+# Commands exposed on /tasks/{key}/commands/{command}. `claim` is POST /claims. `promote` and
+# `time_out` are system commands, issued only inside the control plane (system actors cannot
+# authenticate over HTTP).
+INTERNAL_COMMANDS = (TaskCommand.CLAIM, TaskCommand.PROMOTE, TaskCommand.TIME_OUT)
+PUBLIC_COMMANDS = [c for c in TaskCommand if c not in INTERNAL_COMMANDS]
 
 
 def _task_out(task: Task) -> TaskOut:
@@ -66,7 +85,7 @@ def _task_out(task: Task) -> TaskOut:
 # ---- health ---------------------------------------------------------------------------------
 
 
-@router.get("/healthz", tags=["ops"])
+@public_router.get("/healthz", tags=["ops"])
 def healthz(conn: ConnDep) -> dict[str, str]:
     conn.execute("SELECT 1")
     return {"status": "ok", "database": "ok"}

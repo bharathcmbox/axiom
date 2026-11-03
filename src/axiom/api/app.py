@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from axiom.api import errors
-from axiom.api.routes import router
+from axiom.api.routes import public_router, router
 from axiom.config import Settings, get_settings
 from axiom.orchestrator.reaper import Reaper
 from axiom.state.db import create_pool
@@ -54,6 +54,7 @@ def create_app(settings: Settings | None = None, *, start_reaper: bool = True) -
         lifespan=lifespan,
     )
     errors.install(app)
+    app.include_router(public_router)
     app.include_router(router)
     return app
 

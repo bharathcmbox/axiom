@@ -2,8 +2,17 @@
 
 Interactive docs (OpenAPI) are served at <http://127.0.0.1:8000/docs> when the stack is up.
 
-Every write request needs an `X-Axiom-Actor` header: `human:<name>`, `agent:<AGENT-KEY>` or
-`system:<name>`. In Phase 1 it is trusted, not authenticated; the API listens on localhost only.
+Every request except `GET /healthz` needs a bearer token: `Authorization: Bearer axm_…`. The
+token decides who you are (`human:<name>` or `agent:<AGENT-KEY>`); clients cannot choose their
+actor. `system:` actors (the reaper, dependency promotion) exist only inside the control plane
+and cannot hold tokens. Issue tokens where the database is reachable:
+
+```bash
+docker compose exec api python -m axiom.registry.tokens issue human:bharath   # printed once
+docker compose exec api python -m axiom.registry.tokens issue agent:DEV-01
+docker compose exec api python -m axiom.registry.tokens list
+docker compose exec api python -m axiom.registry.tokens revoke <id>
+```
 
 ## Endpoints
 
@@ -23,8 +32,8 @@ Every write request needs an `X-Axiom-Actor` header: `human:<name>`, `agent:<AGE
 | GET | `/tasks/{key}/events`, `/events?after_id=&limit=` | Event log |
 
 Commands accepted on `/tasks/{key}/commands/{command}`: `assign`, `start`, `submit`,
-`ask_human`, `answer`, `fail`, `time_out`, `approve`, `request_changes`, `reject_merge`,
-`merge`, `retry`, `cancel`. (`claim` is `POST /claims`; `promote` is internal.) See
+`ask_human`, `answer`, `fail`, `approve`, `request_changes`, `reject_merge`,
+`merge`, `retry`, `cancel`. (`claim` is `POST /claims`; `promote` and `time_out` are internal.) See
 [state-machines.md](state-machines.md) for which actor may issue each one, and from which
 states.
 
@@ -34,8 +43,8 @@ Body: `{"error": "<code>", "detail": "<message>", ...}`.
 
 | Status | Codes |
 |---|---|
-| 400 | malformed `X-Axiom-Actor` |
-| 403 | `actor_not_permitted`, `not_execution_owner`, `forbidden` |
+| 401 | missing, invalid or revoked bearer token |
+| 403 | `actor_not_permitted`, `not_execution_owner`, `forbidden` (e.g. an agent changing the registry) |
 | 404 | `not_found` |
 | 409 | `illegal_transition` (adds `state`, `command`, `allowed`), `assignment_rejected`, `dependencies_not_met`, `lease_expired`, `lease_not_expired`, `no_active_execution`, `already_exists` |
 | 422 | request validation, `invalid_input` |
@@ -44,8 +53,10 @@ Body: `{"error": "<code>", "detail": "<message>", ...}`.
 
 ```bash
 api=http://127.0.0.1:8000
-H=(-H "X-Axiom-Actor: human:bharath" -H "Content-Type: application/json")
-DEV=(-H "X-Axiom-Actor: agent:DEV-01" -H "Content-Type: application/json")
+HTOK=$(docker compose exec -T api python -m axiom.registry.tokens issue human:bharath)
+DTOK=$(docker compose exec -T api python -m axiom.registry.tokens issue agent:DEV-01)
+H=(-H "Authorization: Bearer $HTOK" -H "Content-Type: application/json")
+DEV=(-H "Authorization: Bearer $DTOK" -H "Content-Type: application/json")
 
 curl -s "${H[@]}" -d '{"key":"AX","name":"Axiom"}' $api/projects
 curl -s "${H[@]}" $api/projects/AX/tasks -d '{
@@ -64,5 +75,5 @@ curl -s "${H[@]}" -d '{}' $api/tasks/AX-001/commands/approve
 curl -s "${H[@]}" -d '{}' $api/tasks/AX-001/commands/merge   # -> DONE
 
 curl -s "${H[@]}" -d '{}' $api/tasks/AX-001/commands/merge   # -> 409 illegal_transition
-curl -s $api/tasks/AX-001/events                              # full history
+curl -s "${H[@]}" $api/tasks/AX-001/events                     # full history
 ```

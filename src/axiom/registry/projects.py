@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 from axiom.domain.roles import Actor
 from axiom.errors import AlreadyExists, InvalidInput, NotFound
 from axiom.events.log import append_event
+from axiom.registry.guards import require_not_agent
 from axiom.state.db import Conn
 
 PROJECT_KEY = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
@@ -41,6 +42,7 @@ def create_project(
     specification: str | None = None,
     settings: dict[str, Any] | None = None,
 ) -> Project:
+    require_not_agent(actor)
     if not PROJECT_KEY.match(key):
         raise InvalidInput(f"project key must match {PROJECT_KEY.pattern}: {key!r}")
     if not name.strip():

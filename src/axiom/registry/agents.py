@@ -12,6 +12,7 @@ from psycopg import errors
 from axiom.domain.roles import Actor, Role, Runtime
 from axiom.errors import AlreadyExists, InvalidInput, NotFound
 from axiom.events.log import append_event
+from axiom.registry.guards import require_not_agent
 from axiom.state.db import Conn
 
 AGENT_KEY = re.compile(r"^[A-Z]+-[0-9]{2}$")
@@ -64,6 +65,7 @@ def register_agent(
     instructions_path: str | None = None,
     max_concurrent: int = 1,
 ) -> Agent:
+    require_not_agent(actor)
     role_, runtime_ = _validate(key, role, runtime, max_concurrent)
     with conn.transaction():
         try:
@@ -107,6 +109,7 @@ def list_agents(conn: Conn, *, role: str | None = None, enabled: bool | None = N
 
 def set_enabled(conn: Conn, actor: Actor, key: str, enabled: bool) -> Agent:
     """Enable or disable an agent. A no-op (already in that state) writes no event."""
+    require_not_agent(actor)
     with conn.transaction():
         row = conn.execute("SELECT * FROM agents WHERE key = %s FOR UPDATE", (key,)).fetchone()
         if row is None:

@@ -14,8 +14,8 @@ sequenceDiagram
     participant R as Route
     participant S as Service (orchestrator)
     participant H as Error handlers
-    C->>F: POST /tasks/AX-001/commands/submit<br/>X-Axiom-Actor: agent:DEV-01<br/>{"payload": {...}}
-    F->>D: get_actor(header) → Actor(AGENT, "DEV-01")
+    C->>F: POST /tasks/AX-001/commands/submit<br/>Authorization: Bearer axm_…<br/>{"payload": {...}}
+    F->>D: get_actor(token) → look up hash → Actor(AGENT, "DEV-01")
     F->>D: get_conn() → borrow a connection from the pool
     F->>F: validate body as CommandIn (pydantic)
     F->>R: command_route(key, command, conn, actor, body)
@@ -46,22 +46,38 @@ flowchart LR
     routes --> schemas
 ```
 
-## The actor header
+## Authentication: the actor comes from the token
 
-Every write needs `X-Axiom-Actor`. It is parsed into an `Actor(kind, name)`:
+Every route except `/healthz` requires `Authorization: Bearer <token>`. The token is looked up
+(by its SHA-256 hash) in `api_tokens`, and the row says who it belongs to:
 
 ```mermaid
 flowchart LR
-    h["X-Axiom-Actor: agent:DEV-01"] --> p{"Actor.parse"}
-    p -->|"missing"| e422["422 (FastAPI: required header)"]
-    p -->|"no colon / unknown kind"| e400["400 malformed actor"]
-    p -->|ok| a["Actor(kind=AGENT, name='DEV-01')"]
+    h["Authorization: Bearer axm_…"] --> s{"scheme = Bearer<br/>and a token?"}
+    s -->|no| e1["401 missing bearer token"]
+    s -->|yes| l["sha256(token) → api_tokens<br/>WHERE revoked_at IS NULL"]
+    l -->|not found| e2["401 invalid or revoked token"]
+    l -->|found| a["Actor(kind=AGENT, name='DEV-01')"]
     a --> rules["the transition table checks the kind;<br/>execution guards check the name"]
 ```
 
-> ⚠️ **Phase 1 trusts this header.** Anyone who can reach the API can claim to be `human:` or
-> `system:`. That is acceptable only because the API listens on 127.0.0.1. Phase 2 replaces it
-> with per-agent tokens before any worker runs unattended.
+```mermaid
+flowchart TB
+    cli["python -m axiom.registry.tokens issue agent:DEV-01"] --> gen["random 256-bit token, prefix axm_"]
+    gen --> store["store only sha256(token)<br/>+ actor + agent_id"]
+    gen --> show["print the token once"]
+    store --> ev["event TOKEN_ISSUED<br/>(never contains the token)"]
+```
+
+Three rules matter here:
+- **Clients cannot choose their actor.** A request is DEV-01 because it carries DEV-01's token.
+  A test sends a spoofed `X-Axiom-Actor: human:…` header next to an agent token and checks it
+  is ignored.
+- **`system:` actors cannot hold tokens.** `promote` and `time_out` only ever come from inside
+  the control plane, so they are not exposed over HTTP at all.
+- **Agents cannot change the registry** (projects, agents, enable/disable): 403.
+
+(Phase 1 trusted an `X-Axiom-Actor` header instead; tokens replaced it at the start of Phase 2.)
 
 ## Error mapping
 
@@ -72,6 +88,9 @@ one module, `api/errors.py`, turns them into HTTP responses:
 flowchart LR
     subgraph s404["404"]
         NotFound
+    end
+    subgraph s401["401: who are you?"]
+        auth["missing / invalid / revoked token"]
     end
     subgraph s403["403: you are not allowed"]
         ActorNotPermitted
@@ -147,7 +166,7 @@ trade-off.
 
 1. Open <http://127.0.0.1:8000/docs>, expand `POST /tasks/{key}/commands/{command}`, and send
    an illegal command. Read the 409 body.
-2. Send a request with `X-Axiom-Actor: robot:x`. You should get a 400.
+2. Send a request without a token, then with a made-up `Bearer axm_nope`. Both should be 401.
 3. Find `STATUS` in `api/errors.py`. Add a new error class to `axiom/errors.py` without
    mapping it, and work out what FastAPI would return. (Answer: 500, which is why every domain
    error must be listed.)

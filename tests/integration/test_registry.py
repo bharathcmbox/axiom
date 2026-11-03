@@ -146,3 +146,18 @@ def test_seed_skips_existing_and_adds_new(db: Conn, human: Actor, tmp_path: Path
         '[[agents]]\nkey = "QA-01"\nrole = "qa"\nruntime = "codex"\n'
     )
     assert [a.key for a in seed_agents(db, human, cfg)] == ["QA-01"]
+
+
+def test_agents_cannot_change_the_registry(db: Conn) -> None:
+    from axiom.domain.roles import ActorKind
+    from axiom.errors import Forbidden
+
+    human = Actor(ActorKind.HUMAN, "tester")
+    agent = Actor(ActorKind.AGENT, "DEV-01")
+    register_agent(db, human, key="DEV-01", role="developer", runtime="claude_code")
+    with pytest.raises(Forbidden):
+        create_project(db, agent, key="AX", name="x")
+    with pytest.raises(Forbidden):
+        register_agent(db, agent, key="DEV-02", role="developer", runtime="claude_code")
+    with pytest.raises(Forbidden):
+        set_enabled(db, agent, "DEV-01", False)

@@ -9,9 +9,13 @@ set -euo pipefail
 api="http://127.0.0.1:${AXIOM_API_PORT:-8000}"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-H=(-H "X-Axiom-Actor: human:demo" -H "Content-Type: application/json")
-DEV1=(-H "X-Axiom-Actor: agent:DEV-01" -H "Content-Type: application/json")
-DEV2=(-H "X-Axiom-Actor: agent:DEV-02" -H "Content-Type: application/json")
+issue() { docker compose exec -T api python -m axiom.registry.tokens issue "$1"; }
+HTOK=$(issue human:demo)
+export HTOK
+H=(-H "Authorization: Bearer $HTOK" -H "Content-Type: application/json")
+DEV1=(-H "Authorization: Bearer $(issue agent:DEV-01)" -H "Content-Type: application/json")
+DEV2=(-H "Authorization: Bearer $(issue agent:DEV-02)" -H "Content-Type: application/json")
+get() { curl -fsS -H "Authorization: Bearer $HTOK" "$@"; }
 LEASE=${DEMO_LEASE_SECONDS:-30}
 
 json() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
@@ -43,7 +47,9 @@ snapshot() { # snapshot PROJECT FILE
   python3 - "$api" "$1" > "$2" <<'PY'
 import json, sys, urllib.request
 api, project = sys.argv[1], sys.argv[2]
-get = lambda path: json.load(urllib.request.urlopen(api + path))
+import os
+req = lambda path: urllib.request.Request(api + path, headers={"Authorization": "Bearer " + os.environ["HTOK"]})
+get = lambda path: json.load(urllib.request.urlopen(req(path)))
 tasks = get(f"/tasks?project={project}")
 pid = get(f"/projects/{project}")["id"]
 events, after = [], 0
@@ -60,7 +66,7 @@ PY
 wait_healthy
 echo "==> waiting until DEV-01 and DEV-02 are free (e.g. leases left over from an earlier run)"
 for _ in $(seq 1 120); do
-  busy=$(curl -fsS "$api/tasks?state=ASSIGNED" "$api/tasks?state=IN_PROGRESS" 2>/dev/null \
+  busy=$(get "$api/tasks?state=ASSIGNED" "$api/tasks?state=IN_PROGRESS" 2>/dev/null \
          | grep -c '"assigned_role":"developer"' || true)
   [ "$busy" = "0" ] && break; sleep 1
 done
@@ -96,7 +102,7 @@ cmd "$inflight" assign H "{\"agent_key\":\"DEV-01\",\"lease_seconds\":$LEASE}"
 cmd "$inflight" start DEV1 "{\"lease_seconds\":$LEASE}"
 
 echo "==> tasks before the crash"
-curl -fsS "$api/tasks?project=$P" | show_tasks
+get "$api/tasks?project=$P" | show_tasks
 snapshot "$P" "$work/before.json"
 echo "    ($(json 'len(d["events"])' < "$work/before.json") events, in-flight task $inflight held by DEV-01 with a ${LEASE}s lease)"
 
@@ -118,9 +124,9 @@ fi
 
 echo "==> DEV-01 never comes back; waiting for its lease to expire and the reaper to act"
 for _ in $(seq 1 $((LEASE + 30))); do
-  state=$(curl -fsS "$api/tasks/$inflight" | json 'd["state"]')
+  state=$(get "$api/tasks/$inflight" | json 'd["state"]')
   [ "$state" = "READY" ] && break; sleep 1
 done
-curl -fsS "$api/tasks/$inflight/events" | show_events
-curl -fsS "$api/tasks/$inflight" | json '"   {} is {} with attempt_count={}".format(d["key"], d["state"], d["attempt_count"])'
-echo "==> invariants: $(curl -fsS "$api/invariants")"
+get "$api/tasks/$inflight/events" | show_events
+get "$api/tasks/$inflight" | json '"   {} is {} with attempt_count={}".format(d["key"], d["state"], d["attempt_count"])'
+echo "==> invariants: $(get "$api/invariants")"

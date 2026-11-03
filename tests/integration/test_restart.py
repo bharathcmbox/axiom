@@ -9,23 +9,26 @@ from fastapi.testclient import TestClient
 from axiom.api.app import create_app
 from axiom.config import Settings
 from axiom.state.db import Conn
+from tests.conftest import bearer
 from tests.integration.helpers import expire_lease
 
-H = {"X-Axiom-Actor": "human:bharath"}
-DEV1 = {"X-Axiom-Actor": "agent:DEV-01"}
-DEV2 = {"X-Axiom-Actor": "agent:DEV-02"}
+H = bearer("human:bharath")
+DEV1 = bearer("agent:DEV-01")
+DEV2 = bearer("agent:DEV-02")
 
 
 def _app(db_url: str) -> TestClient:
-    return TestClient(create_app(Settings(database_url=db_url), start_reaper=False))
+    return TestClient(create_app(Settings(database_url=db_url), start_reaper=False), headers=H)
 
 
 def _snapshot(c: TestClient) -> dict[str, Any]:
-    tasks = c.get("/tasks").json()
+    tasks = c.get("/tasks", headers=H).json()
     return {
         "tasks": tasks,
-        "executions": {t["key"]: c.get(f"/tasks/{t['key']}/executions").json() for t in tasks},
-        "events": c.get("/events", params={"limit": 1000}).json(),
+        "executions": {
+            t["key"]: c.get(f"/tasks/{t['key']}/executions", headers=H).json() for t in tasks
+        },
+        "events": c.get("/events", params={"limit": 1000}, headers=H).json(),
     }
 
 
@@ -63,7 +66,7 @@ def _populate(c: TestClient) -> dict[str, str]:
     return keys
 
 
-def test_restart_preserves_all_state(org: Conn, db_url: str) -> None:
+def test_restart_preserves_all_state(api_tokens: Conn, db_url: str) -> None:
     with _app(db_url) as first:
         keys = _populate(first)
         before = _snapshot(first)
@@ -71,19 +74,19 @@ def test_restart_preserves_all_state(org: Conn, db_url: str) -> None:
 
     with _app(db_url) as second:  # brand-new pool and app; nothing carried over in memory
         assert _snapshot(second) == before
-        assert second.get("/invariants").json() == {"violations": []}
+        assert second.get("/invariants", headers=H).json() == {"violations": []}
         # ...and work continues where it left off
         r = second.post(f"/tasks/{keys['IN_PROGRESS']}/commands/submit", json={}, headers=DEV1)
         assert r.json()["state"] == "IN_REVIEW"
 
 
-def test_startup_times_out_executions_orphaned_while_down(org: Conn, db_url: str) -> None:
+def test_startup_times_out_executions_orphaned_while_down(api_tokens: Conn, db_url: str) -> None:
     with _app(db_url) as first:
         keys = _populate(first)
-    expire_lease(org, keys["IN_PROGRESS"])  # the worker died while Axiom was down
+    expire_lease(api_tokens, keys["IN_PROGRESS"])  # the worker died while Axiom was down
 
     with _app(db_url) as second:
-        task = second.get(f"/tasks/{keys['IN_PROGRESS']}").json()
+        task = second.get(f"/tasks/{keys['IN_PROGRESS']}", headers=H).json()
         assert (task["state"], task["attempt_count"]) == ("READY", 1)
-        last = second.get(f"/tasks/{keys['IN_PROGRESS']}/events").json()[-1]
+        last = second.get(f"/tasks/{keys['IN_PROGRESS']}/events", headers=H).json()[-1]
         assert (last["type"], last["actor"]) == ("EXECUTION_TIMED_OUT", "system:reaper")

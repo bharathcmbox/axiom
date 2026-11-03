@@ -134,13 +134,13 @@ With the stack running (`make up`), paste the walkthrough from
 After each line, run:
 
 ```bash
-curl -s localhost:8000/tasks/AX-001 | python3 -c 'import json,sys; t=json.load(sys.stdin); print(t["state"])'
-curl -s localhost:8000/tasks/AX-001/events | python3 -c 'import json,sys; [print(e["id"], e["type"], e["from_state"], "->", e["to_state"]) for e in json.load(sys.stdin)]'
+curl -s "${H[@]}" localhost:8000/tasks/AX-001 | python3 -c 'import json,sys; t=json.load(sys.stdin); print(t["state"])'
+curl -s "${H[@]}" localhost:8000/tasks/AX-001/events | python3 -c 'import json,sys; [print(e["id"], e["type"], e["from_state"], "->", e["to_state"]) for e in json.load(sys.stdin)]'
 ```
 
 Then try to break it:
 - send `merge` twice (409, with the allowed commands);
-- `start` as `agent:DEV-02` (403, not the owner);
+- `start` with DEV-02's token (403, not the owner);
 - `cancel` as an agent (403, only humans cancel).
 
 Each time, confirm the event list did not grow.

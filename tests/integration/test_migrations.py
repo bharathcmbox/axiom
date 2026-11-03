@@ -29,7 +29,8 @@ def test_fresh_database_gets_full_schema_and_rerun_is_noop(migrated_db: str) -> 
             "executions",
             "events",
         }
-        assert [r[0] for r in c.execute("SELECT name FROM schema_migrations")] == ["0001_init"]
+        applied = [r[0] for r in c.execute("SELECT name FROM schema_migrations ORDER BY name")]
+        assert applied == [p.stem for p in discover(default_migrations_dir())]
         assert migrate(c) == []  # second run applies nothing
 
 

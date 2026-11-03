@@ -8,7 +8,6 @@ work=$(mktemp -d)
 project="axiom-smoke-$$"
 export AXIOM_API_PORT=18000 AXIOM_DB_PORT=15432
 api="http://127.0.0.1:${AXIOM_API_PORT}"
-human=(-H "X-Axiom-Actor: human:smoke" -H "Content-Type: application/json")
 
 cleanup() {
   (cd "$work/axiom" && docker compose -p "$project" down -v --remove-orphans) >/dev/null 2>&1 || true
@@ -23,16 +22,22 @@ cd "$work/axiom"
 echo "==> docker compose up"
 docker compose -p "$project" up -d --build --wait --quiet-pull 2>&1 | tail -4
 
+issue() { docker compose -p "$project" exec -T api python -m axiom.registry.tokens issue "$1"; }
+HTOK=$(issue human:smoke); DTOK=$(issue agent:DEV-01)
+human=(-H "Authorization: Bearer $HTOK" -H "Content-Type: application/json")
+
 echo "==> /healthz"
 curl -fsS "$api/healthz"; echo
 echo "==> seeded agents"
-curl -fsS "$api/agents" | python3 -c 'import json,sys; print([a["key"] for a in json.load(sys.stdin)])'
+curl -fsS "${human[@]}" "$api/agents" | python3 -c 'import json,sys; print([a["key"] for a in json.load(sys.stdin)])'
 echo "==> create project + task, claim it as DEV-01"
 curl -fsS "${human[@]}" -d '{"key":"SMOKE","name":"Smoke test"}' "$api/projects" >/dev/null
 curl -fsS "${human[@]}" -d '{"title":"hello","specification":"say hello"}' \
   "$api/projects/SMOKE/tasks" | python3 -c 'import json,sys; t=json.load(sys.stdin); print(t["key"], t["state"])'
-curl -fsS -X POST -H "X-Axiom-Actor: agent:DEV-01" "$api/claims" \
+curl -fsS -X POST -H "Authorization: Bearer $DTOK" "$api/claims" \
   | python3 -c 'import json,sys; t=json.load(sys.stdin); print(t["key"], t["state"])'
+echo "==> a request without a token is refused"
+curl -s -o /dev/null -w "   GET /tasks without token -> %{http_code}\n" "$api/tasks"
 echo "==> invariants"
-curl -fsS "$api/invariants"; echo
+curl -fsS "${human[@]}" "$api/invariants"; echo
 echo "SMOKE OK"

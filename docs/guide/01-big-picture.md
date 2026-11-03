@@ -69,8 +69,9 @@ flowchart TB
 ```
 
 These seven are registered from [config/agents.toml](../../config/agents.toml) at startup. In
-Phase 1 they are only rows in the `agents` table. You "become" one by sending
-`X-Axiom-Actor: agent:DEV-01`. From Phase 2, a worker process will do that for real.
+Phase 1 they are only rows in the `agents` table. You "become" one by using that agent's API
+token (`python -m axiom.registry.tokens issue agent:DEV-01`). From Phase 2, a worker process
+holds the token and does that for real.
 
 ## Phases
 
@@ -116,14 +117,16 @@ mindmap
       clean-clone smoke test
 ```
 
-What it deliberately does **not** contain: any LLM call, any worker, any GitHub access, or any
-authentication. Those arrive in Phase 2.
+What Phase 1 deliberately did **not** contain: any LLM call, any worker, or any GitHub access.
+Those arrive in Phase 2. (Bearer-token authentication was added at the start of Phase 2.)
 
 ## Try it
 
 1. `docker compose up -d --build --wait`, then open <http://127.0.0.1:8000/docs>. Every
    endpoint in the guide can be tried from that page.
-2. `curl -s localhost:8000/agents | python3 -m json.tool` lists your seven employees.
+2. Issue yourself a token (`docker compose exec api python -m axiom.registry.tokens issue human:me`),
+   then `curl -s -H "Authorization: Bearer <token>" localhost:8000/agents | python3 -m json.tool`
+   lists your seven employees.
 3. Read [SPEC.md](../../SPEC.md) sections 1–4. Then find each of the two rules above in the
    code: search for `check(` in `orchestrator/commands.py`, and look for any in-memory state in
    `api/app.py` (there is none apart from the connection pool).
