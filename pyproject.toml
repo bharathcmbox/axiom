@@ -11,6 +11,11 @@ dependencies = [
     "uvicorn[standard]>=0.54.0",
 ]
 
+[project.optional-dependencies]
+sandbox = [
+    "claude-agent-sdk>=0.2.177",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -39,6 +44,7 @@ addopts = "-ra"
 
 [dependency-groups]
 dev = [
+    "claude-agent-sdk>=0.2.177",
     "httpx2>=2.16.0",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
