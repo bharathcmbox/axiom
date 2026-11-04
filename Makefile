@@ -53,9 +53,9 @@ smoke:
 demo-restart: up
 	scripts/demo_restart.sh
 
-# Issue API tokens for the two developer workers and store them in .env (once).
+# Issue API tokens for the developer and reviewer workers and store them in .env (once).
 worker-tokens: up
-	@for a in DEV01:DEV-01 DEV02:DEV-02; do \
+	@for a in DEV01:DEV-01 DEV02:DEV-02 REV01:REV-01 SEC01:SEC-01; do \
 	  var=AXIOM_$${a%%:*}_TOKEN; key=$${a#*:}; \
 	  if grep -q "^$$var=" .env 2>/dev/null; then echo "$$var already in .env"; \
 	  else tok=$$(docker compose exec -T api python -m axiom.registry.tokens issue agent:$$key --label worker); \
@@ -64,7 +64,7 @@ worker-tokens: up
 
 workers: sandbox-image
 	mkdir -p $(AXIOM_WORKSPACES_DIR)
-	docker compose --profile workers up -d --build --wait worker-dev-01 worker-dev-02 github-sync
+	docker compose --profile workers up -d --build --wait worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
 
 workers-down:
-	docker compose --profile workers stop worker-dev-01 worker-dev-02 github-sync
+	docker compose --profile workers stop worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync

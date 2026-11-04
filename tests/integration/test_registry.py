@@ -161,3 +161,22 @@ def test_agents_cannot_change_the_registry(db: Conn) -> None:
         register_agent(db, agent, key="DEV-02", role="developer", runtime="claude_code")
     with pytest.raises(Forbidden):
         set_enabled(db, agent, "DEV-01", False)
+
+
+def test_set_model_writes_an_event_and_is_human_only(db: Conn, human: Actor) -> None:
+    from axiom.domain.roles import ActorKind
+    from axiom.errors import Forbidden
+    from axiom.registry.agents import set_model
+
+    register_agent(db, human, key="REV-01", role="code_reviewer", runtime="claude_code")
+    agent = set_model(db, human, "REV-01", "claude-fable-5-1")
+    assert agent.model == "claude-fable-5-1"
+    set_model(db, human, "REV-01", "claude-fable-5-1")  # no-op: no event
+    changed = [e for e in list_events(db) if e["type"] == "AGENT_MODEL_CHANGED"]
+    assert [(e["payload"]["from"], e["payload"]["to"]) for e in changed] == [
+        (None, "claude-fable-5-1")
+    ]
+    with pytest.raises(Forbidden):
+        set_model(db, Actor(ActorKind.AGENT, "REV-01"), "REV-01", "claude-opus-5-5")
+    with pytest.raises(InvalidInput):
+        set_model(db, human, "REV-01", "Robert'); DROP TABLE agents;--")

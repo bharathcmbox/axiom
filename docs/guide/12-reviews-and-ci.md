@@ -463,6 +463,100 @@ superseded. The metrics will show it.
 
 Runs for any *other* commit are ignored: CI is judged on exactly the commit the reviewers saw.
 
+## The reviewer workers, and everything together (T7)
+
+### All the moving parts
+
+```mermaid
+flowchart TB
+    you(["You"])
+    subgraph compose["docker compose"]
+        api["api<br/>control plane + reaper"]
+        db[(postgres)]
+        d1["worker-dev-01<br/>developer (Opus 5.5)"]
+        d2["worker-dev-02<br/>developer (Opus 5.5)"]
+        r1["reviewer-rev-01<br/>code review (Fable 5.1)"]
+        r2["reviewer-sec-01<br/>security review (Fable 5.1)"]
+        sync["github-sync<br/>reads PRs, reviews, comments, CI"]
+        proxy["egress-proxy"]
+    end
+    sbx["sandbox containers<br/>(one per run; dev: edits;<br/>review: read-only)"]
+    gh["GitHub<br/>PRs · CI (Actions)"]
+    d1 & d2 -->|"claim tasks, submit"| api
+    r1 & r2 -->|"claim reviews, submit verdicts"| api
+    sync -->|"CI results, merges,<br/>change requests"| api
+    api --- db
+    d1 & d2 & r1 & r2 -->|docker run| sbx
+    sbx --> proxy
+    d1 & d2 -->|"push axiom/*, open PR, comment"| gh
+    r1 & r2 -->|"clone at head_sha"| gh
+    sync -->|"read only"| gh
+    you -->|"merge, comment /axiom changes"| gh
+    you -->|"curl / docs UI"| api
+```
+
+### What a reviewer worker does
+
+```mermaid
+flowchart LR
+    c["POST /reviews/claim<br/>(lease 300s, heartbeat)"] --> w["review workspace:<br/>task branch at head_sha,<br/>diff vs main"]
+    w --> run["sandbox, review mode<br/>model from registry<br/>(REV-01 / SEC-01: Fable 5.1)"]
+    run --> chk{"workspace still clean?<br/>(git status)"}
+    chk -->|no| f1["fail run:<br/>'reviewer modified the workspace'"]
+    chk -->|yes| ok{"valid review<br/>contract?"}
+    ok -->|yes| sub["POST /reviews/{id}/submit<br/>→ aggregator decides"]
+    ok -->|no| f2["POST /reviews/{id}/fail<br/>(retried, ERROR after 3)"]
+```
+
+The "workspace still clean" check is the reviewer's version of the developer's diff check:
+the hook should already stop every edit, but if it ever didn't, the review doesn't count.
+
+Agent models can now be changed without re-registering: `POST /agents/{key}/model` (humans
+only, logged as AGENT_MODEL_CHANGED). `config/agents.toml` registers the reviewers on
+`claude-fable-5-1`. The reviewer worker also falls back to Fable 5.1 if an agent has no model.
+
+### The full loop, as one story
+
+This is `tests/integration/test_full_loop.py`. Real API, database, engine, aggregator, git and
+sync; only the models and GitHub's API are fakes:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant D1 as DEV-01
+    participant D2 as DEV-02
+    participant A as Axiom (+ aggregator)
+    participant R as REV-01
+    participant S as SEC-01
+    participant Y as github-sync
+    actor H as You (GitHub)
+    D1->>A: submit round 1 (PR opened)
+    R->>A: FAIL [high] "planted defect"
+    A->>A: request_changes → READY (SEC-01's review superseded)
+    D2->>A: claim, rework on the same branch/PR, submit round 2
+    Note over D2: posts "Round 2" comment on the PR
+    R->>A: PASS
+    S->>A: PASS
+    A->>A: wait (CI not reported yet)
+    Y->>A: CI success for round-2 commit
+    A->>A: approve → AWAITING_MERGE
+    H->>H: merge the PR on GitHub
+    Y->>A: merged by bharathcmbox
+    A->>A: merge → DONE (actor human:github-bharathcmbox)
+```
+
+The test checks the task's transitions one by one: who did what, in which order. It also
+checks there was **one** PR with **one** round comment, and that the reviews table shows
+round 1 (FAIL, SUPERSEDED) and round 2 (PASS, PASS).
+
+### Running it
+
+```bash
+make worker-tokens   # issues tokens for DEV-01/02, REV-01, SEC-01 into .env (once)
+make workers         # developers, reviewers and github-sync
+docker compose logs -f reviewer-rev-01
+```
+
 ## Try it (so far)
 
 1. `uv run pytest tests/unit/test_review_machine.py -v`: every review command × state, checked
@@ -476,5 +570,7 @@ Runs for any *other* commit are ignored: CI is judged on exactly the commit the 
    round 2 on the same branch and PR, with a round comment.
 8. `uv run pytest tests/integration/test_sync.py -v`: every GitHub situation above against a fake
    GitHub, including "merged before the gate" and ignored comments.
+9. `uv run pytest tests/integration/test_full_loop.py -v -s` and read it top to bottom: it is
+   the whole of Phase 3 in one test.
 6. Read `sandbox/review_prompt.py`, then write a buggy one-line change of your own and ask
    yourself which checklist item should catch it.

@@ -73,6 +73,25 @@ services:
       AXIOM_AGENT_KEY: DEV-02
       AXIOM_AGENT_TOKEN: ${AXIOM_DEV02_TOKEN:-}
 
+  # Reviewers (ADR-009): read-only review runs on Claude Fable 5.1, one service per identity.
+  reviewer-rev-01:
+    <<: *worker
+    environment:
+      <<: *worker-env
+      AXIOM_WORKER_KIND: review
+      AXIOM_AGENT_KEY: REV-01
+      AXIOM_AGENT_TOKEN: ${AXIOM_REV01_TOKEN:-}
+      AXIOM_FAKE_REVIEW: ${AXIOM_FAKE_REVIEW:-}
+
+  reviewer-sec-01:
+    <<: *worker
+    environment:
+      <<: *worker-env
+      AXIOM_WORKER_KIND: review
+      AXIOM_AGENT_KEY: SEC-01
+      AXIOM_AGENT_TOKEN: ${AXIOM_SEC01_TOKEN:-}
+      AXIOM_FAKE_REVIEW: ${AXIOM_FAKE_REVIEW:-}
+
   # GitHub sync (ADR-010): reads PR state, human change requests and CI; issues task commands.
   # Read-only towards GitHub. Control-plane code with its own DB connection (like the reaper).
   github-sync:

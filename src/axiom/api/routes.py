@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, R
 
 from axiom.api.schemas import (
     AgentIn,
+    AgentModelIn,
     AgentOut,
     BudgetIn,
     ClaimIn,
@@ -149,6 +150,12 @@ def get_agent(key: str, conn: ConnDep) -> AgentOut:
 @router.post("/agents/{key}/enable", tags=["agents"])
 def enable_agent(key: str, conn: ConnDep, actor: ActorDep) -> AgentOut:
     return AgentOut.model_validate(agents.set_enabled(conn, actor, key, True))
+
+
+@router.post("/agents/{key}/model", tags=["agents"])
+def set_agent_model(key: str, body: AgentModelIn, conn: ConnDep, actor: ActorDep) -> AgentOut:
+    """Change an agent's model (humans only)."""
+    return AgentOut.model_validate(agents.set_model(conn, actor, key, body.model))
 
 
 @router.post("/agents/{key}/disable", tags=["agents"])

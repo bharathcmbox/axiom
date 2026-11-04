@@ -130,6 +130,33 @@ def set_enabled(conn: Conn, actor: Actor, key: str, enabled: bool) -> Agent:
     return agent
 
 
+def set_model(conn: Conn, actor: Actor, key: str, model: str | None) -> Agent:
+    """Change which model an agent runs on (humans only), e.g. reviewers on a different model."""
+    require_not_agent(actor)
+    if model is not None and not re.match(r"^[a-z0-9][a-z0-9.\-]{2,63}$", model):
+        raise InvalidInput(f"not a model id: {model!r}")
+    with conn.transaction():
+        row = conn.execute("SELECT * FROM agents WHERE key = %s FOR UPDATE", (key,)).fetchone()
+        if row is None:
+            raise NotFound(f"agent {key} not found")
+        old = row["model"]
+        if old == model:
+            return Agent.from_row(row)
+        row = conn.execute(
+            "UPDATE agents SET model = %s WHERE id = %s RETURNING *", (model, row["id"])
+        ).fetchone()
+        assert row is not None
+        agent = Agent.from_row(row)
+        append_event(
+            conn,
+            actor=actor,
+            type="AGENT_MODEL_CHANGED",
+            agent_id=agent.id,
+            payload={"from": old, "to": model},
+        )
+    return agent
+
+
 def seed_agents(conn: Conn, actor: Actor, config_path: Path) -> list[Agent]:
     """Register every agent in a TOML file that is not registered yet. Returns the new ones."""
     data = tomllib.loads(config_path.read_text())

@@ -51,6 +51,10 @@ class AgentIn(BaseModel):
     max_concurrent: int = Field(default=1, ge=1)
 
 
+class AgentModelIn(BaseModel):
+    model: str | None = Field(examples=["claude-fable-5-1"])
+
+
 class AgentOut(_Out):
     id: int
     key: str

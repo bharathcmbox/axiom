@@ -71,5 +71,24 @@ class AxiomClient:
                 return p  # type: ignore[no-any-return]
         raise ApiError(404, {"error": "not_found", "detail": f"project {project_id}"})
 
+    # ---- reviews (Phase 3) ----
+
+    def claim_review(self, lease_seconds: int) -> dict[str, Any] | None:
+        return self._call("POST", "/reviews/claim", {"lease_seconds": lease_seconds})  # type: ignore[no-any-return]
+
+    def review_heartbeat(self, review_id: int, lease_seconds: int) -> None:
+        self._call("POST", f"/reviews/{review_id}/heartbeat", {"lease_seconds": lease_seconds})
+
+    def submit_review(self, review_id: int, contract: dict[str, Any], cost: dict[str, Any]) -> str:
+        r = self._call("POST", f"/reviews/{review_id}/submit", {"contract": contract, "cost": cost})
+        return str(r["decision"])
+
+    def fail_review(self, review_id: int, error: str, cost: dict[str, Any]) -> str:
+        r = self._call("POST", f"/reviews/{review_id}/fail", {"error": error, "cost": cost})
+        return str(r["decision"])
+
+    def task_reviews(self, key: str) -> list[dict[str, Any]]:
+        return self._call("GET", f"/tasks/{key}/reviews")  # type: ignore[no-any-return]
+
     def agent(self, key: str) -> dict[str, Any]:
         return self._call("GET", f"/agents/{key}")  # type: ignore[no-any-return]

@@ -314,3 +314,9 @@ def test_agents_cannot_approve_over_http(client: TestClient) -> None:
     _cmd(client, key, "submit", DEV1)
     r = _cmd(client, key, "approve", DEV1)
     assert (r.status_code, r.json()["error"]) == (403, "actor_not_permitted")
+
+
+def test_set_agent_model_over_http(client: TestClient) -> None:
+    r = client.post("/agents/REV-01/model", json={"model": "claude-fable-5-1"})
+    assert r.status_code == 200 and r.json()["model"] == "claude-fable-5-1"
+    assert client.post("/agents/REV-01/model", json={"model": "x"}, headers=DEV1).status_code == 403
