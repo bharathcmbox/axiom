@@ -388,6 +388,81 @@ sequenceDiagram
 - **Allowed paths are checked per round:** the base for the diff check is the branch head
   *before* this round, so only the new commits are judged.
 
+## The GitHub sync: GitHub moves Axiom, never the other way round (T6)
+
+Axiom never merges. You do, on GitHub. Something has to notice, and also notice CI results
+and requests for changes. That is the **GitHub sync** (`sync/service.py`), a small loop that
+runs every 30 seconds as its own Compose service (`github-sync`).
+
+```mermaid
+flowchart TB
+    loop(["every 30s"]) --> q["tasks in IN_REVIEW or AWAITING_MERGE<br/>that have a PR"]
+    q --> pr{"PR state<br/>on GitHub"}
+    pr -->|merged| m1{"task state?"}
+    m1 -->|AWAITING_MERGE| merge["merge → DONE<br/>actor human:github-&lt;login&gt;"]
+    m1 -->|IN_REVIEW| early["approve (human override)<br/>+ merge → DONE<br/>flagged merged_before_gate"]
+    pr -->|"closed, not merged"| cancel["cancel → CANCELLED"]
+    pr -->|open| hr{"a human asked for changes<br/>on the submitted work?"}
+    hr -->|yes| back["reject_merge / request_changes<br/>→ READY, their text as feedback"]
+    hr -->|no| ci["CI runs for head_sha"]
+    ci --> rec["record_ci(pending / success / failure)<br/>→ aggregator decides"]
+```
+
+What it is allowed to do, and what it is not:
+- **It only reads GitHub.** `GitHubReader` has four GET methods (PR, reviews, comments, workflow
+  runs). A test runs a full sync against a fake GitHub that rejects every POST and checks none
+  was attempted.
+- **It writes to Axiom through the same command engine as everything else**, inside the control
+  plane (like the reaper), so every change is a legal transition with an event.
+- **Humans stay humans.** A merge on GitHub is recorded as `human:github-<login>`; the sync
+  itself only records CI results (as `system:github-sync`).
+
+### How you ask for changes on GitHub
+
+GitHub's "Request changes" review works, but **only for someone other than the PR's author**.
+Axiom's PRs are opened with your token, so GitHub shows *you* as the author and won't let you
+request changes on them. So the sync also understands a comment:
+
+```text
+/axiom changes please also log the alert id
+```
+
+```mermaid
+sequenceDiagram
+    actor You
+    participant GH as GitHub PR #42
+    participant Sync as github-sync
+    participant A as Axiom
+    You->>GH: comment "/axiom changes please also log the alert id"
+    Sync->>GH: GET comments (every 30s)
+    Sync->>Sync: from OWNER/MEMBER/COLLABORATOR? after the last submission? yes
+    Sync->>A: reject_merge (actor human:github-you)<br/>feedback: "you on GitHub: please also log the alert id"
+    A->>A: task → READY, review_rounds + 1
+    Note over A: the next developer round sees your words<br/>in its prompt, on the same PR (T5)
+```
+
+Comments are ignored if they come from someone without write access, if they are older than
+the latest submission (they were about an earlier round), or if they don't start with
+`/axiom changes`.
+
+### Merging before the gate
+
+Without GitHub Pro nothing *stops* you merging a PR whose reviews or CI are not finished
+(ADR-010). The sync doesn't pretend otherwise. It records exactly what happened: a human
+override (`approve`), then `merge`, with `merged_before_gate: true`, and the open reviews are
+superseded. The metrics will show it.
+
+### CI: from workflow runs to one status
+
+| Runs for the submitted commit | Status recorded |
+|---|---|
+| none yet | (nothing recorded) |
+| any queued or in progress | `pending` |
+| all completed: success / skipped / neutral | `success` |
+| any completed with failure / cancelled / timed out | `failure` (names of the runs in the feedback) |
+
+Runs for any *other* commit are ignored: CI is judged on exactly the commit the reviewers saw.
+
 ## Try it (so far)
 
 1. `uv run pytest tests/unit/test_review_machine.py -v`: every review command × state, checked
@@ -399,5 +474,7 @@ sequenceDiagram
 5. `make test-docker`: includes a review run inside the real sandbox container.
 7. `uv run pytest tests/integration/test_worker.py -k rework -v`: round 1, a failed review,
    round 2 on the same branch and PR, with a round comment.
+8. `uv run pytest tests/integration/test_sync.py -v`: every GitHub situation above against a fake
+   GitHub, including "merged before the gate" and ignored comments.
 6. Read `sandbox/review_prompt.py`, then write a buggy one-line change of your own and ask
    yourself which checklist item should catch it.

@@ -30,10 +30,18 @@ docker compose exec api python -m axiom.registry.tokens revoke <id>
 | POST | `/tasks/{key}/heartbeat` | Owning agent extends its lease (no event) |
 | GET | `/tasks/{key}/executions` | Execution history of a task |
 | GET | `/tasks/{key}/events`, `/events?after_id=&limit=` | Event log |
+| POST | `/tasks/{key}/budget` | Change a task's budget (humans only) |
+| POST | `/reviews/claim` | Reviewer agent claims the oldest pending review for its role (200, or 204 if none) |
+| POST | `/reviews/{id}/heartbeat` | Holder extends the review's lease |
+| POST | `/reviews/{id}/submit` | Submit a review contract; response says what the aggregator did |
+| POST | `/reviews/{id}/fail` | Report a failed reviewer run (retried, ERROR after 3) |
+| GET | `/tasks/{key}/reviews` | All reviews of a task, by round |
 
 Commands accepted on `/tasks/{key}/commands/{command}`: `assign`, `start`, `submit`,
 `ask_human`, `answer`, `fail`, `approve`, `request_changes`, `reject_merge`,
-`merge`, `retry`, `cancel`. (`claim` is `POST /claims`; `promote` and `time_out` are internal.) See
+`merge`, `retry`, `cancel`. (`claim` is `POST /claims`; `promote`, `time_out` and `escalate` are
+internal.) Since Phase 3, `approve` and `request_changes` are made by the aggregator; over HTTP
+only a human can issue them, as an override. See
 [state-machines.md](state-machines.md) for which actor may issue each one, and from which
 states.
 

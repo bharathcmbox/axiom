@@ -64,7 +64,7 @@ worker-tokens: up
 
 workers: sandbox-image
 	mkdir -p $(AXIOM_WORKSPACES_DIR)
-	docker compose --profile workers up -d --build --wait worker-dev-01 worker-dev-02
+	docker compose --profile workers up -d --build --wait worker-dev-01 worker-dev-02 github-sync
 
 workers-down:
-	docker compose --profile workers stop worker-dev-01 worker-dev-02
+	docker compose --profile workers stop worker-dev-01 worker-dev-02 github-sync
