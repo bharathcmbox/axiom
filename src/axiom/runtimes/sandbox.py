@@ -17,6 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
+from typing import Any
 
 from axiom.runtimes.base import (
     CommandResult,
@@ -26,6 +27,12 @@ from axiom.runtimes.base import (
     RunRequest,
     outcome_from_dict,
     request_to_dict,
+)
+from axiom.runtimes.review import (
+    ReviewOutcome,
+    ReviewRequest,
+    review_outcome_from_dict,
+    review_request_to_dict,
 )
 
 # The only environment variables a sandbox may receive from the harness's environment.
@@ -41,6 +48,7 @@ class SandboxRuntime:
     memory: str = "4g"
     cpus: str = "2"
     fake_scenario: str | None = None  # run FakeRuntime inside the container (tests, demos)
+    fake_review: str | None = None  # run FakeReviewer inside the container (tests, demos)
     docker: str = "docker"
     name: str = "sandbox"
     _container: str | None = None
@@ -64,6 +72,7 @@ class SandboxRuntime:
         container: str,
         entrypoint: list[str] | None,
         pass_env: bool,
+        env: list[str] | None = None,
     ) -> list[str]:
         st = workspace.stat()
         args = [
@@ -88,8 +97,8 @@ class SandboxRuntime:
         for var in PASSTHROUGH_ENV if pass_env else ():
             if var in os.environ:
                 args += ["-e", var]  # name only: the value is read from our env, not argv
-        if self.fake_scenario:
-            args += ["-e", f"AXIOM_FAKE_SCENARIO={self.fake_scenario}"]
+        for item in env or []:
+            args += ["-e", item]
         if entrypoint:
             args += ["--entrypoint", entrypoint[0], self.image, *entrypoint[1:]]
         else:
@@ -97,20 +106,62 @@ class SandboxRuntime:
         return args
 
     def run(self, request: RunRequest, on_event: EventCallback | None = None) -> RunOutcome:
+        """A developer run."""
+        done = self._run_container(
+            request_json=request_to_dict(request),
+            workspace=request.workspace,
+            output_dir=request.output_dir,
+            task_key=request.task_key,
+            outcome_name="outcome.json",
+            extra_env=[f"AXIOM_FAKE_SCENARIO={self.fake_scenario}"] if self.fake_scenario else [],
+            on_event=on_event,
+        )
+        if isinstance(done, RunOutcome):
+            return done
+        return outcome_from_dict(done, request.output_dir)
+
+    def run_review(
+        self, request: ReviewRequest, on_event: EventCallback | None = None
+    ) -> ReviewOutcome:
+        """A read-only review run (the runner switches on request.json's `mode`)."""
+        done = self._run_container(
+            request_json=review_request_to_dict(request),
+            workspace=request.workspace,
+            output_dir=request.output_dir,
+            task_key=request.task_key,
+            outcome_name="review_outcome.json",
+            extra_env=[f"AXIOM_FAKE_REVIEW={self.fake_review}"] if self.fake_review else [],
+            on_event=on_event,
+        )
+        if isinstance(done, RunOutcome):
+            return ReviewOutcome(done.outcome, error=done.error)
+        return review_outcome_from_dict(done, request.output_dir)
+
+    def _run_container(
+        self,
+        *,
+        request_json: dict[str, Any],
+        workspace: Path,
+        output_dir: Path,
+        task_key: str,
+        outcome_name: str,
+        extra_env: list[str],
+        on_event: EventCallback | None,
+    ) -> dict[str, Any] | RunOutcome:
+        """Start the sandbox, wait, and return the parsed outcome file (or a failure)."""
         emit: Callable[[dict[str, object]], None] = on_event or (lambda e: None)
-        request.output_dir.mkdir(parents=True, exist_ok=True)
-        (request.output_dir / "request.json").write_text(json.dumps(request_to_dict(request)))
-        container = f"axiom-sbx-{request.task_key.lower()}-{secrets.token_hex(4)}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "request.json").write_text(json.dumps(request_json))
+        container = f"axiom-sbx-{task_key.lower()}-{secrets.token_hex(4)}"
         with self._lock:
             if self._cancelled:
                 return RunOutcome(Outcome.CANCELLED, error="cancelled before start")
             self._container = container
         emit({"type": "sandbox_started", "container": container})
-        log_path = request.output_dir / "sandbox.log"
+        args = self._args(workspace, output_dir, container, None, pass_env=True, env=extra_env)
+        log_path = output_dir / "sandbox.log"
         with log_path.open("w") as log:
-            proc = subprocess.Popen(
-                self.docker_args(request, container), stdout=log, stderr=subprocess.STDOUT
-            )
+            proc = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
             try:
                 code = proc.wait(timeout=self.timeout_seconds)
             except subprocess.TimeoutExpired:
@@ -120,13 +171,14 @@ class SandboxRuntime:
         emit({"type": "sandbox_exited", "container": container, "code": code})
         if self._cancelled:
             return RunOutcome(Outcome.CANCELLED, error="cancelled")
-        outcome_file = request.output_dir / "outcome.json"
+        outcome_file = output_dir / outcome_name
         if not outcome_file.exists():
             tail = log_path.read_text(errors="replace")[-2000:]
             return RunOutcome(
                 Outcome.FAILED, error=f"sandbox exited {code} without outcome: {tail}"
             )
-        return outcome_from_dict(json.loads(outcome_file.read_text()), request.output_dir)
+        data: dict[str, Any] = json.loads(outcome_file.read_text())
+        return data
 
     def exec(self, workdir: Path, outdir: Path, command: str, timeout: int) -> CommandResult:
         """Run a shell command (e.g. the project's tests) in a fresh sandbox, without any

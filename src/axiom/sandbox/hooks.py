@@ -73,3 +73,20 @@ def make_guard(workspace: Path, allowed: list[str]) -> HookFn:
         return _deny(reason) if reason else {}
 
     return guard
+
+
+def decide_review(tool_name: str, tool_input: dict[str, Any], workspace: Path) -> str | None:
+    """Reviewers are read-only: every edit is denied; reads follow the same secret rules."""
+    if tool_name in EDIT_TOOLS:
+        return "reviewers cannot change files"
+    return decide(tool_name, tool_input, workspace, allowed=[])
+
+
+def make_review_guard(workspace: Path) -> HookFn:
+    async def guard(input_: Any, tool_use_id: str | None, context: Any) -> dict[str, Any]:
+        reason = decide_review(
+            input_.get("tool_name", ""), input_.get("tool_input") or {}, workspace
+        )
+        return _deny(reason) if reason else {}
+
+    return guard

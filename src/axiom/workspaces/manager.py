@@ -77,3 +77,49 @@ def prepare_workspace(
 
 def remove_workspace(workspace: Workspace) -> None:
     shutil.rmtree(workspace.root, ignore_errors=True)
+
+
+@dataclass(frozen=True)
+class ReviewWorkspace:
+    root: Path
+    repo: Path
+    out: Path
+    head_sha: str
+    base_sha: str  # merge-base with the default branch
+    diff: str
+
+
+def prepare_review_workspace(
+    workspaces_root: Path,
+    *,
+    task_key: str,
+    review_id: int,
+    repo_url: str,
+    branch: str,
+    head_sha: str | None,
+    default_branch: str,
+    token: str | None,
+) -> ReviewWorkspace:
+    """Clone the task's branch, check out the commit under review (detached), and compute the
+    diff against the default branch. The reviewer sees exactly what will be merged."""
+    if not _SAFE.match(task_key):
+        raise ValueError(f"unexpected task key {task_key!r}")
+    root = workspaces_root / f"{task_key}-r{review_id}"
+    if root.exists():
+        shutil.rmtree(root)
+    repo, out = root / "repo", root / "out"
+    out.mkdir(parents=True)
+    git(["clone", "--quiet", "--branch", branch, repo_url, str(repo)], token=token)
+    git(["fetch", "--quiet", "origin",
+         f"refs/heads/{default_branch}:refs/remotes/origin/{default_branch}"],
+        cwd=repo, token=token)  # fmt: skip
+    if head_sha:
+        git(["checkout", "--quiet", "--detach", head_sha], cwd=repo)
+    head = git(["rev-parse", "HEAD"], cwd=repo)
+    base = git(["merge-base", f"origin/{default_branch}", "HEAD"], cwd=repo)
+    diff = git(["diff", "--no-color", "--find-renames", f"{base}..{head}"], cwd=repo)
+    return ReviewWorkspace(root=root, repo=repo, out=out, head_sha=head, base_sha=base, diff=diff)
+
+
+def remove_review_workspace(workspace: ReviewWorkspace) -> None:
+    shutil.rmtree(workspace.root, ignore_errors=True)

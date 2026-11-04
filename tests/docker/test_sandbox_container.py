@@ -144,3 +144,17 @@ def test_exec_runs_commands_without_any_credentials(
     assert "ANTHROPIC_API_KEY" not in ok.output  # verification needs no API key
     slow = rt.exec(request_.workspace, request_.output_dir, "sleep 30", 3)
     assert slow.exit_code == 124 and "timed out" in slow.output
+
+
+def test_review_run_in_the_container(request_: RunRequest) -> None:
+    from axiom.runtimes.review import ReviewRequest
+
+    review = ReviewRequest(
+        task_key="SOC-001", review_id=3, role="security_reviewer", title="t", specification="s",
+        acceptance_criteria=[], allowed_paths=["CLAUDE.md"], diff="+x\n", developer_result=None,
+        workspace=request_.workspace, output_dir=request_.output_dir, budget_usd=Decimal("1.00"),
+    )  # fmt: skip
+    outcome = SandboxRuntime(fake_review="fail").run_review(review)
+    assert outcome.outcome == Outcome.COMPLETED, outcome.error
+    assert outcome.contract is not None and outcome.contract.verdict == "FAIL"
+    assert outcome.contract.findings[0].issue.startswith("security_reviewer")
