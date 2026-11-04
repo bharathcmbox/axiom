@@ -168,7 +168,7 @@ def test_client_has_no_way_to_merge() -> None:
     methods = {
         n for n in dir(GitHubClient) if not n.startswith("_") and callable(getattr(GitHubClient, n))
     }
-    assert methods == {"find_open_pr", "create_pr"}
+    assert methods == {"find_open_pr", "create_pr", "comment"}  # nothing that can merge
 
 
 def test_refuses_unsafe_branch_before_any_api_call(github: tuple[FakeGitHub, str]) -> None:

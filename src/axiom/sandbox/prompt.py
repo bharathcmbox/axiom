@@ -37,8 +37,14 @@ def build_prompt(request: RunRequest, guidance: str | None) -> str:
         "## Allowed paths (repository-relative; `**` = any depth, trailing `/` = directory)",
         allowed,
     ]
+    if request.round > 1:
+        parts += [
+            f"## This is review round {request.round}",
+            "Your earlier work on this task is already committed on this branch. Keep what was "
+            "right, and address every item of feedback below. Reviewers will check each one.",
+        ]
     if request.previous_feedback:
-        parts += ["## Feedback from earlier attempts"]
+        parts += ["## Feedback from earlier attempts (reviewers, CI, humans)"]
         parts += [f"- {f}" for f in request.previous_feedback]
     if guidance:
         parts += [

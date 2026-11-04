@@ -29,6 +29,7 @@ class RunRequest:
     max_turns: int = 60
     project_guidance: str | None = None  # e.g. the repo's CLAUDE.md, passed as untrusted text
     previous_feedback: list[str] = field(default_factory=list)  # review findings, answers
+    round: int = 1  # review round this work is for (> 1 means rework on an existing branch)
 
 
 class Outcome(StrEnum):
@@ -99,6 +100,7 @@ def request_to_dict(req: RunRequest) -> dict[str, Any]:
         "effort": req.effort,
         "max_turns": req.max_turns,
         "previous_feedback": req.previous_feedback,
+        "round": req.round,
     }
 
 
@@ -116,6 +118,7 @@ def request_from_dict(data: dict[str, Any], workspace: Path, output_dir: Path) -
         effort=data.get("effort", "high"),
         max_turns=int(data.get("max_turns", 60)),
         previous_feedback=list(data.get("previous_feedback", [])),
+        round=int(data.get("round", 1)),
     )
 
 

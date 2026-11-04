@@ -62,6 +62,9 @@ class AxiomClient:
     def executions(self, key: str) -> list[dict[str, Any]]:
         return self._call("GET", f"/tasks/{key}/executions")  # type: ignore[no-any-return]
 
+    def events(self, key: str) -> list[dict[str, Any]]:
+        return self._call("GET", f"/tasks/{key}/events")  # type: ignore[no-any-return]
+
     def project_by_id(self, project_id: int) -> dict[str, Any]:
         for p in self._call("GET", "/projects"):
             if p["id"] == project_id:

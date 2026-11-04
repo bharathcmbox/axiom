@@ -52,7 +52,8 @@ class PullRequest:
 
 @dataclass
 class GitHubClient:
-    """The two GitHub calls Axiom makes. Deliberately nothing else."""
+    """The three GitHub calls Axiom's worker makes: find PR, create PR, comment. Nothing that
+    could merge, push to a protected ref or change settings."""
 
     token: str
     api: str = "https://api.github.com"
@@ -93,6 +94,15 @@ class GitHubClient:
             {"title": title, "head": branch, "base": base, "body": body, "draft": False},
         )
         return PullRequest(pr["number"], pr["html_url"], created=True)
+
+    def comment(self, owner: str, repo: str, number: int, body: str) -> None:
+        """A conversation comment on the PR (PR comments use the issues endpoint)."""
+        self._call("POST", f"/repos/{owner}/{repo}/issues/{number}/comments", {"body": body})
+
+
+def comment_on_pull_request(client: GitHubClient, repo_url: str, number: int, body: str) -> None:
+    owner, repo = parse_github_repo(repo_url)
+    client.comment(owner, repo, number, body)
 
 
 def open_pull_request(

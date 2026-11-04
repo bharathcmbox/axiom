@@ -23,6 +23,7 @@ import uvicorn
 
 from axiom.api.app import create_app
 from axiom.config import Settings
+from axiom.domain.roles import Actor, ActorKind
 from axiom.domain.task_machine import TaskState
 from axiom.orchestrator.leases import expire_leases
 from axiom.orchestrator.tasks import create_task, get_task
@@ -81,11 +82,22 @@ class LocalRunner:
 
 @dataclass
 class FakePrOpener:
+    """Like GitHub: one open PR per branch; opening again returns the existing one."""
+
     calls: list[tuple[str, ...]] = field(default_factory=list)
+    prs: dict[str, PullRequest] = field(default_factory=dict)
+    comments: list[tuple[int, str]] = field(default_factory=list)
 
     def __call__(self, repo_url: str, branch: str, base: str, title: str, body: str) -> PullRequest:
         self.calls.append((repo_url, branch, base, title, body))
-        return PullRequest(41, f"https://github.com/o/r/pull/{41 + len(self.calls)}", created=True)
+        if branch in self.prs:
+            return PullRequest(self.prs[branch].number, self.prs[branch].url, created=False)
+        number = 41 + len(self.prs) + 1
+        self.prs[branch] = PullRequest(number, f"https://github.com/o/r/pull/{number}", True)
+        return self.prs[branch]
+
+    def comment(self, repo_url: str, number: int, body: str) -> None:
+        self.comments.append((number, body))
 
 
 def _project(db: Conn, remote: Path, test_command: str | None = "grep -q v2 CLAUDE.md") -> None:
@@ -105,7 +117,7 @@ def _worker(api_url: str, tmp_path: Path, runtime: FakeRuntime, opener: FakePrOp
     config = WorkerConfig(agent_key=agent, workspaces_root=tmp_path / "work", github_token=None,
                           heartbeat_seconds=0.2, **cfg)  # fmt: skip
     return Worker(config, AxiomClient(api_url, TEST_TOKENS[f"agent:{agent}"]), lambda: runtime,
-                  LocalRunner(), opener)  # fmt: skip
+                  LocalRunner(), opener, comment_pr=opener.comment)  # fmt: skip
 
 
 def _remote_branches(remote: Path) -> list[str]:
@@ -315,3 +327,79 @@ def test_agents_without_a_model_use_the_default(
     api_tokens.execute("UPDATE agents SET model = NULL WHERE key = 'DEV-01'")
     _worker(api_url, tmp_path, Recording(edits=GOOD_EDIT), FakePrOpener()).run_once()
     assert seen == ["claude-opus-5-5"]
+
+
+# ---- Phase 3 T5: rework continues the same branch and PR --------------------------------
+
+
+def _fail_review(db: Conn, key: str) -> None:
+    from axiom.orchestrator.reviews import claim_review, submit_review
+
+    finding = {"severity": "high", "file": "CLAUDE.md", "line": 1,
+               "issue": "says v2, spec wants v3", "required_change": "write v3"}  # fmt: skip
+    claimed = claim_review(db, Actor(ActorKind.AGENT, "REV-01"))
+    assert claimed is not None
+    verdict = {"verdict": "FAIL", "summary": "wrong version", "findings": [finding]}
+    submit_review(db, Actor(ActorKind.AGENT, "REV-01"), claimed.review_id, verdict)
+
+
+class RecordingRuntime(FakeRuntime):
+    def __init__(self, edits: dict[str, str]) -> None:
+        super().__init__(edits=edits)
+        self.requests: list[Any] = []
+
+    def run(self, request: Any, on_event: Any = None) -> Any:
+        self.requests.append(request)
+        return super().run(request, on_event)
+
+
+def test_rework_continues_the_same_branch_and_pr_with_the_findings(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    _project(api_tokens, remote, test_command=None)
+    key = _task(api_tokens)
+    opener = FakePrOpener()
+
+    # round 1
+    assert _worker(api_url, tmp_path, FakeRuntime(edits=GOOD_EDIT), opener).run_once()
+    first = get_task(api_tokens, key)
+    assert (first.state, first.branch) == (TaskState.IN_REVIEW, "axiom/SOC-001-e1")
+
+    # a reviewer fails it
+    _fail_review(api_tokens, key)
+    assert get_task(api_tokens, key).state == TaskState.READY
+
+    # round 2: same branch, findings in the prompt, same PR, a round comment
+    runtime = RecordingRuntime(edits={"CLAUDE.md": "# guide v3\n"})
+    assert _worker(api_url, tmp_path, runtime, opener, agent="DEV-02").run_once()
+    [request] = runtime.requests
+    assert request.round == 2
+    assert any("says v2, spec wants v3" in f for f in request.previous_feedback)
+    second = get_task(api_tokens, key)
+    assert (second.state, second.branch) == (TaskState.IN_REVIEW, "axiom/SOC-001-e1")
+    assert second.pull_request_url == first.pull_request_url
+    assert second.head_sha != first.head_sha
+    log = _run("git", "log", "--format=%an|%s", "main..axiom/SOC-001-e1", cwd=remote).splitlines()
+    assert len(log) == 2  # round 1 and round 2 commits, fast-forward on one branch
+    assert log[0].startswith("Axiom agent DEV-02|") and log[1].startswith("Axiom agent DEV-01|")
+    assert _run("git", "show", "axiom/SOC-001-e1:CLAUDE.md", cwd=remote) == "# guide v3"
+    assert [c[0] for c in opener.comments] == [42]
+    assert opener.comments[0][1].startswith("**Round 2**")
+    rounds = api_tokens.execute(
+        "SELECT round, count(*) AS n FROM reviews GROUP BY round ORDER BY round"
+    ).fetchall()
+    assert [(r["round"], r["n"]) for r in rounds] == [(1, 2), (2, 2)]
+
+
+def test_rework_starts_fresh_if_the_branch_was_deleted(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    _project(api_tokens, remote, test_command=None)
+    key = _task(api_tokens)
+    opener = FakePrOpener()
+    _worker(api_url, tmp_path, FakeRuntime(edits=GOOD_EDIT), opener).run_once()
+    _fail_review(api_tokens, key)
+    _run("git", "branch", "-D", "axiom/SOC-001-e1", cwd=remote)  # someone deleted it on GitHub
+    _worker(api_url, tmp_path, FakeRuntime(edits=GOOD_EDIT), opener, agent="DEV-02").run_once()
+    task = get_task(api_tokens, key)
+    assert task.state == TaskState.IN_REVIEW and task.branch == "axiom/SOC-001-e2"  # new branch

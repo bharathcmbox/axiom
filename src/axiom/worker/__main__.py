@@ -23,7 +23,13 @@ from axiom.runtimes.fake import FakeRuntime, Scenario
 from axiom.runtimes.sandbox import SandboxRuntime
 from axiom.worker.api_client import AxiomClient
 from axiom.worker.harness import Worker, WorkerConfig
-from axiom.worker.publish import GitHubClient, PullRequest, open_pull_request, parse_github_repo
+from axiom.worker.publish import (
+    GitHubClient,
+    PullRequest,
+    comment_on_pull_request,
+    open_pull_request,
+    parse_github_repo,
+)
 
 REQUIRED = ("AXIOM_API_URL", "AXIOM_AGENT_KEY", "AXIOM_AGENT_TOKEN", "AXIOM_WORKSPACES_DIR")
 
@@ -66,12 +72,16 @@ def build_worker() -> Worker:
         client = GitHubClient(token=github_token or "")
         return open_pull_request(client, repo_url, branch=branch, base=base, title=title, body=body)
 
+    def comment_pr(repo_url: str, number: int, body: str) -> None:
+        comment_on_pull_request(GitHubClient(token=github_token or ""), repo_url, number, body)
+
     return Worker(
         config=config,
         api=AxiomClient(env["AXIOM_API_URL"], env["AXIOM_AGENT_TOKEN"]),
         runtime_factory=runtime_factory,
         test_runner=sandbox,
         open_pr=open_pr,
+        comment_pr=comment_pr,
         # The in-process fake runtime (tests, demos) may use local file:// remotes.
         validate_repo=(lambda url: None)
         if env.get("AXIOM_RUNTIME") == "fake"

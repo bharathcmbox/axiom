@@ -36,7 +36,8 @@ class Workspace:
     repo: Path
     out: Path
     branch: str
-    base_sha: str
+    base_sha: str  # where this round starts: changes are checked against this commit
+    continued: bool = False  # True when building on an earlier round's branch
 
 
 def branch_name(task_key: str, execution_id: int) -> str:
@@ -51,7 +52,10 @@ def prepare_workspace(
     repo_url: str,
     default_branch: str,
     token: str | None,
+    existing_branch: str | None = None,
 ) -> Workspace:
+    """A fresh clone. With `existing_branch` (rework after review), continue that branch so the
+    new commits land on the same PR; if it no longer exists on the remote, start fresh."""
     if not _SAFE.match(task_key):
         raise ValueError(f"unexpected task key {task_key!r}")
     root = workspaces_root / f"{task_key}-e{execution_id}"
@@ -59,12 +63,17 @@ def prepare_workspace(
         shutil.rmtree(root)  # a previous attempt of the same execution id is never reused
     repo, out = root / "repo", root / "out"
     out.mkdir(parents=True)
+    continued = existing_branch is not None and _remote_has_branch(repo_url, existing_branch, token)
+    start = existing_branch if continued and existing_branch else default_branch
     git(
-        ["clone", "--quiet", "--single-branch", "--branch", default_branch, repo_url, str(repo)],
+        ["clone", "--quiet", "--single-branch", "--branch", start, repo_url, str(repo)],
         token=token,
     )
-    branch = branch_name(task_key, execution_id)
-    git(["checkout", "--quiet", "-b", branch], cwd=repo)
+    if continued and existing_branch:
+        branch = existing_branch
+    else:
+        branch = branch_name(task_key, execution_id)
+        git(["checkout", "--quiet", "-b", branch], cwd=repo)
     git(["config", "user.name", COMMITTER_NAME], cwd=repo)
     git(["config", "user.email", COMMITTER_EMAIL], cwd=repo)
     exclude = repo / ".git" / "info" / "exclude"
@@ -72,7 +81,13 @@ def prepare_workspace(
     with exclude.open("a") as f:
         f.write("\n# added by Axiom: tool caches\n" + "\n".join(LOCAL_EXCLUDES) + "\n")
     base_sha = git(["rev-parse", "HEAD"], cwd=repo)
-    return Workspace(root=root, repo=repo, out=out, branch=branch, base_sha=base_sha)
+    return Workspace(root=root, repo=repo, out=out, branch=branch, base_sha=base_sha,
+                     continued=continued)  # fmt: skip
+
+
+def _remote_has_branch(repo_url: str, branch: str, token: str | None) -> bool:
+    out = git(["ls-remote", "--heads", repo_url, f"refs/heads/{branch}"], token=token)
+    return bool(out.strip())
 
 
 def remove_workspace(workspace: Workspace) -> None:

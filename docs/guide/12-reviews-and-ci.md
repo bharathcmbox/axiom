@@ -323,6 +323,71 @@ verdict: FAIL
 It also noted that the developer's "2 tests pass" was *true but irrelevant*: exactly the
 "claims are not evidence" rule. The workspace was unchanged afterwards (`git status` clean).
 
+## Rework continues the same PR (T5)
+
+When reviews (or CI) send a task back, the next developer run **continues the task's branch**
+instead of starting a new one. The PR on GitHub updates in place, and its conversation shows
+the whole story.
+
+```mermaid
+gitGraph
+    commit id: "main"
+    branch axiom/SOC-002-e1
+    checkout axiom/SOC-002-e1
+    commit id: "round 1 (DEV-01)"
+    commit id: "round 2 (DEV-02): fix findings"
+    checkout main
+    merge axiom/SOC-002-e1 id: "you merge on GitHub"
+```
+
+### What the developer is told in round 2
+
+The worker reads the task's **event log** (the source of truth) and collects everything since
+the last submission (`worker/feedback.py`):
+
+| Event since last submit | Becomes feedback like |
+|---|---|
+| TASK_REOPENED by the aggregator | `[high] quota.py:3 used < limit → used <= limit` (every finding), `CI failed for abc1234: 2 failed` |
+| TASK_REOPENED by a human (GitHub "request changes") | `changes requested by human:github-…` |
+| TASK_ESCALATED, then answered | `escalated to a human: …`, `human answer: …` |
+
+The prompt then says: *"This is review round 2. Your earlier work on this task is already
+committed on this branch. Keep what was right, and address every item of feedback below.
+Reviewers will check each one."* The next round's reviewers get the previous findings too, so
+they can check each one was fixed.
+
+### One rework round, end to end
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as DEV-02 worker
+    participant A as Axiom
+    participant GH as GitHub
+    participant S as Sandbox
+    W->>A: claim → SOC-002 (review_rounds = 1, branch axiom/SOC-002-e1)
+    W->>A: GET events → feedback since last submit
+    W->>GH: clone branch axiom/SOC-002-e1 (not main)
+    W->>S: run agent, round 2, feedback in prompt
+    S-->>W: result
+    W->>W: verify only THIS round's changes<br/>(base = branch head before the round)
+    W->>GH: push (fast-forward, never force)
+    W->>GH: find open PR for the branch → PR #42 (reused)
+    W->>GH: comment "Round 2: …, tests re-run by Axiom ✅"
+    W->>A: submit {commit def456}
+    A->>A: REVIEW_REQUESTED ×2 for round 2 (head def456)
+```
+
+### Edge cases
+
+- **The branch was deleted on GitHub** (or the PR closed and cleaned up): the worker notices
+  the remote branch is gone and starts a fresh branch from `main`, named after the new
+  execution.
+- **A failed attempt never submitted anything:** the task has no branch yet, so the next
+  attempt starts fresh.
+- **Allowed paths are checked per round:** the base for the diff check is the branch head
+  *before* this round, so only the new commits are judged.
+
 ## Try it (so far)
 
 1. `uv run pytest tests/unit/test_review_machine.py -v`: every review command × state, checked
@@ -332,5 +397,7 @@ It also noted that the developer's "2 tests pass" was *true but irrelevant*: exa
 4. `uv run pytest tests/integration/test_reviews.py -v`: every scenario above against a real
    database, including two reviewers racing for one review.
 5. `make test-docker`: includes a review run inside the real sandbox container.
+7. `uv run pytest tests/integration/test_worker.py -k rework -v`: round 1, a failed review,
+   round 2 on the same branch and PR, with a round comment.
 6. Read `sandbox/review_prompt.py`, then write a buggy one-line change of your own and ask
    yourself which checklist item should catch it.

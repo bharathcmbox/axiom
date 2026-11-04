@@ -17,6 +17,7 @@ from typing import Any
 
 from axiom.runtimes.base import CommandRunner, Outcome, RunOutcome, RunRequest, Runtime
 from axiom.worker.api_client import ApiError, AxiomClient
+from axiom.worker.feedback import feedback_from_events
 from axiom.worker.publish import PullRequest, pr_body, push_branch
 from axiom.worker.verify import check_changes, commit, run_tests
 from axiom.workspaces.manager import Workspace, prepare_workspace, remove_workspace
@@ -25,6 +26,8 @@ log = logging.getLogger("axiom.worker")
 
 # (repo_url, branch, base, title, body) -> PullRequest
 PrOpener = Callable[[str, str, str, str, str], PullRequest]
+# (repo_url, pr_number, body) -> None
+PrCommenter = Callable[[str, int, str], None]
 
 
 @dataclass
@@ -49,6 +52,7 @@ class Worker:
     runtime_factory: Callable[[], Runtime]
     test_runner: CommandRunner
     open_pr: PrOpener
+    comment_pr: PrCommenter = lambda repo_url, number, body: None
     # Checked before any work starts, so a misconfigured project fails fast instead of
     # spending an agent run and only failing at the PR step. Production: parse_github_repo.
     validate_repo: Callable[[str], object] = lambda url: None
@@ -110,6 +114,7 @@ class Worker:
                 repo_url=project["repo_url"],
                 default_branch=project["default_branch"],
                 token=self.config.github_token,
+                existing_branch=task.get("branch"),  # rework continues the same PR
             )
             outcome = runtime.run(self._request(task, workspace))
             if lease_lost.is_set():
@@ -128,6 +133,7 @@ class Worker:
 
     def _request(self, task: dict[str, Any], ws: Workspace) -> RunRequest:
         agent = self.api.agent(self.config.agent_key)
+        feedback = feedback_from_events(self.api.events(task["key"]))
         return RunRequest(
             task_key=task["key"],
             title=task["title"],
@@ -139,6 +145,8 @@ class Worker:
             budget_usd=Decimal(str(task["run_budget_usd"])),
             model=agent.get("model") or self.config.default_model,
             effort=self.config.effort,
+            previous_feedback=feedback,
+            round=task["review_rounds"] + 1,
         )
 
     def _heartbeat(
@@ -212,6 +220,14 @@ class Worker:
         )  # fmt: skip
         pr = self.open_pr(project["repo_url"], ws.branch, project["default_branch"],
                           f"{key}: {task['title']}", body)  # fmt: skip
+        if not pr.created:  # rework: same PR, so explain what this round changed
+            self.comment_pr(
+                project["repo_url"],
+                pr.number,
+                round_comment(
+                    task, execution_id, self.config.agent_key, result, verified, cost["cost"]["usd"]
+                ),
+            )
         self.api.command(
             key,
             "submit",
@@ -231,3 +247,24 @@ class Worker:
             self.api.command(key, "fail", {"error": error[:2000]} | extra)
         except ApiError as e:
             log.warning("%s: could not report failure (%s)", key, e)
+
+
+def round_comment(
+    task: dict[str, Any],
+    execution_id: int,
+    agent: str,
+    result: dict[str, Any],
+    verified: dict[str, Any] | None,
+    cost_usd: str | None,
+) -> str:
+    """PR comment for a rework round: what changed, and the verified test result."""
+    lines = [
+        f"**Round {task['review_rounds'] + 1}** (agent `{agent}`, execution e{execution_id})",
+        "",
+        result.get("summary", ""),
+    ]
+    if verified:
+        status = "✅ passed" if verified["passed"] else "❌ failed"
+        lines += ["", f"Tests re-run by Axiom: `{verified['command']}` {status}"]
+    lines += ["", f"Cost of this round: ${cost_usd or '?'}. Reviews for this round are starting."]
+    return "\n".join(lines)
