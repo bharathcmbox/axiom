@@ -301,8 +301,9 @@ Knowing the edges is part of understanding the system:
   is no longer reserved.
 - **The real Anthropic key is in the sandbox.** A compromised agent can read it. A proxy that adds
   the key itself would keep it out.
-- **Allowlisted hosts can carry data out.** The proxy filters by host, and it can't tell your use of
-  `api.anthropic.com` or PyPI from an attacker's account on the same host.
+- **`api.anthropic.com` can carry data out.** The proxy filters by host, so it can't tell your use
+  of the API from a request using someone else's key. PyPI is much weaker as a way out: the upload
+  host, `upload.pypi.org`, isn't allowlisted.
 - **`outcome.json` is written in the sandbox.** Its result is re-validated, but an agent could forge
   its reported cost and get round budgets.
 - **The worker is high value:** it holds the tokens and the Docker socket (in effect root on this

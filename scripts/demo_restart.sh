@@ -8,8 +8,17 @@ set -euo pipefail
 
 api="http://127.0.0.1:${AXIOM_API_PORT:-8000}"
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
-issue() { docker compose exec -T api python -m axiom.registry.tokens issue "$1"; }
+# </dev/null: exec reads stdin, and would swallow the ids from the loop that revokes tokens below.
+tokens() { docker compose exec -T api python -m axiom.registry.tokens "$@" </dev/null; }
+# Tokens this demo issued must not outlive it: they are real credentials. Also clears any left by a
+# run that died while the API was down.
+revoke_demo_tokens() {
+  tokens list 2>/dev/null | awk '$3 == "active" && $NF == "demo-restart" { print $1 }' |
+    while read -r id; do tokens revoke "$id" >/dev/null 2>&1 || echo "could not revoke token $id"; done
+}
+trap 'revoke_demo_tokens; rm -rf "$work"' EXIT
+revoke_demo_tokens
+issue() { tokens issue "$1" --label demo-restart; }
 HTOK=$(issue human:demo)
 export HTOK
 H=(-H "Authorization: Bearer $HTOK" -H "Content-Type: application/json")

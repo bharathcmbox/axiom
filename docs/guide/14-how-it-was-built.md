@@ -115,6 +115,7 @@ flowchart LR
 | **A compromised agent could escape the sandbox through `.git`** and reach every worker credential | Asking what the harness does with sandbox output, while preparing a drill | ADR-014 |
 | The agent's summary was published unscanned | The same | Scanned before publishing |
 | A regression test passed with its fix removed | Removing the fix on purpose | Rewritten |
+| Demo runs left real, active tokens behind | Listing tokens during rotation | The demo revokes its own |
 | The first report flattered the system: "$0.03 per merged task" came from old demo tasks | Reading its output on real data | Demo tasks tagged, the demo script tags its own |
 
 **Process mistakes** also happened, and are worth knowing:
