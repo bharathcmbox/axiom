@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from axiom.api import errors
 from axiom.api.routes import public_router, router
+from axiom.api.ui import ui_router
 from axiom.config import Settings, get_settings
 from axiom.orchestrator.reaper import Reaper
 from axiom.state.db import create_pool
@@ -56,6 +57,7 @@ def create_app(settings: Settings | None = None, *, start_reaper: bool = True) -
     errors.install(app)
     app.include_router(public_router)
     app.include_router(router)
+    app.include_router(ui_router)
     return app
 
 

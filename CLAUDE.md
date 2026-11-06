@@ -15,6 +15,7 @@ customer projects live in their own repos.
 - `make migrate` — apply migrations/*.sql (also runs on API startup)
 - `make demo-restart` — kill/restart durability demo
 - `make worker-tokens` / `make workers` / `make workers-down` — developers, reviewers, GitHub sync
+- `make report` — daily report from the event log (`PROJECT=SOC` to filter); dashboard at /ui
 - `make test-docker` — sandbox isolation tests; `make test-live` — real API (announce first, costs money)
 - Use `uv run …`; never pip install globally.
 

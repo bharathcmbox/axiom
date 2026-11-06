@@ -4,7 +4,7 @@ DOCKER_GID := $(shell stat -c %g /var/run/docker.sock 2>/dev/null || echo 999)
 AXIOM_WORKSPACES_DIR ?= $(HOME)/.axiom/work
 export AXIOM_UID AXIOM_GID DOCKER_GID AXIOM_WORKSPACES_DIR
 
-.PHONY: worker-tokens workers workers-down db up down logs test test-docker test-live sandbox-image lint fmt migrate seed smoke demo-restart
+.PHONY: report worker-tokens workers workers-down db up down logs test test-docker test-live sandbox-image lint fmt migrate seed smoke demo-restart
 
 db:
 	docker compose up -d --wait db
@@ -68,3 +68,7 @@ workers: sandbox-image
 
 workers-down:
 	docker compose --profile workers stop worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
+
+# The daily report: plain numbers from the event log, no LLM.
+report:
+	docker compose exec -T api python -m axiom.report $(PROJECT)

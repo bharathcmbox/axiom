@@ -105,6 +105,8 @@ flowchart LR
 | Review code defined after `__main__` | Docker test (unit tests passed) | Entry point moved to the end |
 | HOME tmpfs is `noexec`, breaking `uv run --with` | Live run; SOC-001 had hidden it | `exec` on that tmpfs, regression test |
 | A superseded review's cost vanished ($0.30) | Checking the total by hand | Late cost recorded, tested |
+| The rebuilt API crash-looped: login needs `python-multipart`, present only via dev dependencies | Rebuilding the image (tests passed) | Runtime dependency, regression test |
+| The first report flattered the system: "$0.03 per merged task" came from old demo tasks | Reading its output on real data | Demo tasks tagged, the demo script tags its own |
 
 **Process mistakes** also happened, and are worth knowing:
 - Commits went through twice with failing lint, because piping `make lint` into `tail` hid its exit

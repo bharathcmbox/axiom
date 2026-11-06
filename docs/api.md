@@ -38,6 +38,7 @@ docker compose exec api python -m axiom.registry.tokens revoke <id>
 | POST | `/reviews/{id}/submit` | Submit a review contract; response says what the aggregator did |
 | POST | `/reviews/{id}/fail` | Report a failed reviewer run (retried, ERROR after 3) |
 | GET | `/tasks/{key}/reviews` | All reviews of a task, by round |
+| GET | `/ui`, `/ui/tasks/{key}` | Read-only HTML dashboard; signs in at `/ui/login` with a token ([chapter 15](guide/15-metrics.md#the-dashboard)) |
 | GET | `/metrics?project=&include_demo=` | Delivery metrics computed from the event log |
 | POST | `/tasks/{key}/tags` | Set tags, e.g. `demo` to leave a task out of metrics (humans only) |
 | POST | `/tasks/{key}/defects` | Record a defect found after merge (humans only) |

@@ -24,7 +24,12 @@ cmd() { # cmd KEY COMMAND ACTOR_ARRAY_NAME [JSON_BODY]
   local -n actor=$3
   post "${actor[@]}" -d "${4:-{\}}" "$api/tasks/$1/commands/$2" >/dev/null
 }
-task() { post "${H[@]}" -d "$2" "$api/projects/$1/tasks" | json 'd["key"]'; }
+task() { # creates a task tagged demo: this script's tasks must not count as delivery (ADR-012)
+  local key
+  key=$(post "${H[@]}" -d "$2" "$api/projects/$1/tasks" | json 'd["key"]')
+  post "${H[@]}" -d '{"tags":["demo"]}' "$api/tasks/$key/tags" >/dev/null
+  echo "$key"
+}
 
 show_tasks() { python3 -c '
 import json, sys

@@ -75,8 +75,46 @@ curl "${H[@]}" localhost:8000/tasks/SOC-002/tags -d '{"tags": ["demo", "planted"
 **Baselines answer SPEC's main question:** does this beat you driving one session? Without a
 comparable hand-driven task there is nothing to compare with. Collecting them is part of Phase 5.
 
-**Demo work is left out by default.** Planted and smoke-test tasks are tagged `demo`, so they can't
-flatter or distort the results. Add `?include_demo=true` to see them.
+**Demo work is left out by default.** Planted and demo tasks are tagged `demo`, so they can't
+flatter or distort the results: `make demo-restart` tags its own. Add `?include_demo=true` to see
+them. This matters more than it sounds. Before the old demo tasks were tagged, the first report
+said "$0.03 per merged task, 100% first-pass", from tasks no agent ever worked on.
+
+## The daily report
+
+`make report` (or `make report PROJECT=SOC`) prints Markdown: plain numbers, no LLM (Q4 in the
+plan), so it costs nothing and can't invent anything. It leads with what needs you, then today's
+spend and activity, delivery so far, and baselines.
+
+## The dashboard
+
+The same data as HTML, served by the API itself at <http://127.0.0.1:8000/ui>: no new service.
+
+```mermaid
+flowchart TB
+    b["Your browser"] -->|"GET /ui"| c{"valid session cookie?"}
+    c -->|no| l["/ui/login: paste an API token"]
+    l -->|"POST: token checked"| s["cookie set: HttpOnly, SameSite=Strict"]
+    s --> c
+    c -->|yes| o["<b>Overview</b><br/>needs you, numbers, tasks"]
+    o --> t["<b>One task</b><br/>spec, reviews + findings,<br/>developer runs, full timeline"]
+    t -.-> x["Nothing here changes a task:<br/>merging stays on GitHub,<br/>commands stay on the API"]
+```
+
+Three rules, each with a test:
+
+- **Nothing on it can change state.** Every route is GET except the login form, which only checks a
+  token and sets a cookie (`test_only_login_is_not_a_get`). The plan said "every route is GET"; a
+  browser can't send a bearer header, and a token in a URL would land in logs and history, so login
+  is the one exception.
+- **Everything shown is treated as hostile.** Titles, specs, findings and errors are written by
+  models or found in repositories, so all of it is escaped, and only `https://` links are rendered
+  (`test_untrusted_text_is_escaped_everywhere`).
+- **Demo work stays out** unless you ask (`test_demo_tasks_are_hidden_unless_asked`).
+
+The cookie holds your API token until you close the browser. It isn't marked `Secure` because this
+is plain HTTP on 127.0.0.1; it would need to be before the API ever left localhost. To end access,
+revoke the token.
 
 ## The first real numbers
 
@@ -104,3 +142,5 @@ need more data before they mean much.
 1. `curl "${H[@]}" "localhost:8000/metrics?project=SOC&include_demo=true" | python3 -m json.tool`
 2. `uv run pytest tests/unit/test_metrics.py -v`: every definition, on a scripted history.
 3. Change a definition in `metrics.py` (say, count FAILED as agent time) and see which test objects.
+4. `make report PROJECT=SOC`, then open <http://127.0.0.1:8000/ui> and follow a task to its timeline.
+   Issue a token to sign in with: `docker compose exec api python -m axiom.registry.tokens issue human:you`.
