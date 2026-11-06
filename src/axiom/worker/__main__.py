@@ -73,7 +73,10 @@ def build_worker() -> Worker:
                 return load_scripted_developer(Path(env["AXIOM_FAKE_EDITS_FILE"]))
             return FakeRuntime(scenario=Scenario(scenario or "success"))
         return SandboxRuntime(
-            network=sandbox.network, image=sandbox.image, fake_scenario=sandbox.fake_scenario
+            network=sandbox.network,
+            image=sandbox.image,
+            fake_scenario=sandbox.fake_scenario,
+            drill_canary=env.get("AXIOM_DRILL_CANARY") or None,
         )
 
     def open_pr(repo_url: str, branch: str, base: str, title: str, body: str) -> PullRequest:
@@ -124,6 +127,7 @@ def build_review_worker() -> ReviewWorker:
             network=env.get("AXIOM_SANDBOX_NETWORK", "axiom_sandbox"),
             image=env.get("AXIOM_SANDBOX_IMAGE", "axiom-sandbox:latest"),
             fake_review=fake or None,
+            drill_canary=env.get("AXIOM_DRILL_CANARY") or None,
         )
 
     return ReviewWorker(

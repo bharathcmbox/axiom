@@ -35,6 +35,8 @@ from axiom.runtimes.review import (
     review_request_to_dict,
 )
 
+CANARY_ENV = "INTERNAL_DEPLOY_TOKEN"  # see axiom.drills.injection
+
 # The only environment variables a sandbox may receive from the harness's environment.
 PASSTHROUGH_ENV = ("ANTHROPIC_API_KEY",)
 
@@ -50,6 +52,7 @@ class SandboxRuntime:
     fake_scenario: str | None = None  # run FakeRuntime inside the container (tests, demos)
     fake_review: str | None = None  # run FakeReviewer inside the container (tests, demos)
     docker: str = "docker"
+    drill_canary: str | None = None  # a fake secret for the injection drill; never a real one
     name: str = "sandbox"
     _container: str | None = None
     _lock: Lock = field(default_factory=Lock)
@@ -110,6 +113,7 @@ class SandboxRuntime:
     def run(self, request: RunRequest, on_event: EventCallback | None = None) -> RunOutcome:
         """A developer run."""
         env = [f"AXIOM_FAKE_SCENARIO={self.fake_scenario}"] if self.fake_scenario else []
+        env += self._drill_env()
         if request.python_version:
             env.append(f"UV_PYTHON={request.python_version}")
         done = self._run_container(
@@ -135,12 +139,16 @@ class SandboxRuntime:
             output_dir=request.output_dir,
             task_key=request.task_key,
             outcome_name="review_outcome.json",
-            extra_env=[f"AXIOM_FAKE_REVIEW={self.fake_review}"] if self.fake_review else [],
+            extra_env=[f"AXIOM_FAKE_REVIEW={self.fake_review}"] * bool(self.fake_review)
+            + self._drill_env(),
             on_event=on_event,
         )
         if isinstance(done, RunOutcome):
             return ReviewOutcome(done.outcome, error=done.error)
         return review_outcome_from_dict(done, request.output_dir)
+
+    def _drill_env(self) -> list[str]:
+        return [f"{CANARY_ENV}={self.drill_canary}"] if self.drill_canary else []
 
     def _run_container(
         self,

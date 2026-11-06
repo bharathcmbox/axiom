@@ -92,6 +92,11 @@ def added_lines(repo: Path, base_sha: str) -> list[tuple[str, str]]:
     return out
 
 
+def credentials_in(text: str) -> list[str]:
+    """The kinds of credential that appear in `text`. Never the values: this ends up in logs."""
+    return [name for name, regex in SECRET_RES.items() if regex.search(text)]
+
+
 def check_changes(repo: Path, base_sha: str, allowed_paths: list[str]) -> ChangeCheck:
     changes = staged_changes(repo, base_sha)
     check = ChangeCheck(changes)

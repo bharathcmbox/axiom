@@ -7,6 +7,7 @@ If the lease is lost mid-run (heartbeat rejected), the run is cancelled and noth
 reported: the reaper has already timed the execution out and the task is someone else's.
 """
 
+import json
 import logging
 import threading
 from collections.abc import Callable
@@ -21,7 +22,7 @@ from axiom.worker.api_client import ApiError, AxiomClient
 from axiom.worker.feedback import feedback_from_events
 from axiom.worker.publish import PullRequest, pr_body, push_branch
 from axiom.worker.recover_costs import recover_costs
-from axiom.worker.verify import check_changes, commit, run_tests
+from axiom.worker.verify import check_changes, commit, credentials_in, run_tests
 from axiom.workspaces.manager import Workspace, prepare_workspace, remove_workspace
 
 log = logging.getLogger("axiom.worker")
@@ -219,6 +220,13 @@ class Worker:
         if not check.ok:
             self._try_fail(key, "verification failed: " + "; ".join(check.problems),
                            cost | {"problems": check.problems})  # fmt: skip
+            return
+        # The agent's own words become the commit message and PR body. The diff check doesn't see
+        # them, and an agent tricked into printing its environment would publish its API key.
+        leaked = credentials_in(json.dumps(result))
+        if leaked:
+            kinds = ", ".join(leaked)
+            self._try_fail(key, f"verification failed: result text looks like a {kinds}", cost)
             return
         sha = commit(
             ws.repo,

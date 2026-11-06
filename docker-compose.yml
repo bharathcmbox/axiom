@@ -58,6 +58,7 @@ services:
       AXIOM_RUNTIME: ${AXIOM_RUNTIME:-sandbox}
       AXIOM_FAKE_EDITS_FILE: ${AXIOM_FAKE_EDITS_FILE:-}
       AXIOM_KEEP_WORKSPACES: ${AXIOM_KEEP_WORKSPACES:-0}
+      AXIOM_DRILL_CANARY: ${AXIOM_DRILL_CANARY:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}:${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}

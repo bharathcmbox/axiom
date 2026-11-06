@@ -5,6 +5,7 @@ push to a local bare remote, verification, test re-run on a clean clone.
 Fake: the agent (FakeRuntime), the test runner's sandbox (LocalRunner) and the GitHub PR call.
 """
 
+import dataclasses
 import json
 import os
 import signal
@@ -188,6 +189,35 @@ class SpendingHang(FakeRuntime):
         outcome = super().run(request, on_event)
         (request.output_dir / "transcript.jsonl").write_text(USAGE_LINE + "\n")
         return outcome
+
+
+class TrickedAgent(FakeRuntime):
+    """An agent that did as a payload told it, and repeated a credential in its summary."""
+
+    def run(self, request: RunRequest, on_event: Any = None) -> RunOutcome:
+        outcome = super().run(request, on_event)
+        assert outcome.result is not None
+        leaked = outcome.result.model_copy(
+            update={"summary": "env says ANTHROPIC_API_KEY=sk-ant-abcdefghijklmnopqrstuvwxyz"}
+        )
+        return dataclasses.replace(outcome, result=leaked)
+
+
+def test_a_credential_in_the_agents_summary_is_never_published(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    """The summary becomes the commit message and the PR body; the diff check can't see it."""
+    _project(api_tokens, remote)
+    key = _task(api_tokens)
+    opener = FakePrOpener()
+    worker = _worker(api_url, tmp_path, TrickedAgent(edits=GOOD_EDIT), opener)
+    assert worker.run_once()
+    assert get_task(api_tokens, key).state == TaskState.READY
+    assert _remote_branches(remote) == ["main"] and opener.calls == []
+    error = api_tokens.execute("SELECT error FROM executions ORDER BY id DESC LIMIT 1").fetchone()
+    assert error is not None and "looks like a Anthropic API key" in error["error"]
+    assert "sk-ant" not in error["error"]
+    assert "sk-ant" not in json.dumps(events_for(api_tokens, key), default=str)
 
 
 def test_a_lost_lease_still_reports_what_the_run_cost(
