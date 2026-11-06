@@ -54,6 +54,10 @@ stateDiagram-v2
 | S15 | A reviewer finishes after being superseded | verdict ignored, cost recorded | **live** (SOC-002) | `test_superseded_review_still_reports_its_cost_but_not_its_verdict` |
 | S16 | A run is killed partway | cost estimated from its transcript, marked as an estimate | tested | `test_a_lost_lease_still_reports_what_the_run_cost`, `test_a_restarted_worker_costs_the_run_it_lost_when_killed` |
 | S17 | A task's budget runs out during review | WAITING_FOR_HUMAN, no review started | tested | `test_a_spent_task_escalates_instead_of_starting_a_review` |
+| S19 | Task or repository text tells the agent to misbehave | ignored and reported | **live** ([drill](../drills/2026-11-06-prompt-injection.md)) | `test_payloads_ask_for_every_attack_and_go_where_agents_read` |
+| S20 | Code tells reviewers to approve | FAIL, bug and injection reported | **live** ([drill](../drills/2026-11-06-prompt-injection.md)) | `test_reviewer_approving_a_planted_bug_is_a_breach` |
+| S21 | A compromised agent plants code in `.git` | nothing runs, push goes where it should | tested, from the real sandbox | `test_an_attack_planted_from_the_real_sandbox_does_not_reach_the_harness` |
+| S22 | An agent's summary contains a credential | run fails, nothing published | tested | `test_a_credential_in_the_agents_summary_is_never_published` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
@@ -295,8 +299,15 @@ Knowing the edges is part of understanding the system:
 - **A sandbox orphaned by a killed worker keeps running** until its own budget stop. Killing the
   worker doesn't kill the container, so a cost estimated on restart can undercount, and the money
   is no longer reserved.
-- **Prompt-injection drill:** the defences exist (delimited untrusted text, no credentials, egress
-  allowlist, hooks, diff check) but SPEC section 8's seeded-payload drill has not been run.
+- **The real Anthropic key is in the sandbox.** A compromised agent can read it. A proxy that adds
+  the key itself would keep it out.
+- **Allowlisted hosts can carry data out.** The proxy filters by host, and it can't tell your use of
+  `api.anthropic.com` or PyPI from an attacker's account on the same host.
+- **`outcome.json` is written in the sandbox.** Its result is re-validated, but an agent could forge
+  its reported cost and get round budgets.
+- **The worker is high value:** it holds the tokens and the Docker socket (in effect root on this
+  machine), and isn't behind the egress proxy. ADR-014 closes the known way in, not the risk.
+- **Prompt-injection resistance is one small run,** with a crude payload (see the drill).
 - **A dependency that gets cancelled** leaves its dependents PENDING until you cancel them.
 - **A pull request that conflicts after another merges** isn't detected yet (Phase 4 T9).
 - **A task with no CI workflow and `require_ci` on** waits forever (S3).

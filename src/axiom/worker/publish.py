@@ -30,10 +30,11 @@ def assert_safe_branch(branch: str) -> None:
         raise PublishError(f"refusing to push to {branch!r}: only axiom/<TASK>-e<N> branches")
 
 
-def push_branch(repo_dir: Any, branch: str, token: str | None) -> None:
+def push_branch(repo_dir: Any, branch: str, token: str | None, url: str) -> None:
     assert_safe_branch(branch)
-    # Explicit refspec: the local HEAD goes to exactly this remote branch. No --force.
-    git(["push", "--quiet", "origin", f"HEAD:refs/heads/{branch}"], cwd=repo_dir, token=token)
+    # Explicit URL and refspec: the local HEAD goes to exactly this branch of the project's own
+    # repository, wherever a remote may have been pointed. No --force.
+    git(["push", "--quiet", url, f"HEAD:refs/heads/{branch}"], cwd=repo_dir, token=token)
 
 
 def parse_github_repo(repo_url: str) -> tuple[str, str]:

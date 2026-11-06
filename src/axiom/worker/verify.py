@@ -7,6 +7,7 @@
    of that commit. The verified result is what Axiom records, not the agent's claim.
 """
 
+import os
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -14,7 +15,7 @@ from pathlib import Path
 
 from axiom.paths import is_allowed, is_secret
 from axiom.runtimes.base import CommandRunner
-from axiom.workspaces.git import git
+from axiom.workspaces.git import clone_source, git
 
 # Patterns for credentials in added lines. Specific formats only, to keep false positives rare.
 SECRET_RES = {
@@ -97,7 +98,23 @@ def credentials_in(text: str) -> list[str]:
     return [name for name, regex in SECRET_RES.items() if regex.search(text)]
 
 
+def nested_git(repo: Path) -> list[str]:
+    """Any `.git` below the top of the checkout. `git status` runs a nested repository's own
+    config, so these are refused before the harness's git looks at the tree."""
+    found = []
+    for folder, dirs, files in os.walk(repo):
+        for name in dirs + files:
+            if name.lower() == ".git" and Path(folder) != repo:
+                found.append((Path(folder) / name).relative_to(repo).as_posix())
+    return sorted(found)
+
+
 def check_changes(repo: Path, base_sha: str, allowed_paths: list[str]) -> ChangeCheck:
+    nested = nested_git(repo)
+    if nested:
+        return ChangeCheck(
+            [], [f"{path}: nested git repositories may not be added" for path in nested]
+        )
     changes = staged_changes(repo, base_sha)
     check = ChangeCheck(changes)
     if not changes:
@@ -142,7 +159,7 @@ def run_tests(
     if scratch.exists():
         shutil.rmtree(scratch)
     out.mkdir(parents=True)
-    git(["clone", "--quiet", "--no-hardlinks", str(repo), str(clean)])
+    git(["clone", "--quiet", "--no-hardlinks", str(clone_source(repo)), str(clean)])
     result = runner.exec(clean, out, command, timeout)
     return VerifiedTests(
         command=command,

@@ -5,6 +5,7 @@ Layout under the workspaces root (one directory per execution):
     <root>/<TASK>-e<execution_id>/
         repo/   fresh clone on branch axiom/<TASK>-e<execution_id>   (mounted into the sandbox)
         out/    transcript, raw result, logs                           (mounted into the sandbox)
+        harness.git/   the harness's own copy of .git                  (never mounted; ADR-014)
 
 The clone comes from the remote (e.g. GitHub), never from a checkout on this machine, so only
 tracked files are present: no local `.env`, no untracked secrets.
@@ -15,7 +16,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from axiom.workspaces.git import git
+from axiom.workspaces.git import git, seal
 
 BRANCH_PREFIX = "axiom/"
 COMMITTER_NAME = "Axiom"
@@ -81,6 +82,7 @@ def prepare_workspace(
     with exclude.open("a") as f:
         f.write("\n# added by Axiom: tool caches\n" + "\n".join(LOCAL_EXCLUDES) + "\n")
     base_sha = git(["rev-parse", "HEAD"], cwd=repo)
+    seal(repo)
     return Workspace(root=root, repo=repo, out=out, branch=branch, base_sha=base_sha,
                      continued=continued)  # fmt: skip
 
@@ -133,6 +135,7 @@ def prepare_review_workspace(
     head = git(["rev-parse", "HEAD"], cwd=repo)
     base = git(["merge-base", f"origin/{default_branch}", "HEAD"], cwd=repo)
     diff = git(["diff", "--no-color", "--find-renames", f"{base}..{head}"], cwd=repo)
+    seal(repo)
     return ReviewWorkspace(root=root, repo=repo, out=out, head_sha=head, base_sha=base, diff=diff)
 
 

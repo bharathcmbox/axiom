@@ -35,6 +35,8 @@ customer projects live in their own repos.
   tokens; the LLM runs only in `sandbox/` containers with just the Anthropic key, no settings
   from the repo (`setting_sources=[]`), egress via the allowlist proxy. Never pass other
   credentials into a sandbox. Pushes only to `axiom/*`; no merge code path (ADR-007).
+  Never trust what a sandbox leaves behind: harness git uses its own sealed `.git`, with an
+  allowlisted environment (ADR-014). Any potential credential exposure stops work and goes to the human.
 - Budgets are enforced at claim time and per run (`orchestrator/budgets.py`); reviews count too.
   Claims reserve their run budget (ADR-013). A cost from a transcript is marked `cost_estimated`.
 - Reviews (ADR-009): `domain/review_machine.py` holds their legality; review events never move the

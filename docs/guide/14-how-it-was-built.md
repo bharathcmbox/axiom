@@ -112,6 +112,9 @@ flowchart LR
 | A retried review's earlier cost was overwritten on submit | Reading the code for T3 | Costs add up, tested |
 | A timed-out review was recorded as costing $0, which blocked its real estimate. Unit tests passed against a fake API | A test through the real API | Unknown stays NULL |
 | A failed test's leftover thread kept pytest alive for 1h40m, unnoticed behind a `\| tail` | Being asked whether the run had finished | Daemon threads, hard time limits on long runs |
+| **A compromised agent could escape the sandbox through `.git`** and reach every worker credential | Asking what the harness does with sandbox output, while preparing a drill | ADR-014 |
+| The agent's summary was published unscanned | The same | Scanned before publishing |
+| A regression test passed with its fix removed | Removing the fix on purpose | Rewritten |
 | The first report flattered the system: "$0.03 per merged task" came from old demo tasks | Reading its output on real data | Demo tasks tagged, the demo script tags its own |
 
 **Process mistakes** also happened, and are worth knowing:

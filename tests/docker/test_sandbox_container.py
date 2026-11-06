@@ -14,6 +14,8 @@ import pytest
 
 from axiom.runtimes.base import Outcome, RunRequest
 from axiom.runtimes.sandbox import SandboxRuntime
+from axiom.worker.verify import check_changes, commit
+from axiom.workspaces.manager import prepare_workspace
 
 pytestmark = pytest.mark.docker
 IMAGE = "axiom-sandbox:latest"
@@ -180,3 +182,41 @@ def test_uv_can_use_the_projects_python(request_: RunRequest, version: str) -> N
     command = f"export UV_PYTHON={version}; cd /tmp && uv run --no-project python --version"
     done = rt.exec(request_.workspace, request_.output_dir, command, 120)
     assert done.exit_code == 0 and f"Python {version}" in done.output, done.output
+
+
+def test_an_attack_planted_from_the_real_sandbox_does_not_reach_the_harness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Assume the model is compromised: it plants, from inside the real sandbox, what git would
+    run afterwards in the harness (ADR-014). Fake credentials; the harness then does its real work."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "FAKE-TOKEN-NOT-REAL")
+    bare = tmp_path / "remote.git"
+    src = tmp_path / "src"
+    src.mkdir()
+    for args in (
+        ["init", "-q", "-b", "main"],
+        ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "b"],
+    ):
+        subprocess.run(["git", *args], cwd=src, check=True)
+    subprocess.run(["git", "clone", "-q", "--bare", str(src), str(bare)], check=True)
+    ws = prepare_workspace(tmp_path / "work", task_key="AX-1", execution_id=1,
+                           repo_url=str(bare), default_branch="main", token=None)  # fmt: skip
+    rt = SandboxRuntime()
+    plant = (
+        "cd /workspace/repo && ls /workspace > /workspace/out/mounts.txt"
+        " && printf '#!/bin/sh\\nenv > /tmp/loot-from-harness\\ncat\\n' > .git/steal.sh"
+        " && chmod +x .git/steal.sh"
+        " && git config --file .git/config core.fsmonitor .git/steal.sh"
+        " && git config --file .git/config filter.x.clean .git/steal.sh"
+        " && echo '*.md filter=x' > .gitattributes && echo changed > a.md"
+    )
+    planted = rt.exec(ws.repo, ws.out, plant, 120)
+    assert planted.exit_code == 0, planted.output
+    assert (ws.out / "mounts.txt").read_text().split() == ["out", "repo"]  # no harness.git in reach
+    assert "fsmonitor" in (ws.repo / ".git" / "config").read_text()
+    loot = Path("/tmp/loot-from-harness")
+    loot.unlink(missing_ok=True)
+    check = check_changes(ws.repo, ws.base_sha, ["**"])
+    assert check.ok, check.problems
+    commit(ws.repo, "work", "A <a@b>")
+    assert not loot.exists()

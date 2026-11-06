@@ -56,7 +56,7 @@ def ws(tmp_path: Path, remote: Path) -> Workspace:
 
 def test_push_creates_only_the_axiom_branch(ws: Workspace, remote: Path) -> None:
     main_before = _run("git", "rev-parse", "main", cwd=remote)
-    push_branch(ws.repo, ws.branch, token=None)
+    push_branch(ws.repo, ws.branch, token=None, url=str(remote))
     assert _run("git", "rev-parse", ws.branch, cwd=remote) == git(
         ["rev-parse", "HEAD"], cwd=ws.repo
     )
@@ -70,17 +70,17 @@ def test_push_creates_only_the_axiom_branch(ws: Workspace, remote: Path) -> None
 )  # fmt: skip
 def test_unsafe_refs_are_refused(ws: Workspace, remote: Path, branch: str) -> None:
     with pytest.raises(PublishError):
-        push_branch(ws.repo, branch, token=None)
+        push_branch(ws.repo, branch, token=None, url=str(remote))
     assert _run("git", "branch", "--list", cwd=remote) == "* main"
 
 
 def test_push_never_forces(ws: Workspace, remote: Path) -> None:
-    push_branch(ws.repo, ws.branch, token=None)
+    push_branch(ws.repo, ws.branch, token=None, url=str(remote))
     git(["reset", "--hard", "HEAD~1"], cwd=ws.repo)  # rewrite history locally
     (ws.repo / "CLAUDE.md").write_text("# different\n")
     git(["commit", "-qam", "rewritten"], cwd=ws.repo)
     with pytest.raises(GitError):  # non-fast-forward is rejected, not forced
-        push_branch(ws.repo, ws.branch, token=None)
+        push_branch(ws.repo, ws.branch, token=None, url=str(remote))
 
 
 # ---- GitHub API -----------------------------------------------------------------------------

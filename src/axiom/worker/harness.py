@@ -245,7 +245,7 @@ class Worker:
                                cost | {"verified_tests": verified})  # fmt: skip
                 return
 
-        push_branch(ws.repo, ws.branch, self.config.github_token)
+        push_branch(ws.repo, ws.branch, self.config.github_token, project["repo_url"])
         body = pr_body(
             task_key=key, title=task["title"], agent=self.config.agent_key,
             execution_id=execution_id, result=result, verified_tests=verified,

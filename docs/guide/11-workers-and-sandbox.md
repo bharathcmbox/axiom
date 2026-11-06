@@ -154,6 +154,34 @@ Because the repository is private on GitHub's free plan, branch protection isn't
   tested and refused);
 - the GitHub client has exactly two methods, `find_open_pr` and `create_pr`.
 
+## The harness doesn't trust what the sandbox leaves behind
+
+Keeping credentials out of the sandbox isn't enough if the harness then acts on what the sandbox
+wrote. The checkout's `.git` is one such thing: git runs what its config says. So the harness keeps
+its own copy (ADR-014). Found while preparing the Phase 4 drill; before this, a compromised agent
+could reach every credential the worker holds.
+
+```mermaid
+flowchart LR
+    subgraph root["Workspace on the host"]
+        subgraph mounted["Mounted in the sandbox"]
+            repo["repo/<br/>working tree + the agent's .git"]
+            out["out/<br/>transcript, outcome"]
+        end
+        hg["harness.git<br/>copied before the agent starts"]
+    end
+    agent["Agent"] -->|"can write anything"| repo
+    h["Harness git<br/>--git-dir harness.git<br/>allowlisted environment"] --> hg
+    h -->|"reads files only"| repo
+    h -->|"push to the project's URL,<br/>token on this call only"| gh["GitHub"]
+```
+
+Tests: `test_nothing_planted_in_git_config_runs_in_the_harness`,
+`test_a_planted_url_rewrite_cannot_redirect_the_push_or_the_token`,
+`test_a_nested_repository_is_refused_before_git_looks_at_it`,
+`test_git_never_receives_the_workers_credentials`, and from the real sandbox,
+`test_an_attack_planted_from_the_real_sandbox_does_not_reach_the_harness`.
+
 ## Budgets, end to end
 
 ```mermaid

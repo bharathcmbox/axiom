@@ -170,7 +170,10 @@ class ReviewWorker:
         cost = outcome.cost_payload()
         if outcome.outcome == Outcome.COMPLETED and outcome.contract is not None:
             # Defence in depth: a read-only reviewer must leave the checkout untouched.
-            dirty = git(["status", "--porcelain", "--untracked-files=all"], cwd=ws.repo)
+            dirty = git(
+                ["status", "--porcelain", "--untracked-files=all", "--ignore-submodules=all"],
+                cwd=ws.repo,
+            )
             if dirty:
                 self._try_fail(review_id, f"reviewer modified the workspace: {dirty[:300]}", cost)
                 return

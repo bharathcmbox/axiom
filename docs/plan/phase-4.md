@@ -199,7 +199,7 @@ Every task: lint, the full suite, one commit, plus its guide section and diagram
 - [ ] A multi-task spec is delivered end to end: planned, approved by you, developed in parallel where independent, reviewed, merged by you (T10).
 - [ ] Nothing runs before you approve the plan; a bad plan cannot reach you (T6, T7).
 - [ ] Every SPEC section 2 metric is computed from the event log and reported, with the exit run's real numbers (T1, T2, T10).
-- [ ] The prompt-injection drill is run and its result recorded, whatever it is (T4).
+- [x] The prompt-injection drill is run and its result recorded, whatever it is (T4): [result](../drills/2026-11-06-prompt-injection.md).
 - [ ] Real CI failure sends work back, and closing a PR cancels the task, both for real (T5).
 - [ ] Known cost gaps closed: killed runs estimated, reviews within task budgets (T3).
 - [ ] QA tasks can't change implementation files (T6, T9).
