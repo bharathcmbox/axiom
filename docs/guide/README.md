@@ -25,6 +25,7 @@ Doing them is the fastest way to make the ideas stick.
 | 12 | [Independent review and the CI gate](12-reviews-and-ci.md) | Phase 3: reviewers on a different model, the aggregator, CI, merging on GitHub, the real run |
 | 13 | [Scenario atlas](13-scenarios.md) | **Every situation a task can meet, each with a diagram and its proof** |
 | 14 | [How it was built](14-how-it-was-built.md) | **The process, the order, the decisions, the mistakes, the cost** |
+| 15 | [Metrics](15-metrics.md) | Phase 4: what is measured, from where, and how far to trust it |
 
 **Short on time?** Read 1, then 13, then 14. Come back to the others when you want to know how a
 piece works.

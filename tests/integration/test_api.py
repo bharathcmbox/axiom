@@ -330,3 +330,18 @@ def test_require_ci_toggle(client: TestClient) -> None:
     assert client.post("/projects/NOPE/require-ci", json={"require_ci": True}).status_code == 404
     types = [e["type"] for e in client.get("/events", params={"limit": 1000}).json()]
     assert types.count("PROJECT_CI_GATE_CHANGED") == 1
+
+
+def test_metrics_over_http(client: TestClient) -> None:
+    key = _task(client)["key"]
+    r = client.get("/metrics").json()
+    assert r["summary"]["tasks"] == 1 and r["tasks"][0]["key"] == key
+    assert client.post(f"/tasks/{key}/tags", json={"tags": ["demo"]}).json() == {"tags": ["demo"]}
+    assert client.get("/metrics").json()["summary"]["tasks"] == 0
+    assert client.get("/metrics", params={"include_demo": True}).json()["summary"]["tasks"] == 1
+    defect = {"description": "broke", "severity": "high"}
+    assert client.post(f"/tasks/{key}/defects", json=defect).status_code == 201
+    assert client.post(f"/tasks/{key}/defects", json=defect, headers=DEV1).status_code == 403
+    base = {"project_key": "AX", "title": "by hand", "minutes": 30, "cost_usd": "1.20"}
+    assert client.post("/baselines", json=base).status_code == 201
+    assert client.get("/metrics").json()["baselines"][0]["payload"]["title"] == "by hand"

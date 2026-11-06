@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 from dataclasses import asdict
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
@@ -10,10 +11,12 @@ from axiom.api.schemas import (
     AgentIn,
     AgentModelIn,
     AgentOut,
+    BaselineIn,
     BudgetIn,
     ClaimIn,
     CommandIn,
     DecisionOut,
+    DefectIn,
     EventOut,
     ExecutionOut,
     HeartbeatIn,
@@ -26,13 +29,14 @@ from axiom.api.schemas import (
     ReviewFailIn,
     ReviewOut,
     ReviewSubmitIn,
+    TagsIn,
     TaskIn,
     TaskOut,
 )
 from axiom.domain.roles import Actor
 from axiom.domain.task_machine import TaskCommand, TaskState
 from axiom.events.log import list_events
-from axiom.orchestrator import reviews
+from axiom.orchestrator import measures, reviews
 from axiom.orchestrator.assignment import claim_next
 from axiom.orchestrator.commands import apply_command
 from axiom.orchestrator.leases import heartbeat
@@ -328,3 +332,46 @@ def fail_review_route(
 def task_reviews_route(key: str, conn: ConnDep) -> list[ReviewOut]:
     task = get_task(conn, key)
     return [ReviewOut.model_validate(r) for r in reviews.list_reviews(conn, task.id)]
+
+
+# ---- metrics (Phase 4, ADR-012) ------------------------------------------------------------
+
+
+def _jsonable(value: Any) -> Any:
+    return str(value) if isinstance(value, Decimal) else value
+
+
+@router.get("/metrics", tags=["metrics"])
+def metrics_route(
+    conn: ConnDep, project: str | None = None, include_demo: bool = False
+) -> dict[str, Any]:
+    """Delivery metrics computed from the event log. Demo work is excluded unless asked for.
+    `waiting_for_human_s` is elapsed time: an upper bound on attention, not a measure of it."""
+    per_task, summary, baselines = measures.collect(
+        conn, project_key=project, include_demo=include_demo
+    )
+    return {
+        "summary": {k: _jsonable(v) for k, v in asdict(summary).items()},
+        "tasks": [
+            {k: _jsonable(v) for k, v in asdict(m).items()} | {"cost_usd": str(m.cost_usd)}
+            for m in per_task
+        ],
+        "baselines": baselines,
+    }
+
+
+@router.post("/tasks/{key}/tags", tags=["metrics"])
+def tags_route(key: str, body: TagsIn, conn: ConnDep, actor: ActorDep) -> dict[str, list[str]]:
+    return {"tags": measures.set_tags(conn, actor, key, body.tags)}
+
+
+@router.post("/tasks/{key}/defects", status_code=201, tags=["metrics"])
+def defects_route(key: str, body: DefectIn, conn: ConnDep, actor: ActorDep) -> dict[str, str]:
+    measures.record_defect(conn, actor, key, body.description, body.severity)
+    return {"status": "recorded"}
+
+
+@router.post("/baselines", status_code=201, tags=["metrics"])
+def baselines_route(body: BaselineIn, conn: ConnDep, actor: ActorDep) -> dict[str, str]:
+    measures.record_baseline(conn, actor, **body.model_dump())
+    return {"status": "recorded"}

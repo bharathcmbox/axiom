@@ -227,3 +227,24 @@ class DecisionOut(BaseModel):
     decision: str = Field(
         description="Aggregator decision: wait, approve, request_changes, escalate."
     )
+
+
+# ---- metrics (Phase 4) ---------------------------------------------------------------------
+
+
+class TagsIn(BaseModel):
+    tags: list[str]
+
+
+class DefectIn(BaseModel):
+    description: str = Field(min_length=1)
+    severity: str = "medium"
+
+
+class BaselineIn(BaseModel):
+    project_key: str
+    title: str = Field(min_length=1)
+    minutes: float = Field(ge=0)
+    cost_usd: Decimal = Field(ge=0)
+    review_rounds: int = Field(default=0, ge=0)
+    notes: str = ""
