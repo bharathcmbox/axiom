@@ -58,7 +58,7 @@ def test_egress_is_limited_to_the_allowlist(request_: RunRequest) -> None:
     out = _run_in_sandbox(request_, "python", "/workspace/out/probe.py")
     pairs = (line.split(" = ", 1) for line in out.strip().splitlines() if " = " in line)
     lines = {k.strip(): v.strip() for k, v in pairs}
-    assert lines["anthropic via proxy"].startswith("HTTP")
+    assert "403 Filtered" in lines["anthropic via proxy"]  # only the model proxy reaches it
     assert lines["pypi via proxy"].startswith("HTTP")
     assert "403 Filtered" in lines["github via proxy"]
     assert "403 Filtered" in lines["example via proxy"]
@@ -66,10 +66,11 @@ def test_egress_is_limited_to_the_allowlist(request_: RunRequest) -> None:
     assert lines["raw tcp 1.1.1.1 port 443"].startswith("BLOCKED")
 
 
-def test_sandbox_receives_no_credentials_but_the_anthropic_key(
+def test_sandbox_receives_no_credentials_at_all(
     request_: RunRequest, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The harness's environment holds every secret; only the Anthropic key may pass."""
+    """Whatever the harness's environment holds, none of it passes: the agent's model access is a
+    run token from the proxy (ADR-015)."""
     secrets_in_harness = {
         "AXIOM_GITHUB_TOKEN": "github_pat_SHOULD_NOT_LEAK",
         "AXIOM_AGENT_TOKEN": "axm_SHOULD_NOT_LEAK",
@@ -82,7 +83,7 @@ def test_sandbox_receives_no_credentials_but_the_anthropic_key(
     env_dump = _run_in_sandbox(request_, "env")
     assert "SHOULD_NOT_LEAK" not in env_dump
     assert "AXIOM_DATABASE_URL" not in env_dump
-    assert "ANTHROPIC_API_KEY=sk-ant-test-dummy" in env_dump
+    assert "sk-ant-test-dummy" not in env_dump and "ANTHROPIC_API_KEY" not in env_dump
     assert "HOME=/home/agent" in env_dump
     assert "HTTPS_PROXY=http://egress-proxy:3128" in env_dump
 

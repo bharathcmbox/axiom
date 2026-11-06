@@ -36,7 +36,7 @@ flowchart TB
 |---|---|
 | A model gives opinions; code makes decisions | State machines and the aggregator are plain, tested code |
 | Nobody approves their own work | No agent can approve; reviewers are separate, on another model |
-| Agents never touch GitHub or Axiom directly | The LLM runs in a sandbox holding only the Anthropic key; network limited to an allowlist |
+| Agents never touch GitHub or Axiom directly | The LLM runs in a sandbox holding no credentials, reaching the model through a proxy that holds the key; network limited to an allowlist |
 | Agents never merge | No merge code exists. The worker pushes only `axiom/*` branches |
 | Claims are not evidence | Axiom re-runs tests itself; CI is judged on the exact commit reviewed |
 | Budgets stop work | Per run, per task, per day; refused or stopped, not just reported |
@@ -94,7 +94,7 @@ To run real agents, put two secrets in `.env` (git-ignored, `chmod 600`; see `.e
 read) and `ANTHROPIC_API_KEY` (ideally a dedicated key with a spend limit). Then:
 
 ```bash
-make worker-tokens   # once: API tokens for the agents, added to .env
+make worker-tokens   # once: tokens for the agents and the model proxy, added to .env
 make workers         # sandbox image, developers, reviewers, GitHub sync
 docker compose exec api python -m axiom.registry.tokens issue human:you   # your API token
 ```

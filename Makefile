@@ -55,6 +55,10 @@ demo-restart: up
 
 # Issue API tokens for the developer and reviewer workers and store them in .env (once).
 worker-tokens: up
+	@grep -q '^AXIOM_MODEL_PROXY_ADMIN_TOKEN=.' .env 2>/dev/null || { \
+	  sed -i '/^AXIOM_MODEL_PROXY_ADMIN_TOKEN=/d' .env 2>/dev/null; \
+	  echo "AXIOM_MODEL_PROXY_ADMIN_TOKEN=$$(openssl rand -hex 32)" >> .env; \
+	  echo "AXIOM_MODEL_PROXY_ADMIN_TOKEN added to .env"; }
 	@for a in DEV01:DEV-01 DEV02:DEV-02 REV01:REV-01 SEC01:SEC-01; do \
 	  var=AXIOM_$${a%%:*}_TOKEN; key=$${a#*:}; \
 	  if grep -q "^$$var=" .env 2>/dev/null; then echo "$$var already in .env"; \
@@ -67,7 +71,7 @@ workers: sandbox-image
 	docker compose --profile workers up -d --build --wait worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
 
 workers-down:
-	docker compose --profile workers stop worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
+	docker compose --profile workers stop model-proxy worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
 
 # The daily report: plain numbers from the event log, no LLM.
 report:

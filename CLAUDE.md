@@ -32,8 +32,9 @@ customer projects live in their own repos.
 - Auth: every route but /healthz needs a bearer token; the actor comes from the token.
   `system:` actors never authenticate over HTTP.
 - Workers (ADR-008): `worker/` is deterministic harness code holding the GitHub and agent
-  tokens; the LLM runs only in `sandbox/` containers with just the Anthropic key, no settings
-  from the repo (`setting_sources=[]`), egress via the allowlist proxy. Never pass other
+  tokens; the LLM runs only in `sandbox/` containers with no credentials and no settings from the
+  repo (`setting_sources=[]`), egress via the allowlist proxy. Only `modelproxy/` holds the Anthropic
+  key: sandboxes get a run token, and its metered cost is the record (ADR-015). Never pass
   credentials into a sandbox. Pushes only to `axiom/*`; no merge code path (ADR-007).
   Never trust what a sandbox leaves behind: harness git uses its own sealed `.git`, with an
   allowlisted environment (ADR-014). Any potential credential exposure stops work and goes to the human.

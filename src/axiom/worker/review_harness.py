@@ -13,11 +13,12 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from axiom.modelproxy.client import ModelProxyClient
 from axiom.runtimes.base import Outcome
 from axiom.runtimes.estimate import with_estimate
 from axiom.runtimes.review import ReviewOutcome, ReviewRequest, ReviewRuntime
 from axiom.worker.api_client import ApiError, AxiomClient
-from axiom.worker.recover_costs import estimated_cost, recover_costs
+from axiom.worker.recover_costs import recover_costs, recovered_cost
 from axiom.workspaces.git import git
 from axiom.workspaces.manager import (
     ReviewWorkspace,
@@ -46,12 +47,13 @@ class ReviewWorker:
     config: ReviewWorkerConfig
     api: AxiomClient
     runtime_factory: Callable[[], ReviewRuntime]
+    model_proxy: ModelProxyClient | None = None
     _stop: threading.Event = field(default_factory=threading.Event)
 
     def run_forever(self) -> None:
         log.info("reviewer %s started", self.config.agent_key)
         try:
-            recover_costs(self.api, self.config.workspaces_root, kinds="r")
+            recover_costs(self.api, self.config.workspaces_root, kinds="r", proxy=self.model_proxy)
         except Exception:
             log.exception("could not recover the costs of killed runs")
         while not self._stop.is_set():
@@ -186,7 +188,9 @@ class ReviewWorker:
 
     def _recover_earlier_attempt(self, review_id: int, task_key: str) -> None:
         """A killed attempt left its transcript where this attempt is about to work."""
-        cost = estimated_cost(self.config.workspaces_root / f"{task_key}-r{review_id}")
+        cost = recovered_cost(
+            self.config.workspaces_root / f"{task_key}-r{review_id}", self.model_proxy
+        )
         if cost is not None:
             self._try_record_cost(review_id, cost)
 

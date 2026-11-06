@@ -30,7 +30,8 @@ flowchart TB
             db[(postgres)]
             w1["worker-dev-01<br/>(harness, DEV-01 token)"]
             w2["worker-dev-02<br/>(harness, DEV-02 token)"]
-            proxy["egress-proxy<br/>allowlist"]
+            proxy["egress-proxy<br/>allowlist: PyPI"]
+            mp["model-proxy<br/>holds the Anthropic key"]
         end
         sbx["sandbox container<br/>one per execution<br/>Claude Agent SDK"]
         ws[("~/.axiom/work/<br/>SOC-001-e1/{repo,out}")]
@@ -44,7 +45,9 @@ flowchart TB
     w1 -->|"docker run"| sbx
     sbx --- ws
     w1 --- ws
-    sbx -->|"HTTPS via proxy only"| proxy --> anth
+    sbx -->|"run token only"| mp -->|"real key"| anth
+    sbx -->|"packages"| proxy
+    w1 -->|"open and renew a run"| mp
 ```
 
 | Piece | Code | Trusted? | Holds |
@@ -117,10 +120,10 @@ flowchart TB
 ```
 
 What the Docker tests prove (`make test-docker`):
-- **Egress:** `api.anthropic.com` and PyPI are reachable through the proxy. github.com and
+- **Egress:** only PyPI is reachable through the proxy. `api.anthropic.com`, github.com and
   example.com are refused ("403 Filtered"). Direct connections fail (no DNS, no route).
-- **Environment:** even when the worker's own environment holds the GitHub token, Axiom tokens
-  and the database URL, the sandbox sees only `ANTHROPIC_API_KEY`.
+- **Environment:** whatever the worker's own environment holds, the sandbox receives none of it. Its
+  only credential is a run token from the model proxy.
 - **Filesystem:** the container runs as the workspace owner, `/` is read-only, and HOME is empty.
 - **Cancel and timeout:** both kill the container.
 
@@ -153,6 +156,45 @@ Because the repository is private on GitHub's free plan, branch protection isn't
 - it pushes only `HEAD:refs/heads/axiom/<TASK>-e<N>`, never with force (8 unsafe refs are
   tested and refused);
 - the GitHub client has exactly two methods, `find_open_pr` and `create_pr`.
+
+## How the agent reaches the model without the key
+
+The agent is given a run token, which is useless anywhere but the model proxy. The proxy swaps in the
+real key on the way out (ADR-015).
+
+```mermaid
+sequenceDiagram
+    participant W as Worker
+    participant P as Model proxy
+    participant S as Sandbox agent
+    participant A as Anthropic
+    W->>P: open run: budget, model, expires in 2 min
+    P-->>W: run token
+    W->>S: start with the proxy's address and the run token
+    S->>P: POST /v1/messages, run token
+    P->>P: token live, under budget, this model?
+    P->>A: same request, real key
+    A-->>P: streamed reply, with usage
+    P-->>S: the same stream, as it arrives
+    P->>P: add up the usage
+    W->>P: every 40 s: extend the expiry
+    W->>P: close run
+    P-->>W: what was actually used
+```
+
+| If the agent... | What happens |
+|---|---|
+| runs `env` looking for a key | It finds only the run token |
+| sends the token elsewhere | It's useless there, and the sandbox can't reach other hosts anyway |
+| asks for another model, or `/v1/files` | Refused (403) |
+| reports its cost as $0 | Ignored: the proxy's count is the record |
+| spends its whole budget | Refused; the run fails as `budget exceeded` |
+| outlives a killed worker | Renewal stops, and its token dies within 2 minutes |
+
+Tests: `test_the_real_key_is_swapped_in_and_the_run_token_stays_behind`,
+`test_a_forged_cost_is_ignored`, `test_a_token_stops_working_when_it_expires`,
+`test_only_the_messages_endpoints_are_forwarded`, `test_a_stream_is_not_buffered`,
+`test_sandbox_receives_no_credentials_at_all`.
 
 ## The harness doesn't trust what the sandbox leaves behind
 

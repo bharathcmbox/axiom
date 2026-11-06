@@ -1,6 +1,8 @@
 # Phase 4 hardening: credentials outside the sandbox (proposed)
 
 **Status: approved 2026-11-06; runs before T5.** H0 passed: [spike results](../spikes/model-proxy.md).
+H1 done: [ADR-015](../decisions/ADR-015-the-model-proxy-holds-the-anthropic-key.md), with live runs on
+Opus 5.5 and Fable 5.1 metered identically to the SDK ($0.0596412 and $0.15388175).
 
 The drill and the git escape (ADR-014) showed two things. Agents can be asked to steal what is within
 reach, and the code around the sandbox is part of the attack surface. So: put nothing worth stealing

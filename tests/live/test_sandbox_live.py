@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from axiom.modelproxy.client import ModelProxyClient
 from axiom.runtimes.base import Outcome, RunRequest
 from axiom.runtimes.sandbox import SandboxRuntime
 
@@ -17,7 +18,9 @@ pytestmark = pytest.mark.live
 
 
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
-def test_real_agent_edits_only_the_allowed_file(tmp_path: Path) -> None:
+def test_real_agent_edits_only_the_allowed_file(
+    tmp_path: Path, model_proxy: ModelProxyClient
+) -> None:
     repo, out = tmp_path / "repo", tmp_path / "out"
     repo.mkdir()
     out.mkdir()
@@ -39,7 +42,7 @@ def test_real_agent_edits_only_the_allowed_file(tmp_path: Path) -> None:
         effort="low",
         max_turns=15,
     )
-    outcome = SandboxRuntime(timeout_seconds=600).run(request)
+    outcome = SandboxRuntime(timeout_seconds=600, model_proxy=model_proxy).run(request)
     print("\noutcome:", outcome.outcome, "| cost:", outcome.cost_usd, "| turns:", outcome.turns)
     print("error:", outcome.error)
     if outcome.result:

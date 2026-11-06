@@ -102,7 +102,7 @@ These run after every integration test and at startup.
 ```
 worker (deterministic harness; holds GitHub + agent tokens)
   claim → start → heartbeat thread → fresh clone (no credentials in it)
-    → sandbox container (LLM; only the Anthropic key; egress via allowlist proxy; read-only root)
+    → sandbox container (LLM; no credentials, a run token for the model proxy; egress via allowlist proxy; read-only root)
     → verify diff (paths, secrets, symlinks) → commit → tests in a fresh sandbox, clean clone
     → push axiom/* (never forced) → open or reuse PR → submit
 ```

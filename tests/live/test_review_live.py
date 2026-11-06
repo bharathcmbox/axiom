@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from axiom.modelproxy.client import ModelProxyClient
 from axiom.runtimes.base import Outcome
 from axiom.runtimes.review import ReviewRequest
 from axiom.runtimes.sandbox import SandboxRuntime
@@ -43,7 +44,9 @@ def _git(*args: str, cwd: Path) -> str:
 
 
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
-def test_fable_reviewer_catches_the_planted_off_by_one(tmp_path: Path) -> None:
+def test_fable_reviewer_catches_the_planted_off_by_one(
+    tmp_path: Path, model_proxy: ModelProxyClient
+) -> None:
     src = tmp_path / "src"
     src.mkdir()
     (src / "quota.py").write_text(ORIGINAL)
@@ -96,7 +99,7 @@ def test_fable_reviewer_catches_the_planted_off_by_one(tmp_path: Path) -> None:
         effort="high",
         max_turns=20,
     )
-    outcome = SandboxRuntime(timeout_seconds=900).run_review(request)
+    outcome = SandboxRuntime(timeout_seconds=900, model_proxy=model_proxy).run_review(request)
     print("\noutcome:", outcome.outcome, "| cost:", outcome.cost_usd, "| turns:", outcome.turns)
     print("error:", outcome.error)
     if outcome.contract:

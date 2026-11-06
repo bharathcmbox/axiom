@@ -58,6 +58,9 @@ stateDiagram-v2
 | S20 | Code tells reviewers to approve | FAIL, bug and injection reported | **live** ([drill](../drills/2026-11-06-prompt-injection.md)) | `test_reviewer_approving_a_planted_bug_is_a_breach` |
 | S21 | A compromised agent plants code in `.git` | nothing runs, push goes where it should | tested, from the real sandbox | `test_an_attack_planted_from_the_real_sandbox_does_not_reach_the_harness` |
 | S22 | An agent's summary contains a credential | run fails, nothing published | tested | `test_a_credential_in_the_agents_summary_is_never_published` |
+| S23 | An agent looks for the Anthropic key | finds only a run token | tested, from the real sandbox | `test_sandbox_receives_no_credentials_at_all` |
+| S24 | A sandbox forges its cost | ignored, the proxy's count is the record | tested | `test_a_forged_cost_is_ignored` |
+| S25 | A worker dies and its sandbox keeps going | loses the model within 2 minutes | tested | `test_a_token_stops_working_when_it_expires` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
@@ -296,16 +299,13 @@ refused and retried, and the task doesn't move.
 
 Knowing the edges is part of understanding the system:
 
-- **A sandbox orphaned by a killed worker keeps running** until its own budget stop. Killing the
-  worker doesn't kill the container, so a cost estimated on restart can undercount, and the money
-  is no longer reserved.
-- **The real Anthropic key is in the sandbox.** A compromised agent can read it. A proxy that adds
-  the key itself would keep it out.
-- **`api.anthropic.com` can carry data out.** The proxy filters by host, so it can't tell your use
-  of the API from a request using someone else's key. PyPI is much weaker as a way out: the upload
-  host, `upload.pypi.org`, isn't allowlisted.
-- **`outcome.json` is written in the sandbox.** Its result is re-validated, but an agent could forge
-  its reported cost and get round budgets.
+- **A sandbox orphaned by a killed worker keeps running,** without the model after 2 minutes. Until
+  then it can spend under its run's budget, and that money is no longer reserved.
+- **An injected agent can still use its own run,** up to its budget. No key is exposed.
+- **PyPI is reachable from the sandbox,** so a malicious package could run there. Reads could carry a
+  little data out, and `upload.pypi.org` isn't allowlisted. There's nothing to steal in the sandbox.
+- **The model proxy is a valuable target.** It's small and accepts one kind of request (ADR-015).
+- **A transcript estimate can be forged,** if the proxy's record is gone too. It's marked as an estimate.
 - **The worker is high value:** it holds the tokens and the Docker socket (in effect root on this
   machine), and isn't behind the egress proxy. ADR-014 closes the known way in, not the risk.
 - **Prompt-injection resistance is one small run,** with a crude payload (see the drill).

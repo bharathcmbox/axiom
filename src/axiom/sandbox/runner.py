@@ -1,7 +1,7 @@
 """Sandbox entry point: `python -m axiom.sandbox.runner`.
 
 Reads <out>/request.json, runs the Claude Agent SDK in <repo>, writes <out>/outcome.json and
-<out>/transcript.jsonl. Has no Axiom or GitHub credentials; only ANTHROPIC_API_KEY.
+<out>/transcript.jsonl. Holds no credentials, only a run token for the model proxy (ADR-015).
 If AXIOM_FAKE_SCENARIO is set, runs the FakeRuntime instead (container plumbing tests, no cost).
 """
 
@@ -94,8 +94,10 @@ def to_outcome(result: Any, transcript: Path, raised: str | None) -> RunOutcome:
     if result.subtype == "error_max_budget_usd":
         return RunOutcome(Outcome.BUDGET_EXCEEDED, error="budget exceeded", **common)
     if result.is_error or result.subtype != "success":
-        detail = "; ".join(result.errors or []) or raised or result.subtype
-        return RunOutcome(Outcome.FAILED, error=f"{result.subtype}: {detail}", **common)
+        detail = "; ".join(result.errors or []) or result.result or raised or result.subtype
+        # An API error ends a turn normally: its subtype says "success", which reads as nonsense.
+        label = "API error" if result.subtype == "success" else result.subtype
+        return RunOutcome(Outcome.FAILED, error=f"{label}: {str(detail)[:1000]}", **common)
     try:
         contract = parse_result(result.structured_output)
     except InvalidResult as e:

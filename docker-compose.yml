@@ -35,6 +35,26 @@ services:
     networks: [default, sandbox]
     restart: unless-stopped
 
+  # The only holder of the Anthropic key (ADR-015). No LLM and no repository code run here. On both
+  # networks: sandboxes reach it, and it reaches Anthropic. No published ports.
+  model-proxy:
+    build: .
+    profiles: [workers]
+    command: ["python", "-m", "axiom.modelproxy"]
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AXIOM_MODEL_PROXY_ADMIN_TOKEN: ${AXIOM_MODEL_PROXY_ADMIN_TOKEN:-}
+    networks: [default, sandbox]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   # Workers (profile "workers"): `make workers`. One service per agent identity.
   # The workspaces directory is mounted at the SAME absolute path as on the host, because the
   # Docker daemon resolves sandbox bind mounts on the host.
@@ -50,7 +70,7 @@ services:
       AXIOM_AGENT_KEY: DEV-01
       AXIOM_AGENT_TOKEN: ${AXIOM_DEV01_TOKEN:-}
       AXIOM_GITHUB_TOKEN: ${AXIOM_GITHUB_TOKEN:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AXIOM_MODEL_PROXY_ADMIN_TOKEN: ${AXIOM_MODEL_PROXY_ADMIN_TOKEN:-}
       AXIOM_WORKSPACES_DIR: ${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}
       AXIOM_SANDBOX_NETWORK: ${AXIOM_SANDBOX_NETWORK:-axiom_sandbox}
       AXIOM_PROJECT_KEY: ${AXIOM_PROJECT_KEY:-}
@@ -67,6 +87,8 @@ services:
         condition: service_healthy
       egress-proxy:
         condition: service_started
+      model-proxy:
+        condition: service_healthy
     restart: unless-stopped
 
   worker-dev-02:

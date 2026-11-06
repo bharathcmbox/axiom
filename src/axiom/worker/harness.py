@@ -16,6 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from axiom.modelproxy.client import ModelProxyClient
 from axiom.runtimes.base import CommandRunner, Outcome, RunOutcome, RunRequest, Runtime
 from axiom.runtimes.estimate import with_estimate
 from axiom.worker.api_client import ApiError, AxiomClient
@@ -67,6 +68,7 @@ class Worker:
     # Checked before any work starts, so a misconfigured project fails fast instead of
     # spending an agent run and only failing at the PR step. Production: parse_github_repo.
     validate_repo: Callable[[str], object] = lambda url: None
+    model_proxy: ModelProxyClient | None = None
     _stop: threading.Event = field(default_factory=threading.Event)
 
     # ---- loop ----------------------------------------------------------------------------
@@ -74,7 +76,7 @@ class Worker:
     def run_forever(self) -> None:
         log.info("worker %s started", self.config.agent_key)
         try:
-            recover_costs(self.api, self.config.workspaces_root, kinds="e")
+            recover_costs(self.api, self.config.workspaces_root, kinds="e", proxy=self.model_proxy)
         except Exception:
             log.exception("could not recover the costs of killed runs")
         while not self._stop.is_set():

@@ -25,6 +25,7 @@ from axiom.runtimes.review import ReviewOutcome
 PRICES: dict[str, tuple[Decimal, Decimal, Decimal]] = {
     "claude-opus-5-5": (Decimal(4), Decimal(20), Decimal("0.20")),
     "claude-sonnet-5-5": (Decimal(2), Decimal(10), Decimal("0.20")),
+    "claude-haiku-5-5": (Decimal("0.10"), Decimal("0.50"), Decimal("0.01")),
     "claude-fable-5-1": (Decimal(10), Decimal(50), Decimal("0.25")),
 }
 UNKNOWN_MODEL = PRICES["claude-fable-5-1"]  # the dearest: an estimate shouldn't be flattering
@@ -76,6 +77,11 @@ def _message_cost(model: Any, usage: Any, chars: int) -> tuple[Decimal, int, int
         + output * output_price
     ) / MILLION
     return usd, fresh + written + read, output
+
+
+def usage_cost(model: Any, usage: Any) -> Decimal:
+    """The cost of one API reply, from the usage Anthropic reported for it."""
+    return _message_cost(model, usage, 0)[0]
 
 
 def estimate_from_transcript(path: Path) -> CostEstimate | None:
