@@ -55,6 +55,8 @@ services:
       AXIOM_SANDBOX_NETWORK: ${AXIOM_SANDBOX_NETWORK:-axiom_sandbox}
       AXIOM_PROJECT_KEY: ${AXIOM_PROJECT_KEY:-}
       AXIOM_FAKE_SCENARIO: ${AXIOM_FAKE_SCENARIO:-}
+      AXIOM_RUNTIME: ${AXIOM_RUNTIME:-sandbox}
+      AXIOM_FAKE_EDITS_FILE: ${AXIOM_FAKE_EDITS_FILE:-}
       AXIOM_KEEP_WORKSPACES: ${AXIOM_KEEP_WORKSPACES:-0}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

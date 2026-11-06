@@ -10,6 +10,7 @@ Environment:
   AXIOM_RUNTIME            sandbox (default) | fake
   AXIOM_FAKE_SCENARIO      with AXIOM_RUNTIME=fake or for sandbox plumbing tests
   AXIOM_PROJECT_KEY        optional: only claim tasks of this project
+  AXIOM_FAKE_EDITS_FILE    with AXIOM_RUNTIME=fake: JSON with a prepared patch and report
   AXIOM_WORKER_KIND        develop (default) | review
   AXIOM_FAKE_REVIEW        reviewer plumbing tests: pass | fail | ... (no API cost)
 """
@@ -21,7 +22,7 @@ import sys
 from pathlib import Path
 
 from axiom.runtimes.base import Runtime
-from axiom.runtimes.fake import FakeRuntime, Scenario
+from axiom.runtimes.fake import FakeRuntime, Scenario, load_scripted_developer
 from axiom.runtimes.fake_review import FakeReviewer, ReviewScenario
 from axiom.runtimes.review import ReviewRuntime
 from axiom.runtimes.sandbox import SandboxRuntime
@@ -68,6 +69,8 @@ def build_worker() -> Worker:
 
     def runtime_factory() -> Runtime:
         if env.get("AXIOM_RUNTIME") == "fake":
+            if env.get("AXIOM_FAKE_EDITS_FILE"):
+                return load_scripted_developer(Path(env["AXIOM_FAKE_EDITS_FILE"]))
             return FakeRuntime(scenario=Scenario(scenario or "success"))
         return SandboxRuntime(
             network=sandbox.network, image=sandbox.image, fake_scenario=sandbox.fake_scenario

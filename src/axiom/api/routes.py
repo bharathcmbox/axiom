@@ -20,6 +20,7 @@ from axiom.api.schemas import (
     HeartbeatOut,
     ProjectIn,
     ProjectOut,
+    RequireCiIn,
     ReviewAssignmentOut,
     ReviewClaimIn,
     ReviewFailIn,
@@ -122,6 +123,12 @@ def list_projects(conn: ConnDep) -> list[ProjectOut]:
 @router.get("/projects/{key}", tags=["projects"])
 def get_project(key: str, conn: ConnDep) -> ProjectOut:
     return ProjectOut.model_validate(projects.get_project(conn, key))
+
+
+@router.post("/projects/{key}/require-ci", tags=["projects"])
+def set_require_ci_route(key: str, body: RequireCiIn, conn: ConnDep, actor: ActorDep) -> ProjectOut:
+    """Turn the CI gate on or off for a project (humans only)."""
+    return ProjectOut.model_validate(projects.set_require_ci(conn, actor, key, body.require_ci))
 
 
 # ---- agents ---------------------------------------------------------------------------------

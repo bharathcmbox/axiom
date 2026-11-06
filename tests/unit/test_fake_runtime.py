@@ -1,5 +1,6 @@
 """Phase 2 T4: FakeRuntime scenarios behave like a (mis)behaving agent, without any cost."""
 
+import json
 import threading
 from decimal import Decimal
 from pathlib import Path
@@ -7,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from axiom.runtimes.base import Outcome, RunRequest, Runtime
-from axiom.runtimes.fake import FakeRuntime, Scenario
+from axiom.runtimes.fake import FakeRuntime, Scenario, load_scripted_developer
 
 
 def _request(tmp_path: Path) -> RunRequest:
@@ -93,3 +94,21 @@ def test_hang_until_cancelled(tmp_path: Path) -> None:
     runtime.cancel()
     t.join(timeout=5)
     assert result == [Outcome.CANCELLED]
+
+
+def test_scripted_developer_applies_a_patch_and_returns_its_report_verbatim(tmp_path: Path) -> None:
+    report = {
+        "status": "submitted",
+        "summary": "Added the queue",
+        "files_changed": ["CLAUDE.md"],
+        "criteria": [{"criterion": "c", "met": True, "evidence": "test_queue passes"}],
+    }
+    patch = tmp_path / "patch.json"
+    patch.write_text(json.dumps({"edits": {"CLAUDE.md": "# new\n"}, "result": report}))
+    req = _request(tmp_path)
+    out = load_scripted_developer(patch).run(req)
+    assert (req.workspace / "CLAUDE.md").read_text() == "# new\n"
+    assert out.outcome == Outcome.COMPLETED and out.result is not None
+    assert out.result.model_dump(exclude_defaults=True) == report
+    assert "fake" not in json.dumps(out.result.model_dump())  # nothing tips off a reviewer
+    assert out.cost_usd == Decimal("0")  # a prepared patch costs nothing

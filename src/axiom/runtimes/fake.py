@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
+from pathlib import Path
 from threading import Event
 from typing import Any
 
@@ -31,6 +32,7 @@ class FakeRuntime:
     scenario: Scenario = Scenario.SUCCESS
     edits: dict[str, str] = field(default_factory=dict)  # path -> content, within allowed paths
     cost_usd: Decimal = Decimal("0.42")
+    scripted_result: dict[str, Any] | None = None  # the report to return, verbatim
     name: str = "fake"
     _cancelled: Event = field(default_factory=Event)
 
@@ -72,8 +74,10 @@ class FakeRuntime:
             path.write_text(content)
             emit({"type": "edit", "path": rel})
 
-        if self.scenario == Scenario.MALFORMED_RESULT:
-            raw: object = {"status": "done!", "summary": ""}
+        if self.scripted_result is not None:
+            raw: object = self.scripted_result
+        elif self.scenario == Scenario.MALFORMED_RESULT:
+            raw = {"status": "done!", "summary": ""}
         elif self.scenario == Scenario.NEEDS_INPUT:
             raw = {"status": "needs_input", "summary": "blocked", "question": "Which DB?"}
         else:
@@ -105,3 +109,15 @@ class FakeRuntime:
         exact = [p for p in request.allowed_paths if not any(ch in p for ch in "*?[")]
         target = exact[0] if exact else "AXIOM_FAKE_CHANGE.md"
         return {target: f"# change for {request.task_key}\n"}
+
+
+def load_scripted_developer(path: Path) -> FakeRuntime:
+    """A developer that applies a prepared patch at no cost, for blind tests of the reviewers.
+
+    The JSON file holds {"edits": {path: content}, "result": <result contract>}. The report is
+    returned verbatim, so reviewers cannot tell this run from a model's.
+    """
+    data = json.loads(path.read_text())
+    return FakeRuntime(
+        edits=data["edits"], scripted_result=data["result"], cost_usd=Decimal("0"), name="scripted"
+    )

@@ -320,3 +320,13 @@ def test_set_agent_model_over_http(client: TestClient) -> None:
     r = client.post("/agents/REV-01/model", json={"model": "claude-fable-5-1"})
     assert r.status_code == 200 and r.json()["model"] == "claude-fable-5-1"
     assert client.post("/agents/REV-01/model", json={"model": "x"}, headers=DEV1).status_code == 403
+
+
+def test_require_ci_toggle(client: TestClient) -> None:
+    r = client.post("/projects/AX/require-ci", json={"require_ci": True})
+    assert r.status_code == 200 and r.json()["require_ci"] is True
+    assert client.post("/projects/AX/require-ci", json={"require_ci": False},
+                       headers=DEV1).status_code == 403  # fmt: skip
+    assert client.post("/projects/NOPE/require-ci", json={"require_ci": True}).status_code == 404
+    types = [e["type"] for e in client.get("/events", params={"limit": 1000}).json()]
+    assert types.count("PROJECT_CI_GATE_CHANGED") == 1

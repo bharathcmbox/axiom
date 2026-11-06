@@ -84,6 +84,30 @@ def create_project(
     return project
 
 
+def set_require_ci(conn: Conn, actor: Actor, key: str, require_ci: bool) -> Project:
+    """Turn the CI gate on or off for a project. A no-op writes no event."""
+    require_not_agent(actor)
+    with conn.transaction():
+        row = conn.execute("SELECT * FROM projects WHERE key = %s FOR UPDATE", (key,)).fetchone()
+        if row is None:
+            raise NotFound(f"project {key} not found")
+        if row["require_ci"] == require_ci:
+            return Project.from_row(row)
+        row = conn.execute(
+            "UPDATE projects SET require_ci = %s WHERE id = %s RETURNING *", (require_ci, row["id"])
+        ).fetchone()
+        assert row is not None
+        project = Project.from_row(row)
+        append_event(
+            conn,
+            actor=actor,
+            type="PROJECT_CI_GATE_CHANGED",
+            project_id=project.id,
+            payload={"require_ci": require_ci},
+        )
+    return project
+
+
 def get_project(conn: Conn, key: str) -> Project:
     row = conn.execute("SELECT * FROM projects WHERE key = %s", (key,)).fetchone()
     if row is None:

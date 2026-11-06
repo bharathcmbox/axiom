@@ -42,6 +42,10 @@ class ProjectOut(_Out):
     created_at: datetime
 
 
+class RequireCiIn(BaseModel):
+    require_ci: bool
+
+
 class AgentIn(BaseModel):
     key: str = Field(examples=["DEV-03"])
     role: Role
