@@ -117,6 +117,7 @@ flowchart LR
 | A regression test passed with its fix removed | Removing the fix on purpose | Rewritten |
 | Demo runs left real, active tokens behind | Listing tokens during rotation | The demo revokes its own |
 | The agent's key sat in the sandbox, its cost report was its own, and an orphaned sandbox kept spending | The T4 drill's follow-up | The model proxy, ADR-015 |
+| A secret scan only printed a count, and the commit went ahead on a match (a dummy value, this time) | Reading the output afterwards | A check against the real values that stops the commit |
 | The first report flattered the system: "$0.03 per merged task" came from old demo tasks | Reading its output on real data | Demo tasks tagged, the demo script tags its own |
 
 **Process mistakes** also happened, and are worth knowing:

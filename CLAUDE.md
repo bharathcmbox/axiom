@@ -17,6 +17,7 @@ customer projects live in their own repos.
 - `make worker-tokens` / `make workers` / `make workers-down` — developers, reviewers, GitHub sync
 - `make report` — daily report from the event log (`PROJECT=SOC` to filter); dashboard at /ui
 - `make test-docker` — sandbox isolation tests; `make test-live` — real API (announce first, costs money)
+- `scripts/check_secrets.py` — run before committing (`make hooks` installs it as a git hook)
 - Use `uv run …`; never pip install globally.
 
 ## Architecture rules

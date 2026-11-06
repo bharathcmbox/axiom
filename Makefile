@@ -4,7 +4,7 @@ DOCKER_GID := $(shell stat -c %g /var/run/docker.sock 2>/dev/null || echo 999)
 AXIOM_WORKSPACES_DIR ?= $(HOME)/.axiom/work
 export AXIOM_UID AXIOM_GID DOCKER_GID AXIOM_WORKSPACES_DIR
 
-.PHONY: report worker-tokens workers workers-down db up down logs test test-docker test-live sandbox-image lint fmt migrate seed smoke demo-restart
+.PHONY: hooks report worker-tokens workers workers-down db up down logs test test-docker test-live sandbox-image lint fmt migrate seed smoke demo-restart
 
 db:
 	docker compose up -d --wait db
@@ -76,3 +76,8 @@ workers-down:
 # The daily report: plain numbers from the event log, no LLM.
 report:
 	docker compose exec -T api python -m axiom.report $(PROJECT)
+
+# Optional, once per clone: refuse a commit containing a real secret from .env.
+hooks:
+	printf '#!/bin/sh\nexec python3 scripts/check_secrets.py\n' > .git/hooks/pre-commit
+	chmod +x .git/hooks/pre-commit
