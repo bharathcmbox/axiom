@@ -144,6 +144,8 @@ tag and are left out by default.
 | Sandbox Python differs from CI (3.14 vs 3.12) | Found while planning: the sandbox ignores the project's Python. Verified tests can pass while CI fails. The live drill in 4.4 uses this; then `python_version` per project, passed to `uv` |
 | Parallel PRs can conflict after one merges | Sync reads `mergeable`; a conflicted PR gets `request_changes` with that as feedback, and rework merges `main` first |
 
+> **Proposed addition:** [hardening before T5](phase-4-hardening.md), awaiting approval.
+
 ### 4.4 Two live drills on the real repo
 
 **Prompt-injection drill (SPEC section 8).** Payloads go where agents really read: the task text, a
