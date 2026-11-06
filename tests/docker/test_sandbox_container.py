@@ -158,3 +158,16 @@ def test_review_run_in_the_container(request_: RunRequest) -> None:
     assert outcome.outcome == Outcome.COMPLETED, outcome.error
     assert outcome.contract is not None and outcome.contract.verdict == "FAIL"
     assert outcome.contract.findings[0].issue.startswith("security_reviewer")
+
+
+def test_uv_with_can_run_tools_from_its_cache(request_: RunRequest) -> None:
+    """Regression: HOME is a tmpfs, noexec by default, which broke `uv run --with pytest` (the
+    verified test run) with 'Permission denied' unless the project itself depended on pytest."""
+    result = SandboxRuntime().exec(
+        request_.workspace,
+        request_.output_dir,
+        "uv run --no-project --with pytest pytest --version",
+        300,
+    )
+    assert result.exit_code == 0, result.output
+    assert "pytest" in result.output

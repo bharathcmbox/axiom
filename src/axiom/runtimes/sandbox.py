@@ -86,7 +86,9 @@ class SandboxRuntime:
             "--cpus", self.cpus,
             "--read-only",
             "--tmpfs", "/tmp:rw,size=1g,mode=1777",
-            "--tmpfs", "/home/agent:rw,size=2g,mode=1777",
+            # exec: uv installs tools under the cache here (`uv run --with`), and Docker's tmpfs
+            # default is noexec. No loss: the workspace mount is executable anyway.
+            "--tmpfs", "/home/agent:rw,exec,size=2g,mode=1777",
             "-e", "HOME=/home/agent",
             "-e", f"HTTPS_PROXY={self.proxy_url}",
             "-e", f"HTTP_PROXY={self.proxy_url}",
