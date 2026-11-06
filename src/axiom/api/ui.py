@@ -61,6 +61,12 @@ def safe_link(url: str | None, text: str | None = None) -> str:
     return e(url)
 
 
+def cost_cell(row: dict[str, Any]) -> str:
+    """An estimate must not read as a billed amount."""
+    cost = fmt_usd(row["cost_usd"])
+    return f"~{cost} est." if row["cost_estimated"] else cost
+
+
 def state_tag(state: Any) -> str:
     return f'<span class="state {e(state)}">{e(state)}</span>'
 
@@ -167,7 +173,7 @@ def task_page(key: str, conn: ConnDep, user: UserDep) -> HTMLResponse:
     ).fetchall()
     exec_rows = "".join(
         f"<tr><td>{x['attempt']}</td><td>{e(x['agent_key'])}</td><td>{state_tag(x['status'])}</td>"
-        f"<td>{fmt_usd(x['cost_usd'])}</td><td>{e(x['error'])}</td></tr>"
+        f"<td>{cost_cell(x)}</td><td>{e(x['error'])}</td></tr>"
         for x in executions
     )
     events = "".join(
@@ -209,5 +215,5 @@ def _review_row(r: dict[str, Any]) -> str:
     )
     return (
         f"<tr><td>{r['round']}</td><td>{e(r['role'])}</td><td>{state_tag(r['status'])}</td>"
-        f"<td>{fmt_usd(r['cost_usd'])}</td><td>{e(c.get('summary'))}<ul>{findings}</ul></td></tr>"
+        f"<td>{cost_cell(r)}</td><td>{e(c.get('summary'))}<ul>{findings}</ul></td></tr>"
     )

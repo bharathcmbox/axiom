@@ -15,6 +15,7 @@ from axiom.config import get_settings
 from axiom.contracts import InvalidResult, parse_review
 from axiom.domain.review_machine import ReviewCommand, ReviewState, next_review_state
 from axiom.domain.roles import Actor, ActorKind
+from axiom.domain.task_machine import TaskCommand
 from axiom.errors import (
     AssignmentRejected,
     Forbidden,
@@ -24,7 +25,8 @@ from axiom.errors import (
     NotFound,
 )
 from axiom.orchestrator import budgets
-from axiom.orchestrator.aggregator import aggregate
+from axiom.orchestrator.aggregator import AGGREGATOR, aggregate
+from axiom.orchestrator.commands import apply_locked
 from axiom.orchestrator.review_store import review_event
 from axiom.registry.agents import get_agent
 from axiom.state.db import Conn
@@ -105,20 +107,27 @@ def claim_review(
         ).fetchone()
         if held is not None and held["n"] >= agent.max_concurrent:
             raise AssignmentRejected(f"agent {agent.key} is at capacity")
-        cap = get_settings().daily_budget_usd
-        if budgets.daily_spent(conn) >= cap:
-            raise AssignmentRejected(f"daily budget of ${cap} is spent")
         task, review = _review_for_update(conn, row["review_id"])
+        if budgets.task_budget_exhausted(conn, task["id"], task["budget_usd"]):
+            # Nobody can finish this round: a READY-like wait would be stuck for ever. Committed
+            # by returning, not raising; open reviews are superseded by the escalation.
+            apply_locked(
+                conn,
+                task,
+                TaskCommand.ESCALATE,
+                AGGREGATOR,
+                payload={"reason": f"task budget of ${task['budget_usd']} is spent"},
+            )
+            return None
+        run_budget = budgets.reserve(conn, task, get_settings().review_budget_usd)
         target = next_review_state(ReviewCommand.CLAIM, ReviewState(review["status"]), actor.kind)
         updated = conn.execute(
-            """UPDATE reviews SET status = %s, reviewer_agent_id = %s,
+            """UPDATE reviews SET status = %s, reviewer_agent_id = %s, run_budget_usd = %s,
                       lease_expires_at = now() + make_interval(secs => %s)
                WHERE id = %s RETURNING lease_expires_at""",
-            (target, agent.id, lease, review["id"]),
+            (target, agent.id, run_budget, lease, review["id"]),
         ).fetchone()
         assert updated is not None
-        day_left = cap - budgets.daily_spent(conn)
-        run_budget = max(min(get_settings().review_budget_usd, day_left), Decimal("0"))
         review_event(
             conn,
             actor,
@@ -204,15 +213,18 @@ def submit_review(
         )
         conn.execute(
             """UPDATE reviews SET status = %s, verdict = %s, contract = %s, lease_expires_at = NULL,
-                      completed_at = now(), cost_usd = %s, input_tokens = %s, output_tokens = %s
+                      completed_at = now(), input_tokens = %s, output_tokens = %s,
+                      cost_usd = CASE WHEN %s::numeric IS NULL THEN cost_usd
+                                      ELSE coalesce(cost_usd, 0) + %s::numeric END
                WHERE id = %s""",
             (
                 target,
                 verdict,
                 Jsonb(parsed.model_dump(mode="json")),
-                cost_usd,
                 tokens_in,
                 tokens_out,
+                cost_usd,  # earlier attempts of this review cost money too
+                cost_usd,
                 review_id,
             ),
         )
@@ -246,9 +258,29 @@ def fail_review_run(
         if review["status"] == ReviewState.SUPERSEDED:
             return _record_late_cost(conn, actor, review, cost_usd, tokens_in, tokens_out,
                                      late_verdict=None)  # fmt: skip
+        if budgets.is_estimated(payload or {}) and cost_usd is not None:
+            conn.execute("UPDATE reviews SET cost_estimated = true WHERE id = %s", (review_id,))
         return _retry_or_error(
             conn, actor, task, review, ReviewCommand.FAIL_RUN, "REVIEW_RUN_FAILED", error, cost_usd
         )
+
+
+def record_review_cost(conn: Conn, actor: Actor, review_id: int, payload: dict[str, Any]) -> bool:
+    """A review run that ended without reporting (lease lost, worker killed). The review may since
+    have been claimed by someone else, so any reviewer may report. The first report wins."""
+    if actor.kind != ActorKind.AGENT or get_agent(conn, actor.name).role not in REVIEW_ROLES:
+        raise Forbidden("only reviewer agents report review costs")
+    cost_usd, tokens_in, tokens_out = budgets.parse_cost(payload)
+    if cost_usd is None:
+        raise InvalidInput("cost.usd is required")
+    with conn.transaction():
+        _task, review = _review_for_update(conn, review_id)
+        if review["cost_usd"] is not None:
+            return False
+        if budgets.is_estimated(payload):
+            conn.execute("UPDATE reviews SET cost_estimated = true WHERE id = %s", (review_id,))
+        _record_late_cost(conn, actor, review, cost_usd, tokens_in, tokens_out, late_verdict=None)
+    return True
 
 
 def _record_late_cost(
@@ -299,11 +331,14 @@ def _retry_or_error(
         command, ReviewState(review["status"]), actor.kind, attempts_after=attempts
     )
     conn.execute(
+        # Unknown stays NULL, not 0: a killed run's estimate is only recorded where no cost exists.
         """UPDATE reviews SET status = %s, attempt_count = %s, lease_expires_at = NULL,
-                  error = %s, cost_usd = coalesce(cost_usd, 0) + coalesce(%s, 0),
+                  error = %s,
+                  cost_usd = CASE WHEN %s::numeric IS NULL THEN cost_usd
+                                  ELSE coalesce(cost_usd, 0) + %s::numeric END,
                   completed_at = CASE WHEN %s = 'ERROR' THEN now() END
            WHERE id = %s""",
-        (target, attempts, error[:2000], cost_usd, target, review["id"]),
+        (target, attempts, error[:2000], cost_usd, cost_usd, target, review["id"]),
     )
     review_event(
         conn,

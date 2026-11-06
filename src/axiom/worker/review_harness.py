@@ -14,8 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from axiom.runtimes.base import Outcome
+from axiom.runtimes.estimate import with_estimate
 from axiom.runtimes.review import ReviewOutcome, ReviewRequest, ReviewRuntime
 from axiom.worker.api_client import ApiError, AxiomClient
+from axiom.worker.recover_costs import estimated_cost, recover_costs
 from axiom.workspaces.git import git
 from axiom.workspaces.manager import (
     ReviewWorkspace,
@@ -48,6 +50,10 @@ class ReviewWorker:
 
     def run_forever(self) -> None:
         log.info("reviewer %s started", self.config.agent_key)
+        try:
+            recover_costs(self.api, self.config.workspaces_root, kinds="r")
+        except Exception:
+            log.exception("could not recover the costs of killed runs")
         while not self._stop.is_set():
             try:
                 worked = self.run_once()
@@ -84,6 +90,7 @@ class ReviewWorker:
         ws: ReviewWorkspace | None = None
         try:
             project = self.api.project_by_id(task["project_id"])
+            self._recover_earlier_attempt(review_id, task["key"])
             ws = prepare_review_workspace(
                 self.config.workspaces_root,
                 task_key=task["key"],
@@ -94,10 +101,11 @@ class ReviewWorker:
                 default_branch=project["default_branch"],
                 token=self.config.github_token,
             )
-            outcome = runtime.run_review(self._request(a, ws))
+            outcome = with_estimate(runtime.run_review(self._request(a, ws)), ws.out)
             if lost.is_set():
                 log.warning("review %s: lease lost; reporting only what the run cost", review_id)
-                self._try_fail(review_id, "run cancelled: lease lost", outcome.cost_payload())
+                if outcome.cost_usd is not None:
+                    self._try_record_cost(review_id, outcome.cost_payload())
                 return
             self._report(review_id, ws, outcome)
         except Exception as e:
@@ -172,6 +180,18 @@ class ReviewWorker:
             log.info("review %s: %s -> %s", review_id, outcome.contract.verdict, decision)
             return
         self._try_fail(review_id, outcome.error or outcome.outcome.value, cost)
+
+    def _recover_earlier_attempt(self, review_id: int, task_key: str) -> None:
+        """A killed attempt left its transcript where this attempt is about to work."""
+        cost = estimated_cost(self.config.workspaces_root / f"{task_key}-r{review_id}")
+        if cost is not None:
+            self._try_record_cost(review_id, cost)
+
+    def _try_record_cost(self, review_id: int, cost: dict[str, Any]) -> None:
+        try:
+            self.api.record_review_cost(review_id, cost)
+        except (ApiError, OSError) as e:
+            log.warning("review %s: could not record its cost: %s", review_id, e)
 
     def _try_fail(self, review_id: int, error: str, cost: dict[str, Any]) -> None:
         try:

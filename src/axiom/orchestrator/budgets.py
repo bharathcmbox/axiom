@@ -2,11 +2,16 @@
 
 - Per task: `tasks.budget_usd` caps the summed cost of all its executions.
 - Per day: `daily_budget_usd` caps the summed cost of executions started today (UTC).
-- Per run: the worker receives `run_budget_usd` = min(task remaining, day remaining) and
+- Per run: the worker receives `run_budget_usd` = min(per-run cap, task left, day left) and
   passes it to the runtime as a hard stop.
 
 Claims are refused when either budget is spent. A task whose budget runs out while failing goes
 to FAILED instead of back to READY (a READY task that can never be claimed would be stuck).
+
+Costs are only known when a run ends, so a claim also **reserves** its run budget: "left" means
+budget minus spent minus what active runs may still spend. BUDGET_LOCK_ID serializes that
+check-and-reserve. A lock without reservations would achieve nothing, because a claim doesn't
+change what was spent: two serialized claims would see the same money and both spend it.
 """
 
 from decimal import ROUND_DOWN, Decimal
@@ -18,6 +23,7 @@ from axiom.state.db import Conn
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
+BUDGET_LOCK_ID = 727_001  # lock order: task -> agent -> developer cap -> this
 
 
 def task_spent(conn: Conn, task_id: int) -> Decimal:
@@ -42,27 +48,70 @@ def daily_spent(conn: Conn) -> Decimal:
     return Decimal(row["s"])
 
 
-def run_budget(conn: Conn, task_id: int, budget_usd: Decimal | None) -> Decimal:
-    """What a new execution of this task may spend: min(task remaining, day remaining)."""
-    day_left = get_settings().daily_budget_usd - daily_spent(conn)
-    left = day_left if budget_usd is None else min(budget_usd - task_spent(conn, task_id), day_left)
-    # Round down to whole cents: never hand out more than is left.
+def reserved(conn: Conn, task_id: int | None = None) -> Decimal:
+    """What active runs may still spend: all of them, or one task's."""
+    row = conn.execute(
+        """SELECT (SELECT coalesce(sum(run_budget_usd), 0) FROM executions
+                   WHERE status IN ('STARTING', 'RUNNING')
+                     AND (%(t)s::bigint IS NULL OR task_id = %(t)s))
+                + (SELECT coalesce(sum(run_budget_usd), 0) FROM reviews
+                   WHERE status = 'CLAIMED'
+                     AND (%(t)s::bigint IS NULL OR task_id = %(t)s)) AS s""",
+        {"t": task_id},
+    ).fetchone()
+    assert row is not None
+    return Decimal(row["s"])
+
+
+def available(conn: Conn, task_id: int, budget_usd: Decimal | None, run_cap: Decimal) -> Decimal:
+    """What one new run may spend now, rounded down so it never gets more than is left."""
+    left = min(run_cap, get_settings().daily_budget_usd - daily_spent(conn) - reserved(conn))
+    if budget_usd is not None:
+        left = min(left, budget_usd - task_spent(conn, task_id) - reserved(conn, task_id))
     return max(left, ZERO).quantize(CENT, rounding=ROUND_DOWN)
 
 
-def check_can_start(conn: Conn, row: dict[str, Any]) -> Decimal:
-    """Raise AssignmentRejected if the task or the day has no budget left; else the run budget."""
+def run_budget(conn: Conn, task_id: int, budget_usd: Decimal | None) -> Decimal:
+    """A task's run budget: its active run's reservation, or what a new run would get."""
+    active = conn.execute(
+        """SELECT run_budget_usd FROM executions
+           WHERE task_id = %s AND status IN ('STARTING', 'RUNNING')""",
+        (task_id,),
+    ).fetchone()
+    if active is not None and active["run_budget_usd"] is not None:
+        return Decimal(active["run_budget_usd"])
+    return available(conn, task_id, budget_usd, get_settings().max_run_budget_usd)
+
+
+def reserve(conn: Conn, row: dict[str, Any], run_cap: Decimal) -> Decimal:
+    """Check budgets and return what the new run may spend, or raise AssignmentRejected. The
+    caller stores the result on the run in this transaction, while the lock is held."""
+    conn.execute("SELECT pg_advisory_xact_lock(%s)", (BUDGET_LOCK_ID,))
     cap = get_settings().daily_budget_usd
     if daily_spent(conn) >= cap:
         raise AssignmentRejected(f"daily budget of ${cap} is spent")
     budget = row["budget_usd"]
     if budget is not None and task_spent(conn, row["id"]) >= budget:
         raise AssignmentRejected(f"task {row['key']} has spent its budget of ${budget}")
-    return run_budget(conn, row["id"], budget)
+    run = available(conn, row["id"], budget, run_cap)
+    if run <= ZERO:
+        raise AssignmentRejected(
+            f"no budget free for {row['key']}: what is left is reserved by runs in flight"
+        )
+    return run
+
+
+def check_can_start(conn: Conn, row: dict[str, Any]) -> Decimal:
+    return reserve(conn, row, get_settings().max_run_budget_usd)
 
 
 def task_budget_exhausted(conn: Conn, task_id: int, budget_usd: Decimal | None) -> bool:
     return budget_usd is not None and task_spent(conn, task_id) >= budget_usd
+
+
+def is_estimated(payload: dict[str, Any]) -> bool:
+    cost = payload.get("cost")
+    return isinstance(cost, dict) and cost.get("estimated") is True
 
 
 def parse_cost(payload: dict[str, Any]) -> tuple[Decimal | None, int | None, int | None]:

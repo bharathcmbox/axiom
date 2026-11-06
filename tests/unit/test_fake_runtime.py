@@ -41,7 +41,12 @@ def test_success_edits_an_allowed_file_and_reports(tmp_path: Path) -> None:
     assert out.cost_usd == Decimal("0.42") and out.transcript_path is not None
     assert out.transcript_path.exists()
     assert [e["type"] for e in events] == ["started", "edit"]
-    assert out.cost_payload() == {"usd": "0.42", "input_tokens": 1200, "output_tokens": 300}
+    assert out.cost_payload() == {
+        "usd": "0.42",
+        "input_tokens": 1200,
+        "output_tokens": 300,
+        "estimated": False,
+    }
 
 
 def test_custom_edits(tmp_path: Path) -> None:

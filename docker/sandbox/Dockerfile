@@ -14,6 +14,11 @@ RUN uv sync --frozen --no-dev --extra sandbox --no-install-project
 COPY src ./src
 RUN uv sync --frozen --no-dev --extra sandbox
 
+# Other Pythons a project may ask for (projects.python_version), outside HOME and read-only at run
+# time. Keep in step with SANDBOX_PYTHONS in registry/projects.py.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
+RUN UV_PYTHON_DOWNLOADS=automatic uv python install 3.12 3.13 && chmod -R a+rX /opt/uv-python
+
 # HOME is a tmpfs at run time (no user logins or settings can exist in it).
 ENV PATH="/opt/axiom/.venv/bin:$PATH" \
     HOME=/home/agent \

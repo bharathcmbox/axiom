@@ -39,11 +39,24 @@ class ProjectOut(_Out):
     default_branch: str
     test_command: str | None
     require_ci: bool
+    python_version: str | None
     created_at: datetime
 
 
 class RequireCiIn(BaseModel):
     require_ci: bool
+
+
+class PythonVersionIn(BaseModel):
+    python_version: str | None = Field(examples=["3.12"])
+
+
+class LateCostIn(BaseModel):
+    cost: dict[str, Any] = Field(examples=[{"usd": "0.14", "estimated": True}])
+
+
+class LateCostOut(BaseModel):
+    recorded: bool
 
 
 class AgentIn(BaseModel):
@@ -159,6 +172,7 @@ class ExecutionOut(BaseModel):
     result: dict[str, Any] | None
     error: str | None
     cost_usd: Decimal | None
+    cost_estimated: bool
     input_tokens: int | None
     output_tokens: int | None
     transcript_uri: str | None
@@ -218,6 +232,7 @@ class ReviewOut(BaseModel):
     contract: dict[str, Any] | None
     error: str | None
     cost_usd: Decimal | None
+    cost_estimated: bool
     created_at: datetime
     completed_at: datetime | None
 

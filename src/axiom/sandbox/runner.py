@@ -116,6 +116,7 @@ async def run_agent(request: RunRequest, query_fn: QueryFn | None = None) -> Run
         try:
             async for message in run_query(prompt=prompt, options=build_options(request)):
                 log.write(json.dumps(_jsonable(message), default=str) + "\n")
+                log.flush()  # a killed run's transcript is all that says what it cost
                 if isinstance(message, ResultMessage):
                     final = message
         except ResultError as e:  # yielded after the error ResultMessage (see spike notes)
@@ -236,6 +237,7 @@ async def run_review(request: Any, query_fn: QueryFn | None = None) -> Any:
         try:
             async for message in run_query(prompt=prompt, options=build_review_options(request)):
                 log.write(json.dumps(_jsonable(message), default=str) + "\n")
+                log.flush()  # a killed run's transcript is all that says what it cost
                 if isinstance(message, ResultMessage):
                     final = message
         except ResultError as e:

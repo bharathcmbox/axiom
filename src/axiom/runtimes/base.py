@@ -30,6 +30,7 @@ class RunRequest:
     project_guidance: str | None = None  # e.g. the repo's CLAUDE.md, passed as untrusted text
     previous_feedback: list[str] = field(default_factory=list)  # review findings, answers
     round: int = 1  # review round this work is for (> 1 means rework on an existing branch)
+    python_version: str | None = None  # for uv; set by the harness, not sent to the sandbox
 
 
 class Outcome(StrEnum):
@@ -50,12 +51,14 @@ class RunOutcome:
     output_tokens: int | None = None
     turns: int | None = None
     transcript_path: Path | None = None
+    cost_estimated: bool = False  # computed from the transcript; the run never reported a cost
 
     def cost_payload(self) -> dict[str, Any]:
         return {
             "usd": str(self.cost_usd) if self.cost_usd is not None else None,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "estimated": self.cost_estimated,
         }
 
 

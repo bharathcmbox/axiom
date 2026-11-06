@@ -6,6 +6,7 @@ Every command runs in one transaction:
 An illegal command raises before anything is written.
 """
 
+from decimal import Decimal
 from typing import Any
 
 from psycopg.types.json import Jsonb
@@ -118,7 +119,7 @@ def apply_locked(
         agent = _resolve_assignee(conn, command, actor, agent_key, row)
         run_budget = budgets.check_can_start(conn, row)
         agent_id = agent.id
-        execution_id = _create_execution(conn, task_id, agent.id, lease)
+        execution_id = _create_execution(conn, task_id, agent.id, lease, run_budget)
         event_payload |= {
             "agent": agent.key,
             "execution_status": em.INITIAL_STATE,
@@ -233,14 +234,17 @@ def _active_executions(conn: Conn, *, agent_id: int | None = None, role: Role | 
     return int(row["n"])
 
 
-def _create_execution(conn: Conn, task_id: int, agent_id: int, lease_seconds: int) -> int:
+def _create_execution(
+    conn: Conn, task_id: int, agent_id: int, lease_seconds: int, run_budget: Decimal
+) -> int:
     row = conn.execute(
-        """INSERT INTO executions (task_id, agent_id, attempt, status, lease_expires_at)
+        """INSERT INTO executions (task_id, agent_id, attempt, status, lease_expires_at,
+                                   run_budget_usd)
            VALUES (%s, %s,
                    (SELECT count(*) + 1 FROM executions WHERE task_id = %s),
-                   %s, now() + make_interval(secs => %s))
+                   %s, now() + make_interval(secs => %s), %s)
            RETURNING id""",
-        (task_id, agent_id, task_id, em.INITIAL_STATE, lease_seconds),
+        (task_id, agent_id, task_id, em.INITIAL_STATE, lease_seconds, run_budget),
     ).fetchone()
     assert row is not None
     return int(row["id"])
@@ -295,6 +299,7 @@ def _update_execution(
              result = COALESCE(%(result)s, result),
              error = COALESCE(%(error)s, error),
              cost_usd = COALESCE(%(cost_usd)s, cost_usd),
+             cost_estimated = cost_estimated OR %(estimated)s,
              input_tokens = COALESCE(%(tokens_in)s, input_tokens),
              output_tokens = COALESCE(%(tokens_out)s, output_tokens),
              transcript_uri = COALESCE(%(transcript_uri)s, transcript_uri)
@@ -306,6 +311,7 @@ def _update_execution(
             "result": result,
             "error": str(error) if error is not None else None,
             "cost_usd": cost_usd,
+            "estimated": budgets.is_estimated(payload) and cost_usd is not None,
             "tokens_in": tokens_in,
             "tokens_out": tokens_out,
             "transcript_uri": payload.get("transcript_uri"),
@@ -331,3 +337,53 @@ def _record_delivery(conn: Conn, task_id: int, payload: dict[str, Any]) -> None:
            WHERE id = %s""",
         (branch, pr_url, commit, task_id),
     )
+
+
+def record_execution_cost(
+    conn: Conn, actor: Actor, execution_id: int, payload: dict[str, Any]
+) -> bool:
+    """A run that ended without reporting its cost (lease lost, worker killed): the money was
+    spent, and budgets must see it. Not a state change. The first report wins, so a repeat cannot
+    double-count. Returns whether anything was recorded."""
+    cost_usd, tokens_in, tokens_out = budgets.parse_cost(payload)
+    if cost_usd is None:
+        raise InvalidInput("cost.usd is required")
+    with conn.transaction():
+        found = conn.execute(
+            """SELECT e.task_id, e.agent_id, e.status, a.key AS agent_key
+               FROM executions e JOIN agents a ON a.id = e.agent_id WHERE e.id = %s""",
+            (execution_id,),
+        ).fetchone()
+        if found is None:
+            raise NotFound(f"execution {execution_id} not found")
+        task = conn.execute(
+            "SELECT id, project_id FROM tasks WHERE id = %s FOR UPDATE", (found["task_id"],)
+        ).fetchone()
+        assert task is not None
+        row = conn.execute(
+            "SELECT status, cost_usd FROM executions WHERE id = %s FOR UPDATE", (execution_id,)
+        ).fetchone()
+        assert row is not None
+        if actor.kind != ActorKind.AGENT or actor.name != found["agent_key"]:
+            raise NotExecutionOwner(f"execution {execution_id} belongs to {found['agent_key']}")
+        if row["status"] not in em.TERMINAL_STATES:
+            raise InvalidInput(f"execution {execution_id} is still {row['status']}")
+        if row["cost_usd"] is not None:
+            return False
+        conn.execute(
+            """UPDATE executions SET cost_usd = %s, input_tokens = coalesce(input_tokens, %s),
+                      output_tokens = coalesce(output_tokens, %s), cost_estimated = %s
+               WHERE id = %s""",
+            (cost_usd, tokens_in, tokens_out, budgets.is_estimated(payload), execution_id),
+        )
+        append_event(
+            conn,
+            actor=actor,
+            type="EXECUTION_COST_RECORDED",
+            project_id=task["project_id"],
+            task_id=task["id"],
+            execution_id=execution_id,
+            agent_id=found["agent_id"],
+            payload={"cost_usd": str(cost_usd), "estimated": budgets.is_estimated(payload)},
+        )
+    return True

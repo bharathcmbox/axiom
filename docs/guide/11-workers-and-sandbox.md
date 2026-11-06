@@ -158,7 +158,7 @@ Because the repository is private on GitHub's free plan, branch protection isn't
 
 ```mermaid
 flowchart LR
-    claim["claim: refused if task<br/>or day budget spent"] --> rb["run_budget = min(task left, day left)"]
+    claim["claim: refused if task or day budget spent,<br/>or the rest is reserved by runs in flight"] --> rb["run_budget = min(per-run cap, task left, day left)<br/>and reserved until the run ends (ADR-013)"]
     rb --> sdk["SDK max_budget_usd = 80% of run_budget<br/>(its estimate can overshoot)"]
     sdk --> stop["over budget → error_max_budget_usd<br/>→ fail(budget exceeded)"]
     stop --> fs["task budget exhausted → FAILED<br/>(not back to READY)"]

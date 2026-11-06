@@ -16,9 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from axiom.runtimes.base import CommandRunner, Outcome, RunOutcome, RunRequest, Runtime
+from axiom.runtimes.estimate import with_estimate
 from axiom.worker.api_client import ApiError, AxiomClient
 from axiom.worker.feedback import feedback_from_events
 from axiom.worker.publish import PullRequest, pr_body, push_branch
+from axiom.worker.recover_costs import recover_costs
 from axiom.worker.verify import check_changes, commit, run_tests
 from axiom.workspaces.manager import Workspace, prepare_workspace, remove_workspace
 
@@ -45,6 +47,14 @@ class WorkerConfig:
     keep_workspaces: bool = False
 
 
+def test_command(project: dict[str, Any]) -> str:
+    """The project's test command, with its Python chosen for uv. The version was validated on
+    the way in, by the API and by a database constraint."""
+    version = project.get("python_version")
+    command = str(project["test_command"])
+    return f"export UV_PYTHON={version}; {command}" if version else command
+
+
 @dataclass
 class Worker:
     config: WorkerConfig
@@ -62,6 +72,10 @@ class Worker:
 
     def run_forever(self) -> None:
         log.info("worker %s started", self.config.agent_key)
+        try:
+            recover_costs(self.api, self.config.workspaces_root, kinds="e")
+        except Exception:
+            log.exception("could not recover the costs of killed runs")
         while not self._stop.is_set():
             try:
                 worked = self.run_once()
@@ -116,9 +130,11 @@ class Worker:
                 token=self.config.github_token,
                 existing_branch=task.get("branch"),  # rework continues the same PR
             )
-            outcome = runtime.run(self._request(task, workspace))
+            outcome = runtime.run(self._request(task, workspace, project))
+            outcome = with_estimate(outcome, workspace.out)
             if lease_lost.is_set():
-                log.warning("%s: lease lost during the run; not reporting", key)
+                log.warning("%s: lease lost during the run; reporting only its cost", key)
+                self._try_record_cost(execution["id"], outcome)
                 return
             self._report(task, project, execution["id"], workspace, outcome)
         except Exception as e:
@@ -131,7 +147,15 @@ class Worker:
             if workspace and not self.config.keep_workspaces:
                 remove_workspace(workspace)
 
-    def _request(self, task: dict[str, Any], ws: Workspace) -> RunRequest:
+    def _try_record_cost(self, execution_id: int, outcome: RunOutcome) -> None:
+        if outcome.cost_usd is None:
+            return
+        try:
+            self.api.record_execution_cost(execution_id, outcome.cost_payload())
+        except (ApiError, OSError) as e:
+            log.warning("execution %s: could not record its cost: %s", execution_id, e)
+
+    def _request(self, task: dict[str, Any], ws: Workspace, project: dict[str, Any]) -> RunRequest:
         agent = self.api.agent(self.config.agent_key)
         feedback = feedback_from_events(self.api.events(task["key"]))
         return RunRequest(
@@ -147,6 +171,7 @@ class Worker:
             effort=self.config.effort,
             previous_feedback=feedback,
             round=task["review_rounds"] + 1,
+            python_version=project.get("python_version"),
         )
 
     def _heartbeat(
@@ -203,7 +228,7 @@ class Worker:
         )
         verified = None
         if project.get("test_command"):
-            tests = run_tests(ws.repo, ws.root / "verify", project["test_command"],
+            tests = run_tests(ws.repo, ws.root / "verify", test_command(project),
                               self.test_runner, self.config.test_timeout_seconds)  # fmt: skip
             verified = {"command": tests.command, "exit_code": tests.exit_code,
                         "passed": tests.passed, "output_tail": tests.output_tail}  # fmt: skip

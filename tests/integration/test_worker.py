@@ -5,6 +5,7 @@ push to a local bare remote, verification, test re-run on a clean clone.
 Fake: the agent (FakeRuntime), the test runner's sandbox (LocalRunner) and the GitHub PR call.
 """
 
+import json
 import os
 import signal
 import subprocess
@@ -21,8 +22,10 @@ from axiom.domain.roles import Actor, ActorKind
 from axiom.domain.task_machine import TaskState
 from axiom.orchestrator.leases import expire_leases
 from axiom.orchestrator.tasks import get_task
+from axiom.runtimes.base import RunOutcome, RunRequest
 from axiom.runtimes.fake import FakeRuntime, Scenario
 from axiom.state.db import Conn
+from axiom.worker.api_client import AxiomClient
 from tests.conftest import TEST_TOKENS
 from tests.integration.helpers import events_for
 from tests.integration.workers_shared import (
@@ -164,6 +167,74 @@ def test_lost_lease_cancels_the_run_and_reports_nothing(
     types = [e["type"] for e in events_for(api_tokens, key)]
     assert types[-1] == "EXECUTION_TIMED_OUT"  # the worker reported nothing afterwards
     assert get_task(api_tokens, key).state == TaskState.READY
+
+
+USAGE_LINE = json.dumps(
+    {
+        "type": "AssistantMessage",
+        "data": {
+            "message_id": "m1",
+            "model": "claude-opus-5-5",
+            "usage": {"input_tokens": 100_000, "output_tokens": 10},
+        },
+    }
+)
+
+
+class SpendingHang(FakeRuntime):
+    """Hangs until cancelled, like a real run: having spent money, with no final report."""
+
+    def run(self, request: RunRequest, on_event: Any = None) -> RunOutcome:
+        outcome = super().run(request, on_event)
+        (request.output_dir / "transcript.jsonl").write_text(USAGE_LINE + "\n")
+        return outcome
+
+
+def test_a_lost_lease_still_reports_what_the_run_cost(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    _project(api_tokens, remote)
+    key = _task(api_tokens)
+    worker = _worker(api_url, tmp_path, SpendingHang(scenario=Scenario.HANG), FakePrOpener())
+    t = threading.Thread(target=worker.run_once, daemon=True)
+    t.start()
+    for _ in range(100):
+        if get_task(api_tokens, key).state == TaskState.IN_PROGRESS:
+            break
+        time.sleep(0.05)
+    api_tokens.execute("UPDATE executions SET lease_expires_at = now() - interval '1 second'")
+    assert expire_leases(api_tokens) == [key]
+    t.join(timeout=10)
+    assert not t.is_alive()
+    events = events_for(api_tokens, key)
+    assert [e["type"] for e in events][-2:] == ["EXECUTION_TIMED_OUT", "EXECUTION_COST_RECORDED"]
+    assert get_task(api_tokens, key).state == TaskState.READY  # money, not state
+    assert get_task(api_tokens, key).budget_spent_usd == Decimal("0.4002")  # 100k x $4, 10 x $20
+
+
+def test_a_restarted_worker_costs_the_run_it_lost_when_killed(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    """Killing the worker leaves a workspace and a transcript. On restart it reads them."""
+    _project(api_tokens, remote)
+    key = _task(api_tokens)
+    api = AxiomClient(api_url, TEST_TOKENS["agent:DEV-01"])
+    assert api.claim(300) is not None
+    execution_id = api.executions(key)[-1]["id"]
+    out = tmp_path / "work" / f"{key}-e{execution_id}" / "out"
+    out.mkdir(parents=True)
+    (out / "transcript.jsonl").write_text(USAGE_LINE + "\n")
+    api_tokens.execute("UPDATE executions SET lease_expires_at = now() - interval '1 second'")
+    assert expire_leases(api_tokens) == [key]
+
+    worker = _worker(api_url, tmp_path, FakeRuntime(), FakePrOpener())
+    worker.stop()  # the sweep runs, and the loop then ends at once
+    worker.run_forever()
+    row = api.executions(key)[-1]
+    assert row["id"] == execution_id
+    assert Decimal(row["cost_usd"]) == Decimal("0.4002") and row["cost_estimated"] is True
+    worker.run_forever()  # a second restart changes nothing
+    assert get_task(api_tokens, key).budget_spent_usd == Decimal("0.4002")
 
 
 def test_killed_worker_process_is_recovered_by_another_worker(

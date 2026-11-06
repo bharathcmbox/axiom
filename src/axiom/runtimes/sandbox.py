@@ -109,13 +109,16 @@ class SandboxRuntime:
 
     def run(self, request: RunRequest, on_event: EventCallback | None = None) -> RunOutcome:
         """A developer run."""
+        env = [f"AXIOM_FAKE_SCENARIO={self.fake_scenario}"] if self.fake_scenario else []
+        if request.python_version:
+            env.append(f"UV_PYTHON={request.python_version}")
         done = self._run_container(
             request_json=request_to_dict(request),
             workspace=request.workspace,
             output_dir=request.output_dir,
             task_key=request.task_key,
             outcome_name="outcome.json",
-            extra_env=[f"AXIOM_FAKE_SCENARIO={self.fake_scenario}"] if self.fake_scenario else [],
+            extra_env=env,
             on_event=on_event,
         )
         if isinstance(done, RunOutcome):

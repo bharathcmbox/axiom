@@ -2,8 +2,9 @@
 
 Everything Axiom knows is in Postgres. This chapter covers the six core tables from
 [`migrations/0001_init.sql`](../../migrations/0001_init.sql). Later migrations added `api_tokens`
-(0002), budget and contract fields (0003), `reviews` (0004, see chapter 12), CI fields (0005) and
-task `tags` (0006, see chapter 15).
+(0002), budget and contract fields (0003), `reviews` (0004, see chapter 12), CI fields (0005), task
+`tags` (0006, see chapter 15), and budget reservations, estimated costs and per-project Python
+(0007, see ADR-013).
 
 ## Entity-relationship diagram
 

@@ -1,14 +1,20 @@
 """Phase 3 T7: the reviewer worker end to end (real API over HTTP, real git, fake reviewer)."""
 
+import json
+import threading
+import time
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from axiom.domain.task_machine import TaskState
+from axiom.orchestrator.reviews import expire_review_leases
 from axiom.orchestrator.tasks import get_task
 from axiom.runtimes.fake import FakeRuntime
 from axiom.runtimes.fake_review import FakeReviewer, ReviewScenario
+from axiom.runtimes.review import ReviewOutcome, ReviewRequest
 from axiom.state.db import Conn
 from axiom.worker.api_client import ApiError, AxiomClient
 from axiom.worker.review_harness import ReviewWorker, ReviewWorkerConfig
@@ -111,3 +117,83 @@ def test_developers_cannot_act_as_reviewers(api_tokens: Conn, api_url: str, remo
 
 def test_nothing_to_review(api_tokens: Conn, api_url: str, tmp_path: Path) -> None:
     assert reviewer(api_url, tmp_path, lambda: FakeReviewer()).run_once() is False
+
+
+def _claimed(db: Conn) -> int | None:
+    row = db.execute("SELECT id FROM reviews WHERE status = 'CLAIMED' LIMIT 1").fetchone()
+    return int(row["id"]) if row else None
+
+
+class SpendingHang(FakeReviewer):
+    """Hangs until cancelled, like a real run: having spent money, with no final report."""
+
+    def run_review(self, request: ReviewRequest, on_event: Any = None) -> ReviewOutcome:
+        outcome = super().run_review(request, on_event)
+        line = {
+            "type": "AssistantMessage",
+            "data": {
+                "message_id": "m1",
+                "model": "claude-fable-5-1",
+                "usage": {"input_tokens": 10_000},
+            },
+        }
+        (request.output_dir / "transcript.jsonl").write_text(json.dumps(line) + "\n")
+        return outcome
+
+
+def test_a_lost_review_lease_still_reports_what_the_run_cost(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    _submitted(api_tokens, api_url, remote, tmp_path)
+    runtime = SpendingHang(scenario=ReviewScenario.HANG)
+    worker = reviewer(api_url, tmp_path, lambda: runtime)
+    # A daemon: if this test fails, a hung run must not keep pytest from exiting.
+    t = threading.Thread(target=worker.run_once, daemon=True)
+    t.start()
+    for _ in range(100):
+        if _claimed(api_tokens) is not None:
+            break
+        time.sleep(0.05)
+    review_id = _claimed(api_tokens)
+    api_tokens.execute(
+        "UPDATE reviews SET lease_expires_at = now() - interval '1 second' WHERE id = %s",
+        (review_id,),
+    )
+    assert expire_review_leases(api_tokens) == [review_id]
+    t.join(timeout=10)
+    assert not t.is_alive()
+    review = api_tokens.execute("SELECT * FROM reviews WHERE id = %s", (review_id,)).fetchone()
+    assert review is not None
+    assert review["status"] == "PENDING"  # another reviewer takes it; only the money was reported
+    assert review["cost_usd"] == Decimal("0.1") and review["cost_estimated"] is True
+
+
+def test_a_restarted_reviewer_costs_the_run_it_lost_when_killed(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    """Through the real API, whose response shape the recovery code depends on."""
+    key = _submitted(api_tokens, api_url, remote, tmp_path)
+    worker = reviewer(api_url, tmp_path, lambda: FakeReviewer())
+    review_id = worker.api.claim_review(300)["review_id"]  # type: ignore[index]
+    out = tmp_path / "rw-REV-01" / f"{key}-r{review_id}" / "out"
+    out.mkdir(parents=True)
+    line = {
+        "type": "AssistantMessage",
+        "data": {
+            "message_id": "m1",
+            "model": "claude-fable-5-1",
+            "usage": {"input_tokens": 10_000},
+        },
+    }
+    (out / "transcript.jsonl").write_text(json.dumps(line) + "\n")
+    api_tokens.execute(
+        "UPDATE reviews SET lease_expires_at = now() - interval '1 second' WHERE id = %s",
+        (review_id,),
+    )
+    assert expire_review_leases(api_tokens) == [review_id]
+
+    worker.stop()  # the sweep runs, and the loop then ends at once
+    worker.run_forever()
+    worker.run_forever()  # a second restart changes nothing
+    row = next(r for r in worker.api.task_reviews(key) if r["id"] == review_id)
+    assert Decimal(row["cost_usd"]) == Decimal("0.1") and row["cost_estimated"] is True

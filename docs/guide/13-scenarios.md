@@ -52,6 +52,9 @@ stateDiagram-v2
 | S13 | You close the PR | CANCELLED | tested | `test_closing_the_pr_cancels_the_task` |
 | S14 | Axiom itself crashes | nothing lost | tested + demo (real SIGKILL) | `test_restart_preserves_all_state` |
 | S15 | A reviewer finishes after being superseded | verdict ignored, cost recorded | **live** (SOC-002) | `test_superseded_review_still_reports_its_cost_but_not_its_verdict` |
+| S16 | A run is killed partway | cost estimated from its transcript, marked as an estimate | tested | `test_a_lost_lease_still_reports_what_the_run_cost`, `test_a_restarted_worker_costs_the_run_it_lost_when_killed` |
+| S17 | A task's budget runs out during review | WAITING_FOR_HUMAN, no review started | tested | `test_a_spent_task_escalates_instead_of_starting_a_review` |
+| S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
 
@@ -257,14 +260,43 @@ sequenceDiagram
 
 Found in the real run: this cost was being lost, so the budget showed $0.89 instead of $1.19.
 
+## S16. A run is killed partway
+
+```mermaid
+flowchart LR
+    k["Run killed"] --> q{"Is the worker alive?"}
+    q -->|"yes: timeout or lost lease"| h["It estimates from the<br/>transcript and reports"]
+    q -->|"no: SIGKILL"| r["On restart it finds the workspace,<br/>estimates, reports"]
+    h --> c["cost_estimated = true<br/>counts toward budgets"]
+    r --> c
+```
+
+Detail and accuracy: [chapter 15](15-metrics.md#how-far-to-trust-a-cost).
+
+## S17. A task's budget runs out during review
+
+```mermaid
+flowchart LR
+    c["Reviewer claims"] --> s{"Task's budget spent?"}
+    s -->|yes| w["escalate: WAITING_FOR_HUMAN<br/>open reviews superseded"]
+    s -->|no| r["Run budget = min($1, task left, day left)"]
+    w --> h["You raise the budget and answer, or cancel"]
+```
+
+## S18. Everything left is reserved
+
+Not the same as S9. Reserved money may come back when a run finishes under budget, so the claim is
+refused and retried, and the task doesn't move.
+
 ## Not handled yet
 
 Knowing the edges is part of understanding the system:
 
-- **A run killed partway has no final report**, so its cost stays unknown (the budget undercounts).
+- **A sandbox orphaned by a killed worker keeps running** until its own budget stop. Killing the
+  worker doesn't kill the container, so a cost estimated on restart can undercount, and the money
+  is no longer reserved.
 - **Prompt-injection drill:** the defences exist (delimited untrusted text, no credentials, egress
   allowlist, hooks, diff check) but SPEC section 8's seeded-payload drill has not been run.
 - **A dependency that gets cancelled** leaves its dependents PENDING until you cancel them.
-- **Review runs are capped per review and by the day, not by the task's budget:** they count toward
-  its spend, but a nearly spent task can still have reviews started.
+- **A pull request that conflicts after another merges** isn't detected yet (Phase 4 T9).
 - **A task with no CI workflow and `require_ci` on** waits forever (S3).

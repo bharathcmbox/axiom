@@ -21,8 +21,11 @@ from axiom.api.schemas import (
     ExecutionOut,
     HeartbeatIn,
     HeartbeatOut,
+    LateCostIn,
+    LateCostOut,
     ProjectIn,
     ProjectOut,
+    PythonVersionIn,
     RequireCiIn,
     ReviewAssignmentOut,
     ReviewClaimIn,
@@ -38,7 +41,7 @@ from axiom.domain.task_machine import TaskCommand, TaskState
 from axiom.events.log import list_events
 from axiom.orchestrator import measures, reviews
 from axiom.orchestrator.assignment import claim_next
-from axiom.orchestrator.commands import apply_command
+from axiom.orchestrator.commands import apply_command, record_execution_cost
 from axiom.orchestrator.leases import heartbeat
 from axiom.orchestrator.tasks import Task, create_task, get_task, list_tasks, set_task_budget
 from axiom.registry import agents, projects
@@ -127,6 +130,16 @@ def list_projects(conn: ConnDep) -> list[ProjectOut]:
 @router.get("/projects/{key}", tags=["projects"])
 def get_project(key: str, conn: ConnDep) -> ProjectOut:
     return ProjectOut.model_validate(projects.get_project(conn, key))
+
+
+@router.post("/projects/{key}/python-version", tags=["projects"])
+def set_python_version_route(
+    key: str, body: PythonVersionIn, conn: ConnDep, actor: ActorDep
+) -> ProjectOut:
+    """Which Python uv uses in this project's sandboxes, to match its CI (humans only)."""
+    return ProjectOut.model_validate(
+        projects.set_python_version(conn, actor, key, body.python_version)
+    )
 
 
 @router.post("/projects/{key}/require-ci", tags=["projects"])
@@ -326,6 +339,26 @@ def fail_review_route(
     payload = {"cost": body.cost} if body.cost else None
     decision = reviews.fail_review_run(conn, actor, review_id, body.error, payload)
     return DecisionOut(review_id=review_id, decision=decision)
+
+
+@router.post("/reviews/{review_id}/cost", tags=["reviews"])
+def record_review_cost_route(
+    review_id: int, body: LateCostIn, conn: ConnDep, actor: ActorDep
+) -> LateCostOut:
+    """The cost of a run that ended without reporting. The first report wins."""
+    return LateCostOut(
+        recorded=reviews.record_review_cost(conn, actor, review_id, {"cost": body.cost})
+    )
+
+
+@router.post("/executions/{execution_id}/cost", tags=["tasks"])
+def record_execution_cost_route(
+    execution_id: int, body: LateCostIn, conn: ConnDep, actor: ActorDep
+) -> LateCostOut:
+    """The cost of a run that ended without reporting. The first report wins."""
+    return LateCostOut(
+        recorded=record_execution_cost(conn, actor, execution_id, {"cost": body.cost})
+    )
 
 
 @router.get("/tasks/{key}/reviews", tags=["reviews"])

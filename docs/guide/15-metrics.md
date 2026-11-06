@@ -80,6 +80,49 @@ flatter or distort the results: `make demo-restart` tags its own. Add `?include_
 them. This matters more than it sounds. Before the old demo tasks were tagged, the first report
 said "$0.03 per merged task, 100% first-pass", from tasks no agent ever worked on.
 
+## How far to trust a cost
+
+A run reports its cost in its final message, and that figure is what the SDK says was billed. A
+killed run never sends one. All that's left is its transcript, so Axiom estimates, and marks the
+result `cost_estimated = true`. The dashboard shows it as `~$0.14 est.`.
+
+```mermaid
+flowchart TB
+    r["A run ended"] --> f{"Final report?"}
+    f -->|yes| real["Reported cost"]
+    f -->|"no: timeout, lost lease"| e["Harness reads transcript.jsonl"]
+    f -->|"no: worker killed"| w["Worker restarts,<br/>finds the workspace it left"]
+    w --> e
+    e --> s{"What does it show?"}
+    s -->|"final message present"| sdk["The SDK's own figure"]
+    s -->|"only per-message usage"| calc["Input + cache: exact<br/>Output: visible text / 4 x 2.5"]
+    sdk --> mark["Recorded as an estimate.<br/>The first report wins, so a repeat can't double-count."]
+    calc --> mark
+```
+
+The output figure needs scaling because mid-run messages carry a running count (120 tokens where
+2,481 were billed), and thinking is billed but not shown. Replaying real runs with the final report
+removed:
+
+| Run | Actually cost | Usage alone | Estimate |
+|---|---|---|---|
+| SOC-001 | $0.1459 | $0.0987 | $0.1459 |
+| SOC-002 developer, round 2 | $0.1722 | $0.1083 | $0.1797 |
+| SOC-002 code review, round 1 | $0.2585 | $0.1618 | $0.2790 |
+| SOC-002 security review, round 1 | $0.3042 | $0.1952 | $0.3144 |
+| SOC-002 code review, round 2 | $0.2451 | $0.1817 | $0.2522 |
+| SOC-002 security review, round 2 | $0.2133 | $0.1619 | $0.2228 |
+| **Total** | **$1.3393** | **$0.9076** | **$1.3940 (+4%)** |
+
+**Read this table with care.** The 2.5 was chosen from these same six runs, so it shows the method
+fits them, not that it predicts new ones. A run killed early may differ. It errs high on purpose,
+because a budget should overstate rather than understate. Prices live in `runtimes/estimate.py`
+and must be updated if they change; `test_prices_reproduce_a_real_billed_run` checks them against a
+real bill. The Anthropic Console remains the authority on what you were charged.
+
+A review retried after an earlier attempt already reported a cost keeps that first figure, so a run
+lost on top of an earlier failure can still be undercounted.
+
 ## The daily report
 
 `make report` (or `make report PROJECT=SOC`) prints Markdown: plain numbers, no LLM (Q4 in the

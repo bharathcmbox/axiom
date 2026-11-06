@@ -106,6 +106,12 @@ flowchart LR
 | HOME tmpfs is `noexec`, breaking `uv run --with` | Live run; SOC-001 had hidden it | `exec` on that tmpfs, regression test |
 | A superseded review's cost vanished ($0.30) | Checking the total by hand | Late cost recorded, tested |
 | The rebuilt API crash-looped: login needs `python-multipart`, present only via dev dependencies | Rebuilding the image (tests passed) | Runtime dependency, regression test |
+| The plan's lock wouldn't have closed the budget race: a claim doesn't change what was spent | Thinking through the fix | Reservations instead (ADR-013) |
+| A race test still passed with the lock removed | Removing the lock on purpose | A reviewer race, which fails without it |
+| Per-message usage shows only 0.3-5% of billed output, so naive estimates were about a third too low | Replaying real transcripts before writing the estimator | Output estimated from visible text, compared with real bills |
+| A retried review's earlier cost was overwritten on submit | Reading the code for T3 | Costs add up, tested |
+| A timed-out review was recorded as costing $0, which blocked its real estimate. Unit tests passed against a fake API | A test through the real API | Unknown stays NULL |
+| A failed test's leftover thread kept pytest alive for 1h40m, unnoticed behind a `\| tail` | Being asked whether the run had finished | Daemon threads, hard time limits on long runs |
 | The first report flattered the system: "$0.03 per merged task" came from old demo tasks | Reading its output on real data | Demo tasks tagged, the demo script tags its own |
 
 **Process mistakes** also happened, and are worth knowing:

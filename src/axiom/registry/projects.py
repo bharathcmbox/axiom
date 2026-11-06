@@ -17,6 +17,9 @@ from axiom.state.db import Conn
 PROJECT_KEY = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
 
 
+SANDBOX_PYTHONS = ("3.12", "3.13", "3.14")  # installed in docker/sandbox/Dockerfile
+
+
 @dataclass(frozen=True)
 class Project:
     id: int
@@ -28,6 +31,7 @@ class Project:
     default_branch: str
     test_command: str | None
     require_ci: bool
+    python_version: str | None
     created_at: datetime
 
     @classmethod
@@ -80,6 +84,33 @@ def create_project(
             type="PROJECT_CREATED",
             project_id=project.id,
             payload={"key": key, "name": name},
+        )
+    return project
+
+
+def set_python_version(conn: Conn, actor: Actor, key: str, version: str | None) -> Project:
+    """Which Python uv uses in this project's sandboxes. None: the sandbox's own (3.14)."""
+    require_not_agent(actor)
+    if version is not None and version not in SANDBOX_PYTHONS:
+        raise InvalidInput(f"python_version must be one of {', '.join(SANDBOX_PYTHONS)}")
+    with conn.transaction():
+        row = conn.execute("SELECT * FROM projects WHERE key = %s FOR UPDATE", (key,)).fetchone()
+        if row is None:
+            raise NotFound(f"project {key} not found")
+        if row["python_version"] == version:
+            return Project.from_row(row)
+        row = conn.execute(
+            "UPDATE projects SET python_version = %s WHERE id = %s RETURNING *",
+            (version, row["id"]),
+        ).fetchone()
+        assert row is not None
+        project = Project.from_row(row)
+        append_event(
+            conn,
+            actor=actor,
+            type="PROJECT_PYTHON_CHANGED",
+            project_id=project.id,
+            payload={"python_version": version},
         )
     return project
 

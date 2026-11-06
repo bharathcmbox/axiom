@@ -87,6 +87,12 @@ class AxiomClient:
         r = self._call("POST", f"/reviews/{review_id}/fail", {"error": error, "cost": cost})
         return str(r["decision"])
 
+    def record_execution_cost(self, execution_id: int, cost: dict[str, Any]) -> None:
+        self._call("POST", f"/executions/{execution_id}/cost", {"cost": cost})
+
+    def record_review_cost(self, review_id: int, cost: dict[str, Any]) -> None:
+        self._call("POST", f"/reviews/{review_id}/cost", {"cost": cost})
+
     def task_reviews(self, key: str) -> list[dict[str, Any]]:
         return self._call("GET", f"/tasks/{key}/reviews")  # type: ignore[no-any-return]
 

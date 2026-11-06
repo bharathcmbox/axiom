@@ -155,6 +155,33 @@ agent. The advisory lock (a named lock that isn't tied to any row) serializes al
 claims, so the count-then-insert is effectively atomic. Test:
 `test_global_developer_cap_holds_under_contention` (5 developers racing, exactly 2 win).
 
+## Budget reservations
+
+A run's cost is only known when it ends, so a lock around "is there money left?" wouldn't help: two
+claims in turn would read the same money. Each claim therefore **reserves** what it may spend
+(ADR-013).
+
+```mermaid
+sequenceDiagram
+    participant A as Claim A
+    participant DB as PostgreSQL
+    participant B as Claim B
+    Note over DB: $7 day, nothing spent
+    A->>DB: advisory lock (budget)
+    B->>DB: advisory lock (budget), waits
+    A->>DB: free = 7 - spent 0 - reserved 0, takes 4
+    A->>DB: store run_budget_usd = 4, COMMIT
+    DB-->>B: lock granted
+    B->>DB: free = 7 - spent 0 - reserved 4, takes 3
+    B->>DB: store run_budget_usd = 3, COMMIT
+    Note over DB: when a run ends, its reservation ends too
+```
+
+`test_racing_reviewers_never_reserve_more_than_the_day` proves the lock matters: remove it and the
+test fails every time. An earlier race test on developers passed with the lock removed, because
+developer claims are already serialized by their cap. A test that can't fail proves nothing, which is
+why each race test should be tried against the code it claims to protect.
+
 ## Dependency promotion under concurrency
 
 The subtle case: AX-003 depends on AX-001 and AX-002, and **both are merged at the same
@@ -187,7 +214,7 @@ avoids it by always taking locks in the same order:
 
 ```mermaid
 flowchart LR
-    t["task row"] --> e["execution row"] --> a["agent row"] --> adv["advisory lock<br/>(developer cap)"]
+    t["task row"] --> e["execution row"] --> a["agent row"] --> adv["advisory lock<br/>(developer cap)"] --> b["advisory lock<br/>(budget)"]
 ```
 
 ## Try it

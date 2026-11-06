@@ -140,7 +140,7 @@ tag and are left out by default.
 |---|---|
 | A run killed partway has no recorded cost | Estimate from the transcript's per-message token usage and a price table; stored with `cost_estimated = true` |
 | Reviews aren't capped by the task's budget | Claim refuses, and the task escalates, when a task's budget is spent; run budget = min(per-review, task left, day left) |
-| Daily budget check isn't serialized | An advisory lock around the check-and-claim |
+| Daily budget check isn't serialized | An advisory lock around the check-and-claim. **Changed in T3:** a lock alone can't work, because a claim doesn't change what was spent. Runs now also reserve their budget (ADR-013) |
 | Sandbox Python differs from CI (3.14 vs 3.12) | Found while planning: the sandbox ignores the project's Python. Verified tests can pass while CI fails. The live drill in 4.4 uses this; then `python_version` per project, passed to `uv` |
 | Parallel PRs can conflict after one merges | Sync reads `mergeable`; a conflicted PR gets `request_changes` with that as feedback, and rework merges `main` first |
 

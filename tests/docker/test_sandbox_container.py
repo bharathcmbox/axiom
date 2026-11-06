@@ -171,3 +171,12 @@ def test_uv_with_can_run_tools_from_its_cache(request_: RunRequest) -> None:
     )
     assert result.exit_code == 0, result.output
     assert "pytest" in result.output
+
+
+@pytest.mark.parametrize("version", ["3.12", "3.13"])
+def test_uv_can_use_the_projects_python(request_: RunRequest, version: str) -> None:
+    """Installed in the image: the sandbox has a read-only root and may not download one."""
+    rt = SandboxRuntime()
+    command = f"export UV_PYTHON={version}; cd /tmp && uv run --no-project python --version"
+    done = rt.exec(request_.workspace, request_.output_dir, command, 120)
+    assert done.exit_code == 0 and f"Python {version}" in done.output, done.output

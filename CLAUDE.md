@@ -36,6 +36,7 @@ customer projects live in their own repos.
   from the repo (`setting_sources=[]`), egress via the allowlist proxy. Never pass other
   credentials into a sandbox. Pushes only to `axiom/*`; no merge code path (ADR-007).
 - Budgets are enforced at claim time and per run (`orchestrator/budgets.py`); reviews count too.
+  Claims reserve their run budget (ADR-013). A cost from a transcript is marked `cost_estimated`.
 - Reviews (ADR-009): `domain/review_machine.py` holds their legality; review events never move the
   task. Only `orchestrator/aggregator.py` turns reviews + CI into approve / request_changes /
   escalate. No agent can approve. Reviewers run read-only on a different model.
