@@ -1,6 +1,8 @@
 # Phase 4 plan: engineering management
 
-Status: **proposed, awaiting approval** (2026-11-06).
+Status: **approved 2026-11-06**, with defaults for Q1–Q6, Q8 and Q9, and a revised Q7 (below).
+Credits: $197 of Anthropic credits expire 2026-11-19. **Phase 4 API spend cap: $30**; the rest is
+for other projects. Live work finishes before that date.
 Goal (SPEC.md): give Axiom a spec; it proposes a task breakdown; you approve it; agents deliver it,
 and everything is measured. *Exit:* a multi-task spec delivered end to end.
 
@@ -52,7 +54,7 @@ runs".
 | Q4 | **Daily report** | (a) No LLM: plain numbers and lists from the event log. (b) A cheap model writes prose | **(a)**: free and can't misreport. Prose can come later |
 | Q5 | **Issues mirror** (deferred twice) | Mirror tasks to GitHub Issues; needs one more token permission | **Defer again.** Nothing needs it, and the dashboard covers visibility. Revisit if a team joins |
 | Q6 | **GitHub Pro or App** | Would make GitHub enforce the merge gate | **Still defer to Phase 5,** which is when Axiom runs on real work unattended for weeks |
-| Q7 | **Exit spec** | See section 7: wire the queue into `socagent investigate`, remove OpenRouter support, add QA tests | **As proposed.** Tell me if you still want OpenRouter; removing it is a real product decision |
+| Q7 | **Exit spec** | See section 7 | **Decided:** keep OpenRouter and make it dependable, rather than removing it |
 | Q8 | **PR #1** (SOC-001, still open) | It changes the same `CLAUDE.md` line the exit spec touches | **Merge it before T10** (it's reviewed by you only; it predates reviewers) or close it |
 | Q9 | **Pushing to GitHub** | (a) Push after each task's commit, so your backup stays current. (b) Only when you ask | **(a)** |
 
@@ -189,6 +191,7 @@ Every task: lint, the full suite, one commit, plus its guide section and diagram
 | **Part D** | | | |
 | T9 Parallel + QA | QA worker, conflict handling, full plan → merge loop with fakes | Two developers in parallel; dependents wait; conflict resolved | E2E with fakes; race and conflict tests |
 | T10 Exit **LIVE** | A real multi-task spec on tiny-agenticsoc; you approve the plan and merge each PR | Delivered, DONE, measured | recorded run, with the report |
+| T10b Reviewer comparison **LIVE** | The same PRs reviewed by Claude Sonnet 5.5 and Claude Fable 5.1, without affecting the tasks | Findings, cost and overlap compared | a written comparison, stated as a small sample |
 | T11 | Guide chapters 15 (metrics) and 16 (planning), atlas and README refresh, exit check | Every criterion mapped to evidence | — |
 
 ## 6. Phase 4 exit criteria
@@ -201,16 +204,19 @@ Every task: lint, the full suite, one commit, plus its guide section and diagram
 - [ ] Known cost gaps closed: killed runs estimated, reviews within task budgets (T3).
 - [ ] QA tasks can't change implementation files (T6, T9).
 
-## 7. Proposed exit spec (for tiny-agenticsoc)
+## 7. Exit spec (for tiny-agenticsoc)
 
-> **Prioritized investigations and a single LLM provider.** `socagent investigate` should take new
-> incidents from `investigation_queue`, most severe first, with a `--min-severity` option. By default
-> it keeps today's behaviour of investigating everything new (`--min-severity low`). Remove
-> OpenRouter support: `llm.py`, `config.py`, and the docs and examples that mention it, leaving
-> direct Anthropic calls only. Add tests for the new option and for rejecting non-Anthropic models.
+Revised after looking at real costs: for Claude, OpenRouter costs the same plus a 5.5% credit fee, but
+it keeps the flexibility to try other models. So it stays, and gets fixed.
 
-I expect about 3 or 4 tasks (the planner decides), with some independent, which tests parallelism,
-and one QA task.
+> **Prioritized investigations and a dependable provider choice.** `socagent investigate` takes new
+> incidents from `investigation_queue`, most severe first, with a `--min-severity` option that defaults
+> to today's behaviour (investigate everything new). Make the OpenRouter path dependable: no forced
+> tool choice on models that reject it, and prompt caching where supported. Add per-provider and
+> per-model totals to `socagent ledger`, and make the docs describe both providers accurately. Add tests
+> for all of it.
+
+I expect about 3 or 4 tasks (the planner decides), some independent, and one QA task.
 
 ## 8. Expected cost
 
@@ -220,7 +226,8 @@ and one QA task.
 | T5 edge drill | under $1 |
 | T8 planner check | under $1 |
 | T10 exit: plan + about 4 tasks, each developer + 2 reviews, some rework | $4–8 |
-| **Total** | **about $6–12** |
+| T10b reviewer comparison | $2–5 |
+| **Total** | **about $8–17; hard cap $30** |
 
 Caps: $3 per task and $15 per day as now, and a $15 limit for the exit plan. My previous estimate
 was about twice the real cost, so treat these as ceilings.
