@@ -1,6 +1,6 @@
 # Phase 4 hardening: credentials outside the sandbox (proposed)
 
-**Status: proposed, awaiting approval. Nothing here is built.** It would run before T5.
+**Status: approved 2026-11-06; runs before T5.** H0 passed: [spike results](../spikes/model-proxy.md).
 
 The drill and the git escape (ADR-014) showed two things. Agents can be asked to steal what is within
 reach, and the code around the sandbox is part of the attack surface. So: put nothing worth stealing
