@@ -96,7 +96,8 @@ class ReviewWorker:
             )
             outcome = runtime.run_review(self._request(a, ws))
             if lost.is_set():
-                log.warning("review %s: lease lost; not reporting", review_id)
+                log.warning("review %s: lease lost; reporting only what the run cost", review_id)
+                self._try_fail(review_id, "run cancelled: lease lost", outcome.cost_payload())
                 return
             self._report(review_id, ws, outcome)
         except Exception as e:

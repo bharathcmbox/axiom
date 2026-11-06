@@ -304,3 +304,38 @@ def test_reviews_cost_counts_toward_the_task(org: Conn) -> None:
     submit_review(org, REV, code, PASS, cost)
     submit_review(org, SEC, sec, PASS, cost)
     assert get_task(org, key).budget_spent_usd == Decimal("0.80")
+
+
+def test_superseded_review_still_reports_its_cost_but_not_its_verdict(org: Conn) -> None:
+    """Found in the live run: the second reviewer finished after the first one's FAIL had already
+    sent the task back; its $0.30 vanished from the budget."""
+    key = _in_review(org)
+    code, sec = _claim_both(org)
+    submit_review(org, REV, code, FAIL)  # supersedes the security review
+    cost: dict[str, Any] = {"cost": {"usd": "0.30", "input_tokens": 9000, "output_tokens": 500}}
+    assert submit_review(org, SEC, sec, PASS, cost) == "superseded"
+    task = get_task(org, key)
+    assert task.state == S.READY and task.budget_spent_usd == Decimal("0.30")
+    review = next(r for r in list_reviews(org, task.id) if r["id"] == sec)
+    assert (review["status"], review["verdict"], review["input_tokens"]) == (
+        "SUPERSEDED",
+        None,
+        9000,
+    )
+    assert submit_review(org, SEC, sec, PASS, cost) == "superseded"  # a repeat cannot double-count
+    assert get_task(org, key).budget_spent_usd == Decimal("0.30")
+    late = [e for e in events_for(org, key) if e["type"] == "REVIEW_COST_RECORDED"]
+    assert late[0]["payload"]["late_verdict"] == "PASS" and late[0]["to_state"] is None
+    with pytest.raises(NotExecutionOwner):
+        submit_review(org, REV, sec, PASS, cost)  # only the holder may report
+    assert fail_review_run(org, SEC, sec, "crashed", cost) == "superseded"
+
+
+def test_a_decided_review_cannot_be_submitted_again(org: Conn) -> None:
+    from axiom.domain.review_machine import IllegalReviewTransition
+
+    _in_review(org)
+    code, _ = _claim_both(org)
+    submit_review(org, REV, code, PASS)
+    with pytest.raises(IllegalReviewTransition):
+        submit_review(org, REV, code, FAIL)

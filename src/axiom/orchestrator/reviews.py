@@ -192,6 +192,9 @@ def submit_review(
     with conn.transaction():
         task, review = _review_for_update(conn, review_id)
         _require_owner(actor, review)
+        if review["status"] == ReviewState.SUPERSEDED:
+            return _record_late_cost(conn, actor, review, cost_usd, tokens_in, tokens_out,
+                                     late_verdict=parsed.verdict)  # fmt: skip
         verdict = parsed.verdict
         override = None
         if verdict == "PASS" and parsed.blocking:  # ADR-009 consistency rule
@@ -236,13 +239,49 @@ def fail_review_run(
     conn: Conn, actor: Actor, review_id: int, error: str, payload: dict[str, Any] | None = None
 ) -> str:
     """The reviewer's run crashed or produced no valid contract: retry, or ERROR after 3."""
-    cost_usd, _, _ = budgets.parse_cost(payload or {})  # failed runs still cost money
+    cost_usd, tokens_in, tokens_out = budgets.parse_cost(payload or {})  # failures cost money too
     with conn.transaction():
         task, review = _review_for_update(conn, review_id)
         _require_owner(actor, review)
+        if review["status"] == ReviewState.SUPERSEDED:
+            return _record_late_cost(conn, actor, review, cost_usd, tokens_in, tokens_out,
+                                     late_verdict=None)  # fmt: skip
         return _retry_or_error(
             conn, actor, task, review, ReviewCommand.FAIL_RUN, "REVIEW_RUN_FAILED", error, cost_usd
         )
+
+
+def _record_late_cost(
+    conn: Conn,
+    actor: Actor,
+    review: dict[str, Any],
+    cost_usd: Decimal | None,
+    tokens_in: int | None,
+    tokens_out: int | None,
+    late_verdict: str | None,
+) -> str:
+    """A superseded review's run may finish anyway: its verdict no longer counts, but the money
+    was spent and budgets must see it. The first report wins, so a repeat cannot double-count."""
+    conn.execute(
+        """UPDATE reviews SET cost_usd = coalesce(cost_usd, %s),
+                  input_tokens = coalesce(input_tokens, %s),
+                  output_tokens = coalesce(output_tokens, %s)
+           WHERE id = %s""",
+        (cost_usd, tokens_in, tokens_out, review["id"]),
+    )
+    review_event(
+        conn,
+        actor,
+        review,
+        "REVIEW_COST_RECORDED",
+        to_state=review["status"],
+        agent_id=review["reviewer_agent_id"],
+        payload={
+            "cost_usd": str(cost_usd) if cost_usd is not None else None,
+            "late_verdict": late_verdict,
+        },
+    )
+    return "superseded"
 
 
 def _retry_or_error(
