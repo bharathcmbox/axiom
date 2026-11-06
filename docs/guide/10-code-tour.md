@@ -1,6 +1,6 @@
 # 10. Code tour and how to extend it
 
-About 2,000 lines of Python in `src/axiom/`. This chapter maps them and walks through a real
+About 6,000 lines of Python in `src/axiom/`, and about 5,600 of tests. This chapter maps them and walks through a real
 change.
 
 ## Module dependencies
@@ -16,6 +16,14 @@ flowchart TB
         errs[api/errors.py]
         sch[api/schemas.py]
     end
+    subgraph W["worker, sandbox, runtimes, workspaces, sync: Phases 2 and 3"]
+        har["worker/harness.py<br/>worker/review_harness.py"]
+        ver["worker/verify.py, publish.py"]
+        sb["sandbox/ (runs in the container)"]
+        rt["runtimes/ (sandbox, fakes)"]
+        wsp["workspaces/ (git)"]
+        syn["sync/ (GitHub reader + service)"]
+    end
     subgraph L3["orchestrator: behaviour"]
         cmd[commands.py]
         asg[assignment.py]
@@ -23,6 +31,10 @@ flowchart TB
         rea[reaper.py]
         tsk[tasks.py]
         dep[dependencies.py]
+        bud[budgets.py]
+        rvw[reviews.py]
+        agr[aggregator.py]
+        rst[review_store.py]
     end
     subgraph L2["registry + events"]
         agt[registry/agents.py]
@@ -67,6 +79,17 @@ flowchart TB
     log --> db
     em --> tm
     tm --> rol
+    har -->|"HTTP only"| routes
+    har --> rt
+    har --> ver
+    har --> wsp
+    rt -->|docker run| sb
+    syn --> agr
+    syn --> cmd
+    rvw --> agr
+    agr --> cmd
+    cmd --> rst
+    cmd --> bud
 ```
 
 ## File by file
@@ -83,6 +106,13 @@ flowchart TB
 | `migrations/0001_init.sql` | 110 | The schema and its constraints |
 | `api/routes.py` | 230 | Endpoints (thin) |
 | `api/app.py` | 70 | Startup and shutdown |
+| `orchestrator/aggregator.py` | 120 | **How a decision is made** from reviews and CI |
+| `orchestrator/reviews.py` | 350 | Claiming and submitting reviews |
+| `worker/harness.py` | 270 | **One developer run, end to end** |
+| `worker/review_harness.py` | 180 | One review run, end to end |
+| `worker/verify.py` | 150 | The checks before anything is published |
+| `sandbox/runner.py` | 270 | What runs inside the container |
+| `sync/service.py` | 200 | GitHub → task commands |
 
 ## Configuration
 
@@ -118,28 +148,27 @@ You did not need to touch `apply_locked`, because these commands have no side ef
 the state change. Note the cancel rule: `NON_TERMINAL_STATES` is computed, so BLOCKED is
 automatically cancellable.
 
-## Where Phase 2 plugs in
+## Workers only use the public API
 
 ```mermaid
 flowchart LR
-    subgraph new["Phase 2 (new)"]
-        w["worker process<br/>(one per concurrent developer)"]
-        ad["runtimes/claude_code.py<br/>Claude Agent SDK adapter"]
-        ws["workspaces/<br/>git worktree + container"]
-        gh["integrations/github.py<br/>branch, PR, Issues mirror"]
+    subgraph w["worker (or reviewer) process"]
+        h["harness"]
+        ad["runtime adapter<br/>(Claude Agent SDK in a sandbox)"]
+        ws["workspace<br/>(git clone)"]
+        gh["GitHub publisher"]
     end
-    subgraph existing["Phase 1 (unchanged API)"]
-        api["POST /claims<br/>commands/start<br/>heartbeat<br/>commands/submit | fail | ask_human"]
+    subgraph api["Axiom API, same as curl"]
+        e["POST /claims · /reviews/claim<br/>commands/start · heartbeat<br/>commands/submit | fail | ask_human<br/>/reviews/{id}/submit | fail"]
     end
-    w -->|HTTP| api
-    w --> ad
-    w --> ws
-    w --> gh
+    h -->|HTTP + token| e
+    h --> ad
+    h --> ws
+    h --> gh
 ```
 
-The worker is just another API client, doing exactly what you did by hand with curl. The
-control plane doesn't need to change for Phase 2 to work, apart from adding authentication and
-recording cost.
+A worker is just another API client, doing what you can do by hand with curl. A new runtime
+(Codex, say) means a new adapter behind the same interface; the control plane doesn't change.
 
 ## Exercises
 

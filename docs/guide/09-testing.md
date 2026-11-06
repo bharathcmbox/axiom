@@ -1,18 +1,19 @@
 # 9. How it is tested
 
-634 tests run in about 40 seconds against a real PostgreSQL. This chapter explains how they
+1004 tests run in about 90 seconds against a real PostgreSQL, plus 9 Docker tests against the real
+sandbox image and 2 live tests that call the real API. This chapter explains how they
 are organized, and the three techniques that give confidence beyond "the happy path works".
 
 ## The shape of the suite
 
 ```mermaid
 flowchart TB
-    subgraph unit["tests/unit: pure, no database (333 tests, under 1s)"]
+    subgraph unit["tests/unit: pure, no database (535 tests, about a second)"]
         u1["test_task_machine.py<br/>every command × state, every command × actor kind,<br/>reachability, terminal states"]
         u2["test_execution_machine.py<br/>every command × execution state"]
         u3["doc_tables.py<br/>parses docs/state-machines.md"]
     end
-    subgraph integ["tests/integration: real Postgres (301 tests)"]
+    subgraph integ["tests/integration: real Postgres (468 tests)"]
         i1["test_migrations.py: schema + constraints"]
         i2["test_registry.py: projects, agents"]
         i3["test_transitions.py: generated legal/illegal/actor cases"]
@@ -21,6 +22,11 @@ flowchart TB
         i6["test_api.py: HTTP"]
         i7["test_restart.py: durability"]
         i8["test_invariants.py: the checker catches corruption"]
+        i9["test_budgets, test_tokens: money and auth"]
+        i10["test_workspaces, test_verify, test_publish: git + checks"]
+        i11["test_worker, test_review_worker: harnesses over HTTP"]
+        i12["test_reviews, test_sync: reviews, aggregator, GitHub"]
+        i13["test_full_loop: every role together"]
     end
     u3 --> u1
     u3 --> u2
@@ -126,6 +132,18 @@ Each runs several rounds.
 An invariant checker that never fires proves nothing. `test_invariants.py` deliberately
 corrupts the database: it changes a state without an event, removes an execution, and pushes
 an agent over capacity. It then asserts that `check_invariants` reports each problem.
+
+## Beyond the default suite
+
+```mermaid
+flowchart LR
+    d["make test<br/>1004 tests, free,<br/>real Postgres and git"] --> dk["make test-docker<br/>9 tests, free,<br/>real sandbox + proxy"]
+    dk --> lv["make test-live<br/>2 tests, a few cents,<br/>real models"]
+    lv --> run["Exit demos<br/>real repo, real PRs"]
+```
+
+Each step out found bugs the step before could not: see the list in
+[chapter 14](14-how-it-was-built.md#what-went-wrong).
 
 ## Commands
 

@@ -16,8 +16,8 @@ merge pull requests.
   route except an allowlist proxy.
 - The harness pushes only refs matching `refs/heads/axiom/*`, opens pull requests and has no
   code path that merges. A test asserts the ref guard.
-- Before Phase 3 (merge gating), upgrade to GitHub Pro or move to a GitHub App or machine user,
-  so that GitHub enforces protection on `main` as well.
+- Upgrading to GitHub Pro, or moving to a GitHub App or machine user, would make GitHub enforce
+  protection on `main` as well. Deferred by ADR-010; revisit before relying on Axiom for real work.
 
 ## Consequences
 - The guarantee rests on the trust boundary between harness and sandbox, so that boundary must

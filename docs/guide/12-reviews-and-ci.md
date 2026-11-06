@@ -1,7 +1,6 @@
 # 12. Independent review and the CI gate (Phase 3)
 
-> This chapter grows with Phase 3. Each section was written in the same commit as the code it
-> describes.
+> For every scenario on one page, see [chapter 13](13-scenarios.md).
 
 ## The idea in one picture
 
@@ -32,7 +31,7 @@ Three principles, each enforced in code rather than by a prompt:
 3. **Trust CI, not claims.** The developer's "tests pass" is a claim; the CI result on GitHub
    is evidence, and it is part of the gate.
 
-## Reviews are their own kind of work (T2)
+## Reviews are their own kind of work
 
 A review is not another execution of the task. It has its own table (`reviews`) and its own
 state machine:
@@ -96,7 +95,7 @@ The generated tests from chapter 9 picked this up automatically. Agent `approve`
 `request_changes` are now in the "wrong actor" cases, and `escalate` got its legal and
 illegal cases without any test being written by hand.
 
-## The aggregator: how a decision is made (T3)
+## The aggregator: how a decision is made
 
 Every time a review finishes, or the CI status changes, the **aggregator**
 (`orchestrator/aggregator.py`) looks at the current round and decides. It is a pure function,
@@ -137,7 +136,7 @@ sequenceDiagram
     participant A as Axiom
     participant R as REV-01 (code review)
     participant S as SEC-01 (security review)
-    participant G as GitHub sync (T6)
+    participant G as GitHub sync
     D->>A: submit {commit abc123, PR #7}
     A->>A: TASK_SUBMITTED → IN_REVIEW<br/>REVIEW_REQUESTED ×2 (round 1)
     R->>A: POST /reviews/claim
@@ -247,7 +246,7 @@ REVIEW_SUPERSEDED     security_reviewer         system:reviews
 Each review event carries `review_id`, role, round, and the review's from/to state in its
 payload. The task's own `from_state`/`to_state` columns are filled only for task transitions.
 
-## The reviewer's sandbox: read-only by construction (T4)
+## The reviewer's sandbox: read-only by construction
 
 A reviewer runs in the same sandbox image as a developer, but in **review mode**. The runner
 reads `request.json`, sees `"mode": "review"`, and builds a different agent:
@@ -263,7 +262,7 @@ reads `request.json`, sees `"mode": "review"`, and builds a different agent:
 
 ```mermaid
 flowchart LR
-    subgraph harness["reviewer worker (T7)"]
+    subgraph harness["reviewer worker"]
         claim["claim review<br/>(head_sha abc123)"] --> ws["review workspace:<br/>clone task branch,<br/>checkout abc123 (detached),<br/>diff = merge-base(main)..abc123"]
     end
     subgraph sbx["sandbox, review mode"]
@@ -323,7 +322,7 @@ verdict: FAIL
 It also noted that the developer's "2 tests pass" was *true but irrelevant*: exactly the
 "claims are not evidence" rule. The workspace was unchanged afterwards (`git status` clean).
 
-## Rework continues the same PR (T5)
+## Rework continues the same PR
 
 When reviews (or CI) send a task back, the next developer run **continues the task's branch**
 instead of starting a new one. The PR on GitHub updates in place, and its conversation shows
@@ -388,7 +387,7 @@ sequenceDiagram
 - **Allowed paths are checked per round:** the base for the diff check is the branch head
   *before* this round, so only the new commits are judged.
 
-## The GitHub sync: GitHub moves Axiom, never the other way round (T6)
+## The GitHub sync: GitHub moves Axiom, never the other way round
 
 Axiom never merges. You do, on GitHub. Something has to notice, and also notice CI results
 and requests for changes. That is the **GitHub sync** (`sync/service.py`), a small loop that
@@ -438,7 +437,7 @@ sequenceDiagram
     Sync->>Sync: from OWNER/MEMBER/COLLABORATOR? after the last submission? yes
     Sync->>A: reject_merge (actor human:github-you)<br/>feedback: "you on GitHub: please also log the alert id"
     A->>A: task → READY, review_rounds + 1
-    Note over A: the next developer round sees your words<br/>in its prompt, on the same PR (T5)
+    Note over A: the next developer round sees your words<br/>in its prompt, on the same PR
 ```
 
 Comments are ignored if they come from someone without write access, if they are older than
@@ -463,7 +462,7 @@ superseded. The metrics will show it.
 
 Runs for any *other* commit are ignored: CI is judged on exactly the commit the reviewers saw.
 
-## The reviewer workers, and everything together (T7)
+## The reviewer workers, and everything together
 
 ### All the moving parts
 
@@ -557,7 +556,63 @@ make workers         # developers, reviewers and github-sync
 docker compose logs -f reviewer-rev-01
 ```
 
-## Try it (so far)
+## The real run: SOC-002
+
+The exit test for Phase 3, on the real `tiny-agenticsoc` repository. A scripted developer submitted
+a useful feature, `investigation_queue`, with one wrong character:
+
+```python
+todo = [i for i in incs if i.status == "new" and SEVERITY_ORDER[i.severity] > floor]
+#                                                                           ^ should be >=
+```
+
+With the default floor, every `high` incident is silently dropped. The patch's tests never used a
+`high` incident, so all 11 passed, in Axiom's own run and on GitHub. The reviewers weren't told
+it was a test, and the report they got claimed every criterion was met.
+
+```mermaid
+sequenceDiagram
+    participant D1 as DEV-01 (scripted)
+    participant CI as GitHub Actions
+    participant R as REV-01 (Fable 5.1)
+    participant S as SEC-01 (Fable 5.1)
+    participant A as Aggregator
+    participant D2 as DEV-02 (Opus 5.5)
+    actor Y as You
+    D1->>A: 04:13 submit: PR #2 opens, with the bug
+    CI->>A: 04:14 success (the tests can't see the bug)
+    R->>A: 04:14 FAIL: [high] > should be >=, [high] tests miss the boundary
+    A->>D2: 04:14 request_changes (SEC-01 superseded)
+    S-->>A: its FAIL arrives too late, only its cost counts
+    D2->>A: 04:15 round 2 on the same PR, 4 new tests
+    S->>A: 04:16 PASS
+    R->>A: 04:16 PASS (all earlier findings verified fixed)
+    CI->>A: 04:16 success for the new commit
+    A->>Y: 04:16 AWAITING_MERGE
+    Y->>A: merge on GitHub: DONE, human:github-bharathcmbox
+```
+
+What the code reviewer wrote, in its round-1 summary:
+
+> The developer's report claims this criterion is met via test_low_severity_is_left_out, but that
+> test compares "critical" against "medium", so it never exercises the boundary.
+
+Things worth noticing:
+
+- **CI was green on the buggy commit.** Tests alone would have let it through. That is the case
+  for independent review.
+- **Both reviewers caught it independently,** though the security reviewer's verdict arrived after
+  the code reviewer's had already sent the task back.
+- **The developer did more than the minimum:** it fixed the bug, added tests for every finding, and
+  took up an optional `low` finding too.
+- **Cost, $1.19:** four reviews $1.02 ($0.26, $0.30, $0.25, $0.21), rework $0.17. The scripted patch
+  cost nothing. About 2.5 minutes from PR to AWAITING_MERGE.
+- **It was one bug, in one small change.** It shows the loop works; it says nothing yet about how
+  often reviewers catch bugs, or how often they raise false alarms.
+
+The run also found two real bugs in Axiom itself. See [chapter 14](14-how-it-was-built.md).
+
+## Try it
 
 1. `uv run pytest tests/unit/test_review_machine.py -v`: every review command × state, checked
    against the table in `docs/state-machines.md`.

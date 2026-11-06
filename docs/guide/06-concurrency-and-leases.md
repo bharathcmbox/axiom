@@ -1,6 +1,6 @@
 # 6. Concurrency, leases and the reaper
 
-Phase 2 will run several agents at once. They will race to claim work, and sometimes crash
+Several workers run at once. They race to claim work, and sometimes crash
 halfway through. This chapter explains the three mechanisms that keep that safe:
 
 - **row locks**: two agents never act on the same task at the same time;

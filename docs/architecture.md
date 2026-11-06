@@ -1,4 +1,8 @@
-# Architecture (Phase 1)
+# Architecture
+
+The control plane first (Phase 1), then workers and sandboxes (Phase 2), then reviews, the
+aggregator and the GitHub sync (Phase 3), at the end of this page. To learn it, read
+[the guide](guide/README.md).
 
 Axiom's control plane is a single FastAPI process in front of PostgreSQL. All state lives in
 Postgres; the process keeps nothing in memory that matters, so it can be killed at any time.
@@ -92,5 +96,31 @@ These run after every integration test and at startup.
   together (a unit test keeps them in sync), then handle side effects in `apply_locked`. The
   generated legal, illegal and wrong-actor tests pick it up automatically.
 - **Schema change:** add `migrations/000N_*.sql`. Never edit an applied migration.
-- **Phase 2 workers** talk to the existing API: `POST /claims` → `start` → heartbeats →
-  `submit`, `ask_human` or `fail`.
+
+## Workers and sandboxes (Phase 2, ADR-008)
+
+```
+worker (deterministic harness; holds GitHub + agent tokens)
+  claim → start → heartbeat thread → fresh clone (no credentials in it)
+    → sandbox container (LLM; only the Anthropic key; egress via allowlist proxy; read-only root)
+    → verify diff (paths, secrets, symlinks) → commit → tests in a fresh sandbox, clean clone
+    → push axiom/* (never forced) → open or reuse PR → submit
+```
+
+Workers use only the public API. Budgets are enforced at claim time and per run. No code path can
+merge. Detail: [guide chapter 11](guide/11-workers-and-sandbox.md).
+
+## Reviews, the aggregator and the GitHub sync (Phase 3, ADR-009, ADR-010)
+
+```
+submit → one review per required role (reviews table: own state machine, leases)
+reviewer worker → workspace at the submitted commit → read-only sandbox (Fable 5.1) → review contract
+github-sync (read-only) → CI result for the head commit, merges, closes, change requests
+aggregator (pure decide()) → approve | request_changes | escalate | wait
+human merges on GitHub → sync → merge → DONE, recorded as human:github-<login>
+```
+
+`approve` and `request_changes` are system commands, with a human override. Agents cannot issue
+them. Lock order everywhere: task row → execution or review row → agent row → advisory lock.
+Detail: [guide chapter 12](guide/12-reviews-and-ci.md); every scenario:
+[chapter 13](guide/13-scenarios.md).

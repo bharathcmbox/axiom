@@ -1,7 +1,8 @@
 # 4. The data model
 
-Everything Axiom knows is in six tables, created by
-[`migrations/0001_init.sql`](../../migrations/0001_init.sql).
+Everything Axiom knows is in Postgres. This chapter covers the six core tables from
+[`migrations/0001_init.sql`](../../migrations/0001_init.sql). Later migrations added `api_tokens`
+(0002), budget and contract fields (0003), `reviews` (0004, see chapter 12) and CI fields (0005).
 
 ## Entity-relationship diagram
 
@@ -91,7 +92,7 @@ two tasks created at the same moment can never get the same number.
 ### `agents`: the registry
 The organization chart. `role` decides which tasks an agent may take (it must equal the task's
 `assigned_role`). `max_concurrent` caps how many tasks it may hold at once. `runtime` and
-`model` are what Phase 2 will use to start the right worker.
+`model` decide how the worker runs it (developers on Opus 5.5, reviewers on Fable 5.1).
 
 ### `tasks`
 The contract from the spec (title, specification, acceptance criteria, role, priority,

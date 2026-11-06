@@ -33,9 +33,9 @@ flowchart LR
 ```mermaid
 flowchart TB
     L1["<b>You</b><br/>direction · specifications · priorities · approvals"]
-    L2["<b>Axiom control plane</b>  ← Phase 1 builds this<br/>backlog · state machines · leases · agent registry · event log · REST API"]
-    L3["<b>Worker runtimes</b>  ← Phase 2+<br/>Claude Code via the Claude Agent SDK · Codex later"]
-    L4["<b>Shared infrastructure</b>  ← Phase 2+<br/>GitHub branches, PRs, Issues mirror · GitHub Actions · containers + worktrees"]
+    L2["<b>Axiom control plane</b>  ← Phases 1, 3<br/>backlog · state machines · leases · agent registry · reviews · aggregator · event log · REST API"]
+    L3["<b>Worker runtimes</b>  ← Phases 2, 3<br/>Claude Code via the Claude Agent SDK · Codex later"]
+    L4["<b>Shared infrastructure</b>  ← Phases 2, 3<br/>GitHub branches, PRs, Issues mirror · GitHub Actions · containers + worktrees"]
     L1 --> L2 --> L3 --> L4
 ```
 
@@ -68,24 +68,24 @@ flowchart TB
     em --> rev
 ```
 
-These seven are registered from [config/agents.toml](../../config/agents.toml) at startup. In
-Phase 1 they are only rows in the `agents` table. You "become" one by using that agent's API
-token (`python -m axiom.registry.tokens issue agent:DEV-01`). From Phase 2, a worker process
-holds the token and does that for real.
+These seven are registered from [config/agents.toml](../../config/agents.toml) at startup. Four
+of them work today: developers DEV-01 and DEV-02, and reviewers REV-01 and SEC-01, each run by a
+worker process holding that agent's API token. EM-01, ARCH-01 and QA-01 are registered but have no
+worker until Phase 4.
 
 ## Phases
 
 ```mermaid
 flowchart LR
     p1["<b>Phase 1</b><br/>Control plane skeleton<br/>✅ done"]
-    p2["<b>Phase 2</b><br/>First worker<br/>Claude Code adapter,<br/>worktree + container, PR"]
-    p3["<b>Phase 3</b><br/>Quality organization<br/>reviewers, CI gate,<br/>changes-requested loop"]
-    p4["<b>Phase 4</b><br/>Engineering management<br/>spec decomposition,<br/>dashboard, reports"]
+    p2["<b>Phase 2</b><br/>First worker<br/>Claude Code adapter,<br/>sandbox, PR<br/>✅ done"]
+    p3["<b>Phase 3</b><br/>Quality organization<br/>reviewers, CI gate,<br/>changes-requested loop<br/>✅ done"]
+    p4["<b>Phase 4</b><br/>Engineering management<br/>spec decomposition, QA,<br/>dashboard, reports"]
     p5["<b>Phase 5</b><br/>Scale + diversify<br/>Codex review,<br/>continuous operation"]
     p1 --> p2 --> p3 --> p4 --> p5
 ```
 
-## What Phase 1 actually contains
+## What Phase 1, the foundation, contains
 
 ```mermaid
 mindmap
@@ -111,14 +111,15 @@ mindmap
       REST API + OpenAPI
       docker compose
     Proof
-      634 tests
+      generated transition tests
       invariant checker
       SIGKILL restart demo
       clean-clone smoke test
 ```
 
-What Phase 1 deliberately did **not** contain: any LLM call, any worker, or any GitHub access.
-Those arrive in Phase 2. (Bearer-token authentication was added at the start of Phase 2.)
+Phase 1 deliberately contained no LLM call, worker or GitHub access. Phase 2 added those plus
+authentication and budgets ([chapter 11](11-workers-and-sandbox.md)); Phase 3 added independent
+review and the CI gate ([chapter 12](12-reviews-and-ci.md)).
 
 ## Try it
 

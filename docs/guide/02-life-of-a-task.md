@@ -1,8 +1,9 @@
 # 2. The life of a task
 
-The best way to understand Axiom is to follow one task from creation to DONE. In Phase 1 you
-play every part: the human, the developer agent and the reviewer. From Phase 2, real agents
-will make the agent calls.
+The best way to understand Axiom is to follow one task from creation to DONE. This chapter drives
+the task by hand with curl, playing every part, which is still possible and is the clearest way
+to see the mechanics. In real use, workers make the agent calls (chapter 11), the aggregator
+approves after independent reviews (chapter 12), and you merge on GitHub.
 
 ## The journey at a glance
 
@@ -13,7 +14,7 @@ flowchart LR
     R -->|"claim (agent)"| AS[ASSIGNED]
     AS -->|"start (agent)"| IP[IN_PROGRESS]
     IP -->|"submit (agent)"| IR[IN_REVIEW]
-    IR -->|"approve (reviewer/human)"| AM[AWAITING_MERGE]
+    IR -->|"approve (aggregator, or a human override)"| AM[AWAITING_MERGE]
     AM -->|"merge (human only)"| D([DONE])
 ```
 

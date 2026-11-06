@@ -1,7 +1,7 @@
 # The Axiom guide: how it is built and how it works
 
-This guide is for learning. It explains what Phase 1 built, why it is built that way, and how
-each piece works, with a diagram for almost every idea. It assumes you know Python and SQL,
+This guide is for learning. It explains what Axiom is (Phases 1–3 are built), why it is built that
+way, and how each piece works, with a diagram for almost every idea. It assumes you know Python and SQL,
 but not Postgres locking or state-machine design.
 
 Every chapter ends with **"Try it"** exercises against the running stack or the test suite.
@@ -22,7 +22,12 @@ Doing them is the fastest way to make the ideas stick.
 | 9 | [How it is tested](09-testing.md) | Tests generated from the transition table, invariants, race tests |
 | 10 | [Code tour and how to extend it](10-code-tour.md) | Where everything lives, and a worked example of adding a feature |
 | 11 | [Workers, the sandbox and verification](11-workers-and-sandbox.md) | Phase 2: how a real agent runs safely, end to end, up to a pull request |
-| 12 | [Independent review and the CI gate](12-reviews-and-ci.md) | Phase 3: reviewers on a different model, the aggregator, CI, merging on GitHub |
+| 12 | [Independent review and the CI gate](12-reviews-and-ci.md) | Phase 3: reviewers on a different model, the aggregator, CI, merging on GitHub, the real run |
+| 13 | [Scenario atlas](13-scenarios.md) | **Every situation a task can meet, each with a diagram and its proof** |
+| 14 | [How it was built](14-how-it-was-built.md) | **The process, the order, the decisions, the mistakes, the cost** |
+
+**Short on time?** Read 1, then 13, then 14. Come back to the others when you want to know how a
+piece works.
 
 The reference documents sit next to this guide:
 - [state-machines.md](../state-machines.md): the transition tables;
@@ -34,33 +39,43 @@ The reference documents sit next to this guide:
 
 ```mermaid
 flowchart TB
-    you["You (CTO)<br/>curl / browser at /docs"]
-    subgraph api["FastAPI process"]
-        routes["api/routes.py<br/>parse + serialize"]
-        engine["orchestrator/commands.py<br/>apply_command"]
-        claim["orchestrator/assignment.py<br/>claim_next"]
-        leases["orchestrator/leases.py<br/>heartbeat, expire_leases"]
-        reaper["orchestrator/reaper.py<br/>background thread"]
-        table["domain/task_machine.py<br/>the rules (pure data)"]
+    you(["You (CTO)"])
+    subgraph axiom["Axiom control plane"]
+        api["REST API + token auth"]
+        engine["command engine<br/>(the only writer of state)"]
+        rules["state machines<br/>(pure tables)"]
+        agg["aggregator<br/>(reviews + CI → decision)"]
+        reaper["reaper<br/>(expired leases)"]
+        sync["GitHub sync<br/>(read-only)"]
+        db[("PostgreSQL<br/>tasks · executions · reviews · events")]
     end
-    subgraph pg["PostgreSQL"]
-        tasks[(tasks)]
-        execs[(executions)]
-        events[(events<br/>append-only)]
-        reg[(projects, agents)]
+    subgraph workers["Workers: deterministic harness code, hold the tokens"]
+        dev["developers<br/>DEV-01, DEV-02"]
+        rev["reviewers<br/>REV-01, SEC-01"]
     end
-    you --> routes
-    routes --> engine
-    routes --> claim
-    routes --> leases
-    reaper --> leases
-    claim --> engine
-    leases --> engine
-    engine -. "asks: is this legal?" .-> table
-    engine --> tasks
-    engine --> execs
-    engine --> events
-    routes --> reg
+    subgraph sandbox["Sandboxes: one per run, untrusted"]
+        s1["Claude Opus 5.5<br/>edits files"]
+        s2["Claude Fable 5.1<br/>read-only"]
+    end
+    gh["GitHub: branches, PRs, CI"]
+    anth["Anthropic API"]
+    you -->|"merge, /axiom changes"| gh
+    you -->|"create tasks, answer, retry"| api
+    dev --> api
+    rev --> api
+    api --> engine
+    reaper --> engine
+    agg --> engine
+    sync --> agg
+    sync --> engine
+    engine -.->|"is this legal?"| rules
+    engine --> db
+    dev -->|docker run| s1
+    rev -->|docker run| s2
+    s1 -->|"via allowlist proxy"| anth
+    s2 -->|"via allowlist proxy"| anth
+    dev -->|"push axiom/*, open PR"| gh
+    sync -->|reads| gh
 ```
 
 ## Glossary
@@ -69,8 +84,13 @@ flowchart TB
 |---|---|
 | **Task** | A unit of work with a contract: title, specification, acceptance criteria, role, priority, retry limit, dependencies |
 | **Execution** | One attempt by one agent to work on a task. A task can have many over its life, but only one active at a time |
-| **Agent** | A logical employee in the registry (e.g. `DEV-01`, a developer running on Claude Code). In Phase 1 agents are just rows; you act as them with a header |
-| **Actor** | Whoever issues a command: `human:<name>`, `agent:<KEY>` or `system:<name>` |
+| **Agent** | A logical employee in the registry (e.g. `DEV-01`, a developer running on Claude Code). A worker process acts as an agent using its API token |
+| **Actor** | Whoever issues a command: `human:<name>`, `agent:<KEY>` or `system:<name>`. Over HTTP it comes from the bearer token |
+| **Worker** | Deterministic harness code that runs one agent's work: claims, heartbeats, verifies, publishes. It holds the tokens; the LLM never does |
+| **Sandbox** | A short-lived locked-down container where the LLM runs, with no GitHub or Axiom credentials |
+| **Review** | One reviewer role's verdict on one round of a task's work, returned as a strict contract |
+| **Aggregator** | Plain code that turns reviews and CI into one decision: approve, request changes, escalate or wait |
+| **Round** | One submission and its reviews. Rework starts the next round, on the same branch and PR |
 | **Command** | A request to change a task's state, e.g. `start`, `submit`, `merge`. Legal or illegal depending on the current state and the actor |
 | **Event** | A row in the append-only log, written in the same transaction as every state change |
 | **Lease** | A time-limited claim on a task held by an execution. Heartbeats renew it; if it expires, the reaper takes the task back |

@@ -118,10 +118,11 @@ Test results in a result contract are claims. Axiom trusts CI, not the agent.
 - `agents`: registry of role, runtime, model, instructions, concurrency, enabled
 - `tasks` + `task_dependencies`: contract fields, state, retry and review counters
 - `executions`: one row per agent run: lease, status, result, cost, tokens, transcript
-- `reviews` (Phase 3): review contracts linked to an execution and a PR
+- `reviews`: review contracts per role and round, with their cost
 - `events`: append-only log of everything that happens
 
-GitHub Issues mirror tasks (Phase 2+); they are not the source of truth.
+GitHub PRs and CI feed back through the sync. An Issues mirror is planned for Phase 4; GitHub is
+not the source of truth.
 
 ## 8. Guardrails
 
@@ -142,6 +143,8 @@ around $200/month for the prototype.
 
 ## 10. Phases (each ends with a working demo)
 
+Status: Phases 1, 2 and 3 are complete; see [docs/plan/](docs/plan/).
+
 1. **Control plane skeleton.** Schema, agent registry, task + execution state machines, leases,
    event log, REST API, Docker Compose, tests. *Exit:* drive tasks through every state by hand;
    kill and restart; state intact.
@@ -149,11 +152,12 @@ around $200/month for the prototype.
    contract, PR creation, GitHub integration (Issues mirror), budget cap. Target: a small,
    well-scoped task in the Agentic SOC repository (ADR-006). *Exit:* one real task goes from
    READY to an open PR with no human input.
-3. **Quality organization.** QA, security and code reviewers; review contracts; changes-requested
-   loop; CI results; human merge approval. *Exit:* a deliberately buggy task is caught and sent back.
-4. **Engineering management.** Spec decomposition with human approval, automatic assignment,
-   cost accounting, dashboard (Streamlit) and daily report. *Exit:* a multi-task spec delivered
-   end to end.
+3. **Quality organization.** Code and security reviewers on a different model; review contracts;
+   changes-requested loop on the same PR; CI results; human merge on GitHub, observed by a sync.
+   *Exit:* a deliberately buggy task is caught and sent back.
+4. **Engineering management.** Spec decomposition with human approval, QA agent, Issues mirror,
+   cost accounting and metrics, dashboard (Streamlit) and daily report. *Exit:* a multi-task spec
+   delivered end to end.
 5. **Scale and diversify.** Codex runtime (cross-model review), more developers, Agentic SOC
    delivered end to end, continuous operation.
 

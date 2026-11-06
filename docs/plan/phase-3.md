@@ -154,14 +154,66 @@ Every task: lint, the full suite, one commit. **LIVE** steps are announced befor
 | T8 **LIVE** exit demo | a planted-bug task on tiny-agenticsoc: a scripted developer submits a subtle bug that the tests don't catch; real reviewers (Q3) must FAIL it; a real developer reworks; reviewers PASS; CI green; **you** merge | sent back at least once, then DONE after your merge | recorded run: events, review contracts, PR conversation, costs |
 | T9 | Guide chapter 12 (reviews, aggregation, GitHub sync) + exit check | — | — |
 
-## 6. Phase 3 exit criteria
+## 6. Phase 3 exit criteria: met (2026-11-05)
 
-- [ ] A deliberately buggy change is caught by an independent reviewer and sent back at least once; the reworked change passes (T8, live).
-- [ ] CI results gate AWAITING_MERGE: CI red sends the task back (T3, T6).
-- [ ] Nobody approves their own work: reviewers use a different model; agents cannot approve, merge or review their own task (T2, T3).
-- [ ] Merging happens only on GitHub by a human and Axiom records it as DONE (T6, T8). (Without GitHub Pro this is enforced by Axiom having no merge path plus convention, not by GitHub.)
-- [ ] Every review is stored as a validated contract with events (T3).
-- [ ] Rework updates the same PR (T5).
+| Criterion | Evidence |
+|---|---|
+| A deliberately buggy change is caught by an independent reviewer and sent back; the reworked change passes | **SOC-002**, [PR #2](https://github.com/bharathcmbox/tiny-agenticsoc/pull/2): a planted `>` for `>=` that all tests and CI passed. Blind, Claude Fable 5.1 returned FAIL with a high finding on the exact line. A real developer (Claude Opus 5.5) fixed it on the same PR; both reviewers then passed it. Automated equivalent: `test_buggy_change_caught_reworked_approved_merged` |
+| CI results gate AWAITING_MERGE; red CI sends the task back | Live: approval came only when CI reported success for the round-2 commit. Red CI: `test_red_ci_sends_the_work_back`, `test_ci_must_be_green_for_the_head_commit` (fake GitHub; not exercised live) |
+| Nobody approves their own work | Generated `test_wrong_actor_kind_rejected` cases (agents cannot approve), `test_developers_and_humans_cannot_claim_reviews`, `test_developers_cannot_act_as_reviewers`; reviewers ran on a different model |
+| Merging only on GitHub by a human, recorded as DONE | Live: TASK_DONE by `human:github-bharathcmbox`, `merged_before_gate: false`. Axiom has no merge path (`test_client_has_no_way_to_merge`, `test_the_sync_never_writes_to_github`). **Not enforced by GitHub** without Pro (ADR-010) |
+| Every review stored as a validated contract with events | `test_invalid_contracts_are_rejected_without_changes`; live: 4 reviews with contracts and costs |
+| Rework updates the same PR | Live: one PR, two commits, one round comment. `test_rework_continues_the_same_branch_and_pr_with_the_findings` |
 
-**Estimated API spend:** T4 docker/live check under $1; T8 roughly $2–6 (two developer runs plus
-four reviews on Fable 5.1). No recurring cost (GitHub Pro deferred).
+Totals: 1004 default tests + 9 Docker tests + 2 live tests, all passing; ruff and mypy (strict)
+clean. API spend in Phase 3: $0.15 (reviewer live test) + $1.19 (SOC-002) = $1.34.
+
+## 7. Changes from the plan
+
+- **The token and the GitHub App:** no GitHub Pro and no App (Q1, Q2 changed by the human); the guarantee stays
+  harness-enforced plus convention.
+- **`/axiom changes` comment command:** added, because GitHub doesn't let a PR's author request
+  changes.
+- **Scripted developer** (`AXIOM_FAKE_EDITS_FILE`): added so the reviewers' test could be blind. The
+  planted patch lives outside this repo (ADR-004).
+- **`POST /agents/{key}/model`, `POST /projects/{key}/require-ci`:** added so these changes are
+  logged rather than made with SQL.
+
+## 8. Findings (learning log)
+
+Full list with causes: [guide chapter 14](../guide/14-how-it-was-built.md#what-went-wrong).
+
+- **CI was green on the buggy commit.** The whole case for independent review, in one run.
+- **Both reviewers found the bug independently,** and each noticed the developer's claim was not
+  backed by its evidence.
+- **The live run found two bugs unit tests could not:** a `noexec` HOME in the sandbox, and a lost
+  cost for superseded reviews.
+- **Costs were far lower than estimated:** $1.19, against an estimate of $2–6.
+- **Sample size is one.** This shows the loop works. It says nothing yet about catch rates or false
+  alarms; Phases 4 and 5 are for measuring.
+
+## 9. Known limitations
+
+- **GitHub doesn't enforce the gate:** no branch protection without Pro. A human can merge early or
+  push to `main` (the early merge is recorded). PRs show the token owner as author.
+- **A run killed partway has no final report,** so its cost is unknown and budgets undercount it.
+- **Review runs aren't capped by the task's budget:** per review ($1) and per day only.
+- **The daily budget check isn't serialized:** two simultaneous claims can both pass near the cap.
+- **`require_ci` with no CI workflow waits forever.**
+- **Exercised with a fake GitHub only:** red CI, closing a PR, `/axiom changes`, GitHub reviews,
+  merging early. **Security review has only seen trivial code.**
+- **The SPEC's prompt-injection drill has not been run.**
+- **SOC-001 predates reviews:** it has no reviews and no `head_sha`, so it stays IN_REVIEW until its
+  PR #1 is merged or closed.
+- **Sandbox image builds need Docker's credential helper,** which fails when WSL can't reach Docker
+  Desktop; a temporary empty `DOCKER_CONFIG` works around it, since all base images are public.
+
+## 10. Recommended next phase: Phase 4, engineering management
+
+1. **Metrics first:** compute SPEC section 2's numbers from the event log, so everything after this
+   is measured (cycle time, first-pass acceptance, cost per merged task, human interventions).
+2. **Prompt-injection drill**, since it's cheap and overdue.
+3. **Spec → tasks** with human approval, dependencies, two developers in parallel.
+4. **QA agent**, Issues mirror, dashboard, daily report.
+
+Decision needed then: GitHub Pro or a GitHub App, before relying on Axiom for real work.
