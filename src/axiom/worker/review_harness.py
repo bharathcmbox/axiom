@@ -185,7 +185,12 @@ class ReviewWorker:
             )
             log.info("review %s: %s -> %s", review_id, outcome.contract.verdict, decision)
             return
-        self._try_fail(review_id, outcome.error or outcome.outcome.value, cost)
+        self._try_fail(
+            review_id,
+            outcome.error or outcome.outcome.value,
+            cost,
+            final=outcome.outcome == Outcome.BUDGET_EXCEEDED,
+        )
 
     def _recover_earlier_attempt(self, review_id: int, task_key: str) -> None:
         """A killed attempt left its transcript where this attempt is about to work."""
@@ -201,8 +206,10 @@ class ReviewWorker:
         except (ApiError, OSError) as e:
             log.warning("review %s: could not record its cost: %s", review_id, e)
 
-    def _try_fail(self, review_id: int, error: str, cost: dict[str, Any]) -> None:
+    def _try_fail(
+        self, review_id: int, error: str, cost: dict[str, Any], *, final: bool = False
+    ) -> None:
         try:
-            self.api.fail_review(review_id, redact(error)[:2000], cost)
+            self.api.fail_review(review_id, redact(error)[:2000], cost, final=final)
         except ApiError as e:
             log.warning("review %s: could not report failure (%s)", review_id, e)

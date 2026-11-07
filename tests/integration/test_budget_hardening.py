@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from axiom.api.app import create_app
 from axiom.config import Settings, get_settings
 from axiom.domain.roles import Actor, ActorKind
-from axiom.domain.task_machine import TaskCommand, TaskState
+from axiom.domain.task_machine import ActorNotPermitted, TaskCommand, TaskState
 from axiom.errors import AssignmentRejected, Forbidden, InvalidInput, NotExecutionOwner
 from axiom.orchestrator import budgets
 from axiom.orchestrator.assignment import claim_next
@@ -34,7 +34,16 @@ from axiom.runtimes.sandbox import SandboxRuntime
 from axiom.state.db import Conn, connect
 from axiom.worker.harness import test_command as command_for
 from tests.conftest import TEST_TOKENS
-from tests.integration.helpers import DEV1, DEV2, HUMAN, do, drive_to, events_for, new_task
+from tests.integration.helpers import (
+    DEV1,
+    DEV2,
+    HUMAN,
+    do,
+    drive_to,
+    escalated,
+    events_for,
+    new_task,
+)
 from tests.integration.test_reviews import PASS, REV, SEC, _in_review
 
 C, S = TaskCommand, TaskState
@@ -172,27 +181,98 @@ def test_racing_reviewers_never_reserve_more_than_the_day(
 # ---- reviews and the task's budget ---------------------------------------------------------
 
 
+def _left(db: Conn, key: str, amount: str) -> None:
+    """Set the task's budget so exactly this much is left."""
+    spent = budgets.task_spent(db, get_task(db, key).id)
+    set_task_budget(db, HUMAN, key, spent + Decimal(amount))
+
+
 def test_a_review_run_is_capped_by_what_the_task_has_left(org: Conn) -> None:
     key = _in_review(org)
-    set_task_budget(
-        org, HUMAN, key, budgets.task_spent(org, get_task(org, key).id) + Decimal("0.30")
-    )
+    _left(org, key, "0.60")
     claimed = claim_review(org, REV)
-    assert claimed is not None and claimed.run_budget_usd == Decimal("0.30")
-    assert list_reviews(org, get_task(org, key).id)[0]["run_budget_usd"] == Decimal("0.30")
+    assert claimed is not None and claimed.run_budget_usd == Decimal("0.60")
+    assert list_reviews(org, get_task(org, key).id)[0]["run_budget_usd"] == Decimal("0.60")
 
 
 def test_second_reviewer_waits_when_the_first_reserved_the_rest(org: Conn) -> None:
     key = _in_review(org)
-    set_task_budget(
-        org, HUMAN, key, budgets.task_spent(org, get_task(org, key).id) + Decimal("0.30")
-    )
+    _left(org, key, "0.60")
     assert claim_review(org, REV) is not None
     before = _state_of(org, key)
     with pytest.raises(AssignmentRejected, match="reserved by runs in flight"):
         claim_review(org, SEC)
     assert _state_of(org, key) == before
     assert get_task(org, key).state == S.IN_REVIEW  # waiting, not escalated: money may come back
+
+
+def test_a_reviewer_wont_start_on_too_little_while_money_may_come_back(org: Conn) -> None:
+    """SOC-005: the first reviewer held $1, the second was given $0.28 and could never finish."""
+    key = _in_review(org)
+    _left(org, key, "1.28")
+    first = claim_review(org, SEC)
+    assert first is not None and first.run_budget_usd == Decimal(1)
+    before = _state_of(org, key)
+    with pytest.raises(AssignmentRejected, match="reserved"):
+        claim_review(org, REV)  # $0.28 is free: below what a review needs
+    assert _state_of(org, key) == before
+    # The first finishes under its reservation, and the rest is free again.
+    submit_review(org, SEC, first.review_id, PASS, {"cost": {"usd": "0.36"}})
+    second = claim_review(org, REV)
+    assert second is not None and second.run_budget_usd == Decimal("0.92")
+
+
+def test_a_task_that_cant_pay_for_a_review_escalates_before_spending(org: Conn) -> None:
+    key = _in_review(org)
+    _left(org, key, "0.40")
+    spent = budgets.task_spent(org, get_task(org, key).id)
+    assert claim_review(org, REV) is None
+    assert get_task(org, key).state == S.WAITING_FOR_HUMAN
+    event = [e for e in events_for(org, key) if e["to_state"] == S.WAITING_FOR_HUMAN][-1]
+    assert "a run needs" in event["payload"]["reason"]
+    assert budgets.task_spent(org, get_task(org, key).id) == spent
+    assert budgets.reserved(org) == 0
+    assert {r["status"] for r in list_reviews(org, get_task(org, key).id)} == {"SUPERSEDED"}
+
+
+def test_a_day_running_short_makes_a_review_wait_not_escalate(
+    org: Conn, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The task can pay. Tomorrow there'll be money again, so the task shouldn't bother a human."""
+    key = _in_review(org)
+    monkeypatch.setattr(
+        get_settings(), "daily_budget_usd", budgets.daily_spent(org) + Decimal("0.30")
+    )
+    with pytest.raises(AssignmentRejected):
+        claim_review(org, REV)
+    assert get_task(org, key).state == S.IN_REVIEW
+
+
+def test_a_review_out_of_budget_isnt_retried(org: Conn) -> None:
+    key = _in_review(org)
+    claimed = claim_review(org, REV)
+    assert claimed is not None
+    payload = {"cost": {"usd": "0.40"}}
+    fail_review_run(org, REV, claimed.review_id, "budget exceeded", payload, final=True)
+    review = next(
+        r for r in list_reviews(org, get_task(org, key).id) if r["id"] == claimed.review_id
+    )
+    assert review["status"] == "ERROR" and review["cost_usd"] == Decimal("0.40")
+    task = get_task(org, key)
+    assert task.state == S.WAITING_FOR_HUMAN
+    event = [e for e in events_for(org, key) if e["to_state"] == S.WAITING_FOR_HUMAN][-1]
+    assert "budget exceeded" in event["payload"]["reason"]  # it says why
+
+
+def test_a_crashed_review_is_still_retried(org: Conn) -> None:
+    key = _in_review(org)
+    claimed = claim_review(org, REV)
+    assert claimed is not None
+    fail_review_run(org, REV, claimed.review_id, "crashed")
+    review = next(
+        r for r in list_reviews(org, get_task(org, key).id) if r["id"] == claimed.review_id
+    )
+    assert review["status"] == "PENDING"
 
 
 def test_a_spent_task_escalates_instead_of_starting_a_review(org: Conn) -> None:
@@ -387,3 +467,104 @@ def test_the_agents_sandbox_gets_the_projects_python(
     )
     SandboxRuntime().run(request)
     assert "UV_PYTHON=3.12" in seen["extra_env"]
+
+
+# ---- reviewing again ------------------------------------------------------------------------
+
+
+def test_rereview_gets_fresh_reviews_on_the_same_commit_without_new_work(org: Conn) -> None:
+    key = escalated(org)
+    task = get_task(org, key)
+    executions = len(_executions(org, key))
+    assert do(org, key, C.REREVIEW, HUMAN).state == S.IN_REVIEW
+    fresh = [r for r in list_reviews(org, task.id) if r["status"] == "PENDING"]
+    assert {r["role"] for r in fresh} == {"code_reviewer", "security_reviewer"}
+    assert {r["head_sha"] for r in fresh} == {task.head_sha}
+    assert get_task(org, key).review_rounds == task.review_rounds + 1
+    assert len(_executions(org, key)) == executions  # no developer ran
+    claimed = claim_review(org, REV)
+    assert claimed is not None and claimed.head_sha == task.head_sha
+
+
+def test_rereview_can_reach_awaiting_merge(org: Conn) -> None:
+    key = escalated(org)
+    do(org, key, C.REREVIEW, HUMAN)
+    for actor in (REV, SEC):
+        claimed = claim_review(org, actor)
+        assert claimed is not None
+        submit_review(org, actor, claimed.review_id, PASS, {"cost": {"usd": "0.30"}})
+    assert get_task(org, key).state == S.AWAITING_MERGE
+
+
+def test_a_question_from_the_agent_cant_be_rereviewed(org: Conn) -> None:
+    """It needs an answer: there may be nothing to review."""
+    key = drive_to(org, S.WAITING_FOR_HUMAN)
+    before = _state_of(org, key)
+    with pytest.raises(InvalidInput, match="answer it"):
+        do(org, key, C.REREVIEW, HUMAN)
+    assert _state_of(org, key) == before
+
+
+def test_rereview_needs_money_left(org: Conn) -> None:
+    key = escalated(org)
+    set_task_budget(org, HUMAN, key, budgets.task_spent(org, get_task(org, key).id))
+    before = _state_of(org, key)
+    with pytest.raises(InvalidInput, match="raise it first"):
+        do(org, key, C.REREVIEW, HUMAN)
+    assert _state_of(org, key) == before
+
+
+def test_only_a_human_rereviews(org: Conn) -> None:
+    key = escalated(org)
+    before = _state_of(org, key)
+    for actor in (DEV1, REV, Actor(ActorKind.SYSTEM, "x")):
+        with pytest.raises(ActorNotPermitted):
+            do(org, key, C.REREVIEW, actor)
+    assert _state_of(org, key) == before
+
+
+def test_a_task_with_no_pr_cant_be_merged_from_waiting(org: Conn) -> None:
+    key = drive_to(org, S.WAITING_FOR_HUMAN)
+    before = _state_of(org, key)
+    with pytest.raises(InvalidInput, match="no pull request"):
+        do(org, key, C.MERGE, HUMAN)
+    assert _state_of(org, key) == before
+
+
+def test_a_budget_too_small_for_a_second_round_goes_to_a_human(org: Conn) -> None:
+    """A round costs about a dollar. A task with $2 can't pay for two, and says so midway."""
+    key = new_task(org, budget_usd=Decimal("2.00")).key
+    for _round in range(2):
+        do(org, key, C.ASSIGN)
+        do(org, key, C.START, DEV1)
+        payload = {"summary": "work", "commit": "abc", "cost": {"usd": "0.60"}}
+        do(org, key, C.SUBMIT, DEV1, payload=payload)
+        first = claim_review(org, REV)
+        assert first is not None
+        fail = {"verdict": "FAIL", "summary": "no", "findings": []}
+        if _round == 0:
+            submit_review(org, REV, first.review_id, fail, {"cost": {"usd": "0.25"}})
+        else:
+            submit_review(org, REV, first.review_id, PASS, {"cost": {"usd": "0.25"}})
+    # $1.70 spent, by two developer runs and two reviews: $0.30 can't pay for the last review.
+    assert claim_review(org, SEC) is None
+    assert get_task(org, key).state == S.WAITING_FOR_HUMAN
+
+
+def test_the_soc_005_sequence_end_to_end(org: Conn) -> None:
+    """What really happened, replayed: a $1.50 task, $0.22 of development, both reviewers."""
+    key = new_task(org, budget_usd=Decimal("1.50")).key
+    do(org, key, C.ASSIGN)
+    do(org, key, C.START, DEV1)
+    payload = {"summary": "tests", "commit": "abc", "cost": {"usd": "0.22"}}
+    do(org, key, C.SUBMIT, DEV1, payload=payload)
+    first = claim_review(org, SEC)
+    assert first is not None and first.run_budget_usd == Decimal(1)
+    with pytest.raises(AssignmentRejected):
+        claim_review(org, REV)
+    submit_review(org, SEC, first.review_id, PASS, {"cost": {"usd": "0.36"}})
+    second = claim_review(org, REV)
+    assert second is not None and second.run_budget_usd == Decimal("0.92")  # was $0.28
+    submit_review(org, REV, second.review_id, PASS, {"cost": {"usd": "0.39"}})
+    task = get_task(org, key)
+    assert task.state == S.AWAITING_MERGE and task.budget_spent_usd == Decimal("0.97")

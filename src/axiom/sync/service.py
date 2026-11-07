@@ -1,7 +1,7 @@
 """The GitHub sync: map what happens on GitHub to task commands (ADR-010). Deterministic, read-only
 towards GitHub, and the only bridge from GitHub back into Axiom.
 
-For every task in IN_REVIEW or AWAITING_MERGE with a pull request:
+For every task in IN_REVIEW, AWAITING_MERGE or WAITING_FOR_HUMAN with a pull request:
 
 - PR merged by a human           -> merge (DONE), actor human:github-<login>
     ...while still IN_REVIEW     -> approve (human override) + merge, flagged early
@@ -108,8 +108,10 @@ def sync_task(conn: Conn, reader: GitHubReader, key: str) -> str:
         actor = github_actor((pr.get("merged_by") or {}).get("login"))
         with conn.transaction():
             row = lock_task(conn, key)
-            early = row["state"] == TaskState.IN_REVIEW
-            if early:  # merged on GitHub before Axiom's gate finished: a human decision
+            # An escalated task has no gate left to pass, but it didn't pass one either.
+            early = row["state"] in (TaskState.IN_REVIEW, TaskState.WAITING_FOR_HUMAN)
+            if row["state"] == TaskState.IN_REVIEW:
+                # merged on GitHub before Axiom's gate finished: a human decision
                 apply_locked(
                     conn,
                     row,
@@ -143,6 +145,9 @@ def sync_task(conn: Conn, reader: GitHubReader, key: str) -> str:
             payload = {"source": "github", "pr": number, "reason": "PR closed"}
             apply_locked(conn, row, TaskCommand.CANCEL, actor, payload=payload)
         return "cancelled"
+
+    if task["state"] == TaskState.WAITING_FOR_HUMAN:
+        return "nothing to do"  # it's with you: only a merge or a close above changes that
 
     request = _human_change_request(
         conn, task, reader.reviews(owner, repo, number), reader.comments(owner, repo, number)
@@ -188,7 +193,7 @@ def sync_task(conn: Conn, reader: GitHubReader, key: str) -> str:
 def sync_once(conn: Conn, reader: GitHubReader) -> dict[str, str]:
     """One pass over every task waiting on GitHub. One task's failure never blocks the others."""
     keys = [r["key"] for r in conn.execute(
-        """SELECT key FROM tasks WHERE state IN ('IN_REVIEW', 'AWAITING_MERGE')
+        """SELECT key FROM tasks WHERE state IN ('IN_REVIEW', 'AWAITING_MERGE', 'WAITING_FOR_HUMAN')
              AND pull_request_url IS NOT NULL ORDER BY id"""
     ).fetchall()]  # fmt: skip
     results = {}

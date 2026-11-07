@@ -31,6 +31,8 @@ stateDiagram-v2
     IN_REVIEW --> READY: request_changes<br/>(a review FAILs or CI red)
     IN_REVIEW --> WAITING_FOR_HUMAN: escalate<br/>(round cap, review ERROR)
     AWAITING_MERGE --> READY: reject_merge (human)<br/>or report_conflict (sync)
+    WAITING_FOR_HUMAN --> IN_REVIEW: rereview (human)
+    WAITING_FOR_HUMAN --> DONE: merge (human, has a PR)
     AWAITING_MERGE --> DONE: merge (human)
     DONE --> [*]
     CANCELLED --> [*]
@@ -64,11 +66,12 @@ Terminal states: **DONE**, **CANCELLED**. FAILED is not terminal; a human can `r
 | 10 | `approve` → REVIEW_APPROVED | IN_REVIEW | AWAITING_MERGE | system (aggregator) / human override | aggregator: all required reviews PASS and CI success | open reviews superseded |
 | 11 | `request_changes` → TASK_REOPENED | IN_REVIEW | READY | system (aggregator) / human override | aggregator: a review FAIL or CI failure | `review_rounds += 1`; findings stored as feedback; open reviews superseded |
 | 12 | `reject_merge` → TASK_REOPENED | AWAITING_MERGE | READY | human | — | `review_rounds += 1` |
-| 13 | `merge` → TASK_DONE | AWAITING_MERGE | DONE | human | — | #2 on dependents |
+| 13 | `merge` → TASK_DONE | AWAITING_MERGE, WAITING_FOR_HUMAN | DONE | human | from WAITING_FOR_HUMAN: has a pull request | #2 on dependents |
 | 14 | `retry` → TASK_RETRIED | FAILED | READY | human | — | `attempt_count = 0` |
 | 15 | `cancel` → TASK_CANCELLED | any non-terminal | CANCELLED | human | — | active execution → CANCELLED; open reviews superseded |
 | 16 | `escalate` → TASK_ESCALATED | IN_REVIEW | WAITING_FOR_HUMAN | system (aggregator) | review round cap reached, or a review ERROR | open reviews superseded; reason stored |
 | 17 | `report_conflict` → TASK_REOPENED | IN_REVIEW, AWAITING_MERGE | READY | system (github-sync) | GitHub says the PR conflicts with the default branch | `review_rounds += 1`; open reviews superseded; the next run merges the default branch first |
+| 18 | `rereview` → TASK_REREVIEW_REQUESTED | WAITING_FOR_HUMAN | IN_REVIEW | human | escalated from review; has a commit; budget not spent | `review_rounds += 1`; fresh reviews on the same commit |
 
 For `fail` and `time_out`, the target is READY while `attempt_count` (after the increment) is
 ≤ `max_retries` **and** the task's budget is not exhausted (summed execution cost < `budget_usd`);

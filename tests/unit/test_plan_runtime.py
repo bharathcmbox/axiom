@@ -151,3 +151,9 @@ def test_an_outcome_survives_the_trip_back(tmp_path: Path) -> None:
 )
 def test_a_damaged_outcome_is_a_failed_run_not_a_crash(tmp_path: Path, data: Any) -> None:
     assert plan_outcome_from_dict(data, tmp_path).outcome == Outcome.FAILED
+
+
+def test_the_planner_is_told_what_a_task_really_costs() -> None:
+    """It gave a QA task $1.50, which one review round could have used up."""
+    rules = " ".join(PLAN_RULES.split())
+    assert "at least $1.50" in rules and "$0.70" in rules

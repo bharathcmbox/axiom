@@ -37,6 +37,7 @@ from tests.integration.helpers import (
     REAPER,
     do,
     drive_to,
+    escalated,
     events_for,
     expire_lease,
     snapshot,
@@ -77,7 +78,8 @@ def test_legal_cases_cover_every_rule() -> None:
 @pytest.mark.parametrize("case", LEGAL, ids=_id)
 def test_legal_transition(org: Conn, case: tuple[TaskCommand, TaskState, int, TaskState]) -> None:
     command, source, max_retries, expected = case
-    key = drive_to(org, source, max_retries=max_retries)
+    guarded = source == S.WAITING_FOR_HUMAN and command in (C.REREVIEW, C.MERGE)
+    key = escalated(org) if guarded else drive_to(org, source, max_retries=max_retries)
     before = events_for(org, key)
 
     task = do(org, key, command)
@@ -89,7 +91,7 @@ def test_legal_transition(org: Conn, case: tuple[TaskCommand, TaskState, int, Ta
     assert len(transitions) == 1
     [event] = transitions
     review_types = sorted(e["type"] for e in new_events if e["review_id"] is not None)
-    if command == C.SUBMIT:
+    if command in (C.SUBMIT, C.REREVIEW):
         assert review_types == ["REVIEW_REQUESTED", "REVIEW_REQUESTED"]  # code + security
     elif source == S.IN_REVIEW:
         assert review_types == ["REVIEW_SUPERSEDED", "REVIEW_SUPERSEDED"]

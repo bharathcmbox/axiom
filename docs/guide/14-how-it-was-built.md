@@ -122,6 +122,8 @@ flowchart LR
 | Workers held the Docker socket | The hardening plan | The launcher, ADR-016 |
 | Adding Python 3.12 and 3.13 to the sandbox image quietly moved `uv` from 3.14 to 3.13 | The T5 drill's patch being rejected for the wrong reason | Each project sets its Python |
 | The planner's rules were written but never given to the model | A test expecting them in the prompt | Passed as the system prompt, with a test |
+| Reservations starved a reviewer ($0.28 for a job costing $0.40), and it was retried with less. A task cost $1.69 against $1.50, with $0.72 wasted | The first real QA run, plan 1 | A minimum run budget, no retry when out of budget (ADR-013) |
+| A failed review forced a developer rerun, and sync couldn't see a merge of an escalated PR | The same run | `rereview`; sync watches WAITING_FOR_HUMAN |
 | The first report flattered the system: "$0.03 per merged task" came from old demo tasks | Reading its output on real data | Demo tasks tagged, the demo script tags its own |
 
 **Process mistakes** also happened, and are worth knowing:

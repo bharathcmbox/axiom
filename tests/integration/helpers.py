@@ -29,6 +29,7 @@ DEFAULT_ACTOR: dict[TaskCommand, Actor] = {
     C.TIME_OUT: REAPER,
     C.APPROVE: HUMAN,
     C.REPORT_CONFLICT: Actor(ActorKind.SYSTEM, "github-sync"),
+    C.REREVIEW: HUMAN,
     C.REQUEST_CHANGES: HUMAN,
     C.REJECT_MERGE: HUMAN,
     C.MERGE: HUMAN,
@@ -99,6 +100,22 @@ def drive_to(db: Conn, state: TaskState, *, max_retries: int | None = None) -> s
     for command in PATH[state]:
         do(db, key, command)
     assert get_task(db, key).state == state
+    return key
+
+
+def escalated(db: Conn) -> str:
+    """A task sent to a human from review, with a commit and a pull request."""
+    key = new_task(db).key
+    do(db, key, C.ASSIGN)
+    do(db, key, C.START)
+    submitted = {
+        "summary": "done",
+        "commit": "abc123",
+        "branch": "axiom/x",
+        "pr_url": "https://github.com/o/r/pull/1",
+    }
+    do(db, key, C.SUBMIT, payload=submitted)
+    do(db, key, C.ESCALATE, payload={"reason": "review could not be completed"})
     return key
 
 

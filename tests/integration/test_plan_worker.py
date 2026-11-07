@@ -115,7 +115,6 @@ def test_an_off_contract_plan_goes_back_with_its_problems(
     ("scenario", "error"),
     [
         (PlanScenario.CRASH, "planner crashed"),
-        (PlanScenario.BUDGET_EXCEEDED, "budget exceeded"),
         (PlanScenario.TRY_TO_EDIT, "planner modified the workspace"),
     ],
 )
@@ -127,6 +126,16 @@ def test_bad_runs_count_as_failed_attempts(
     plan = plans.get_plan(api_tokens, plan_id)
     assert plan["status"] == "REQUESTED" and plan["attempt_count"] == 1
     assert error in plan["error"] and plan["cost_usd"] == Decimal("0.35")
+
+
+def test_a_plan_run_out_of_budget_isnt_retried(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    plan_id = _request(api_tokens, remote)
+    _worker(api_url, tmp_path, FakePlanner(scenario=PlanScenario.BUDGET_EXCEEDED)).run_once()
+    plan = plans.get_plan(api_tokens, plan_id)
+    assert plan["status"] == "ERROR" and "budget exceeded" in plan["error"]
+    assert _worker(api_url, tmp_path, FakePlanner()).run_once() is False
 
 
 def test_three_bad_runs_end_in_error(

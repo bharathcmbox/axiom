@@ -13,7 +13,12 @@ from psycopg.types.json import Jsonb
 
 from axiom.config import get_settings
 from axiom.contracts import InvalidResult, parse_review
-from axiom.domain.review_machine import ReviewCommand, ReviewState, next_review_state
+from axiom.domain.review_machine import (
+    MAX_REVIEW_ATTEMPTS,
+    ReviewCommand,
+    ReviewState,
+    next_review_state,
+)
 from axiom.domain.roles import Actor, ActorKind
 from axiom.domain.task_machine import TaskCommand
 from axiom.errors import (
@@ -23,6 +28,7 @@ from axiom.errors import (
     LeaseExpired,
     NotExecutionOwner,
     NotFound,
+    TooLittleBudget,
 )
 from axiom.orchestrator import budgets
 from axiom.orchestrator.aggregator import AGGREGATOR, aggregate
@@ -119,7 +125,14 @@ def claim_review(
                 payload={"reason": f"task budget of ${task['budget_usd']} is spent"},
             )
             return None
-        run_budget = budgets.reserve(conn, task, get_settings().review_budget_usd)
+        settings = get_settings()
+        try:
+            run_budget = budgets.reserve(
+                conn, task, settings.review_budget_usd, minimum=settings.review_min_run_usd
+            )
+        except TooLittleBudget as e:
+            apply_locked(conn, task, TaskCommand.ESCALATE, AGGREGATOR, payload={"reason": str(e)})
+            return None
         target = next_review_state(ReviewCommand.CLAIM, ReviewState(review["status"]), actor.kind)
         updated = conn.execute(
             """UPDATE reviews SET status = %s, reviewer_agent_id = %s, run_budget_usd = %s,
@@ -248,9 +261,16 @@ def submit_review(
 
 
 def fail_review_run(
-    conn: Conn, actor: Actor, review_id: int, error: str, payload: dict[str, Any] | None = None
+    conn: Conn,
+    actor: Actor,
+    review_id: int,
+    error: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    final: bool = False,
 ) -> str:
-    """The reviewer's run crashed or produced no valid contract: retry, or ERROR after 3."""
+    """The reviewer's run crashed or produced no valid contract: retry, or ERROR after 3. `final`:
+    it ran out of budget, so a retry would have less money and fail the same way."""
     cost_usd, tokens_in, tokens_out = budgets.parse_cost(payload or {})  # failures cost money too
     with conn.transaction():
         task, review = _review_for_update(conn, review_id)
@@ -261,7 +281,15 @@ def fail_review_run(
         if budgets.is_estimated(payload or {}) and cost_usd is not None:
             conn.execute("UPDATE reviews SET cost_estimated = true WHERE id = %s", (review_id,))
         return _retry_or_error(
-            conn, actor, task, review, ReviewCommand.FAIL_RUN, "REVIEW_RUN_FAILED", error, cost_usd
+            conn,
+            actor,
+            task,
+            review,
+            ReviewCommand.FAIL_RUN,
+            "REVIEW_RUN_FAILED",
+            error,
+            cost_usd,
+            final=final,
         )
 
 
@@ -325,10 +353,15 @@ def _retry_or_error(
     event: str,
     error: str,
     cost_usd: Decimal | None,
+    *,
+    final: bool = False,
 ) -> str:
     attempts = review["attempt_count"] + 1
     target = next_review_state(
-        command, ReviewState(review["status"]), actor.kind, attempts_after=attempts
+        command,
+        ReviewState(review["status"]),
+        actor.kind,
+        attempts_after=MAX_REVIEW_ATTEMPTS if final else attempts,
     )
     conn.execute(
         # Unknown stays NULL, not 0: a killed run's estimate is only recorded where no cost exists.

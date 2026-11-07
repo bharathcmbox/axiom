@@ -213,6 +213,51 @@ reach, and `reject_merge` stays human-only.
 A conflict counts as a review round, so repeated ones bring the round cap closer. A conflict in a file the task
 may not change can't be resolved by its agent: it's told to ask you.
 
+### What the first real plan taught
+
+Plan 1's QA task had $1.50. It should have cost $0.97. It cost **$1.69** and ended with no code review:
+
+| Step | Budget given | Spent |
+|---|---|---|
+| QA agent | $1.50 | $0.22 |
+| Security reviewer, first to claim | $1.00 | $0.36, PASS |
+| Code reviewer, attempt 1 | $0.28 | $0.40, ran out |
+| Code reviewer, attempt 2 | $0.52 | $0.43, ran out |
+| Code reviewer, attempt 3 | $0.09 | $0.28, ran out |
+
+Budget reservations (ADR-013) stop two runs spending the same money, but nothing said how little a run could be
+given, and a run that ran out was retried with less. The budget is only checked between requests, so a run on
+very little overshoots it by a large share.
+
+```mermaid
+flowchart TB
+    c["Reviewer claims"] --> f{"At least $0.50 free?"}
+    f -->|yes| r["Runs with up to $1"]
+    f -->|no| w{"Is the task itself short of it?"}
+    w -->|"no: others hold reservations, or the day is short"| wait["Waits. Nothing spent"]
+    w -->|"yes, with nothing reserved"| e["To you, before spending"]
+    r --> o{"Ran out anyway?"}
+    o -->|yes| e2["To you at once, no retry"]
+    o -->|no| done["Verdict"]
+    e --> y{"You decide"}
+    e2 --> y
+    y -->|"raise the budget, rereview"| again["Fresh reviews,<br/>same commit, no new work"]
+    y -->|"merge or close the PR"| sync["Sync records it,<br/>merge flagged as before the gate"]
+```
+
+| Fix | Test |
+|---|---|
+| A reviewer waits rather than start on too little | `test_a_reviewer_wont_start_on_too_little_while_money_may_come_back` |
+| A task that can't pay goes to you before spending | `test_a_task_that_cant_pay_for_a_review_escalates_before_spending` |
+| Out of budget means no retry | `test_a_review_out_of_budget_isnt_retried` |
+| `rereview` reviews the same commit again | `test_rereview_gets_fresh_reviews_on_the_same_commit_without_new_work` |
+| Sync sees a merge or close while a task is with you | `test_merging_an_escalated_task_is_recorded_and_flagged` |
+| The real sequence, replayed: now $0.97 and approved | `test_the_soc_005_sequence_end_to_end` |
+
+A `rereview` counts as a round, so such a task won't count as first-pass in the metrics, though the agent's work may
+have been fine. While one task's review waits, reviewers holding the next review in the queue wait too: small
+enough now, and worth watching with more work in parallel.
+
 ### QA tasks
 
 A QA task is an ordinary task with role `qa`, taken by `QA-01` through the same harness. A plan can only keep it to

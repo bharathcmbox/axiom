@@ -144,11 +144,18 @@ class PlanWorker:
             status = self.api.submit_plan(plan_id, outcome.contract, cost)
             log.info("plan %s: %s", plan_id, status)
             return
-        self._try_fail(plan_id, outcome.error or outcome.outcome.value, cost)
+        self._try_fail(
+            plan_id,
+            outcome.error or outcome.outcome.value,
+            cost,
+            final=outcome.outcome == Outcome.BUDGET_EXCEEDED,
+        )
 
-    def _try_fail(self, plan_id: int, error: str, cost: dict[str, Any]) -> None:
+    def _try_fail(
+        self, plan_id: int, error: str, cost: dict[str, Any], *, final: bool = False
+    ) -> None:
         try:
-            self.api.fail_plan(plan_id, redact(error)[:2000], cost)
+            self.api.fail_plan(plan_id, redact(error)[:2000], cost, final=final)
         except (ApiError, OSError) as e:
             log.warning("plan %s: could not report failure (%s)", plan_id, e)
 

@@ -360,7 +360,7 @@ PLAN = {
             "acceptance_criteria": ["CLAUDE.md changed"],
             "role": "developer",
             "allowed_paths": ["CLAUDE.md"],
-            "budget_usd": 2.0,
+            "budget_usd": 3.0,  # it needs a second round for the conflict
             "depends_on": [],
         },
         {
@@ -370,7 +370,7 @@ PLAN = {
             "acceptance_criteria": ["tests exist"],
             "role": "qa",
             "allowed_paths": ["tests/test_all.py"],
-            "budget_usd": 1.0,
+            "budget_usd": 2.0,
             "depends_on": ["app", "guide"],
         },
     ],

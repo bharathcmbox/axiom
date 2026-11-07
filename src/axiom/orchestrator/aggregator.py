@@ -39,7 +39,11 @@ def decide(
     """Pure decision: ("wait" | "approve" | "request_changes" | "escalate", payload)."""
     statuses = {r["role"]: r["status"] for r in reviews}
     if any(s == "ERROR" for s in statuses.values()):
-        failed = [r["role"] for r in reviews if r["status"] == "ERROR"]
+        failed = [
+            f"{r['role']} ({r['error']})" if r.get("error") else r["role"]
+            for r in reviews
+            if r["status"] == "ERROR"
+        ]
         return "escalate", {"reason": f"review could not be completed: {', '.join(failed)}"}
 
     ci_current = task.get("ci_sha") is not None and task.get("ci_sha") == task.get("head_sha")

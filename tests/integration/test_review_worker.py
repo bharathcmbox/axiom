@@ -197,3 +197,22 @@ def test_a_restarted_reviewer_costs_the_run_it_lost_when_killed(
     worker.run_forever()  # a second restart changes nothing
     row = next(r for r in worker.api.task_reviews(key) if r["id"] == review_id)
     assert Decimal(row["cost_usd"]) == Decimal("0.1") and row["cost_estimated"] is True
+
+
+def test_a_review_that_runs_out_of_budget_isnt_retried_by_the_worker(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    key = _submitted(api_tokens, api_url, remote, tmp_path)
+    runtime = FakeReviewer(scenario=ReviewScenario.BUDGET_EXCEEDED)
+    assert reviewer(api_url, tmp_path, lambda: runtime).run_once()
+    assert get_task(api_tokens, key).state == TaskState.WAITING_FOR_HUMAN
+    assert "ERROR" in {r["status"] for r in _reviews(api_tokens)}
+
+
+def test_a_crashed_review_is_retried_by_the_worker(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    key = _submitted(api_tokens, api_url, remote, tmp_path)
+    runtime = FakeReviewer(scenario=ReviewScenario.CRASH)
+    assert reviewer(api_url, tmp_path, lambda: runtime).run_once()
+    assert get_task(api_tokens, key).state == TaskState.IN_REVIEW

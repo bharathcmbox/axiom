@@ -393,3 +393,51 @@ def test_parse_pr_url() -> None:
     assert parse_pr_url(PR_URL) == ("bharathcmbox", "tiny-agenticsoc", 7)
     with pytest.raises(GitHubReadError):
         parse_pr_url("https://evil.example/o/r/pull/1")
+
+
+# ---- a task escalated to a human ------------------------------------------------------------
+
+
+def _waiting(db: Conn) -> str:
+    key = _submitted(db)
+    do(db, key, C.ESCALATE, payload={"reason": "review could not be completed"})
+    assert get_task(db, key).state == S.WAITING_FOR_HUMAN
+    return key
+
+
+def test_merging_an_escalated_task_is_recorded_and_flagged(
+    org: Conn, gh: tuple[FakeGitHub, GitHubReader]
+) -> None:
+    state, reader = gh
+    key = _waiting(org)
+    state.pr |= {"state": "closed", "merged": True, "merged_by": {"login": "bharathcmbox"}}
+    assert sync_once(org, reader) == {key: "merged (early)"}
+    assert get_task(org, key).state == S.DONE
+    done = next(e for e in events_for(org, key) if e["type"] == "TASK_DONE")
+    assert done["actor"] == "human:github-bharathcmbox"
+    assert done["payload"]["merged_before_gate"] is True
+
+
+def test_closing_an_escalated_tasks_pr_cancels_it(
+    org: Conn, gh: tuple[FakeGitHub, GitHubReader]
+) -> None:
+    state, reader = gh
+    key = _waiting(org)
+    state.pr |= {"state": "closed", "merged": False}
+    assert sync_once(org, reader) == {key: "cancelled"}
+    assert get_task(org, key).state == S.CANCELLED
+
+
+def test_nothing_else_moves_a_task_thats_with_a_human(
+    org: Conn, gh: tuple[FakeGitHub, GitHubReader]
+) -> None:
+    """A conflict, a comment or CI waits until the human has decided."""
+    state, reader = gh
+    key = _waiting(org)
+    state.pr["mergeable"] = False
+    state.comments = [_comment("/axiom changes rename it")]
+    state.runs[get_task(org, key).head_sha or ""] = [_run("completed", "failure")]
+    before = len(events_for(org, key))
+    assert sync_once(org, reader) == {key: "nothing to do"}
+    assert get_task(org, key).state == S.WAITING_FOR_HUMAN
+    assert len(events_for(org, key)) == before

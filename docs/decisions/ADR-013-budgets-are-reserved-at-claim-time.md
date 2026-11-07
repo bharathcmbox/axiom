@@ -27,3 +27,10 @@ and each be told they may spend it. The same applied to two reviewers on one tas
 - A killed run's reservation ends when its lease expires, and its cost is unknown until it is
   estimated (chapter 15). A sandbox orphaned by a killed worker can keep spending, up to its own
   budget stop, after the reservation has ended. That is a known limit.
+
+## Revision (2026-11-07)
+Reservations alone could hand a run too little to finish. In the first real QA run, one reviewer reserved $1 of
+$1.28, the second was given $0.28 for work costing about $0.40, and it was retried three times with less. Reviews and
+planning runs now have a minimum. Below it a claim waits if money may come back, and a task that can't pay goes to a
+human before spending. A run that runs out of budget isn't retried. Developer runs have no minimum yet.
+

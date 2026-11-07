@@ -83,8 +83,12 @@ class AxiomClient:
         r = self._call("POST", f"/reviews/{review_id}/submit", {"contract": contract, "cost": cost})
         return str(r["decision"])
 
-    def fail_review(self, review_id: int, error: str, cost: dict[str, Any]) -> str:
-        r = self._call("POST", f"/reviews/{review_id}/fail", {"error": error, "cost": cost})
+    def fail_review(
+        self, review_id: int, error: str, cost: dict[str, Any], *, final: bool = False
+    ) -> str:
+        r = self._call(
+            "POST", f"/reviews/{review_id}/fail", {"error": error, "cost": cost, "final": final}
+        )
         return str(r["decision"])
 
     def record_execution_cost(self, execution_id: int, cost: dict[str, Any]) -> None:
@@ -103,8 +107,12 @@ class AxiomClient:
         r = self._call("POST", f"/plans/{plan_id}/submit", {"contract": contract, "cost": cost})
         return str(r["status"])
 
-    def fail_plan(self, plan_id: int, error: str, cost: dict[str, Any]) -> str:
-        r = self._call("POST", f"/plans/{plan_id}/fail", {"error": error, "cost": cost})
+    def fail_plan(
+        self, plan_id: int, error: str, cost: dict[str, Any], *, final: bool = False
+    ) -> str:
+        r = self._call(
+            "POST", f"/plans/{plan_id}/fail", {"error": error, "cost": cost, "final": final}
+        )
         return str(r["status"])
 
     def record_plan_cost(self, plan_id: int, cost: dict[str, Any]) -> None:

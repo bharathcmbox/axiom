@@ -30,7 +30,7 @@ DOC: dict[str, tuple[frozenset[str], tuple[str, ...], str]] = {
 
 
 def test_doc_table_was_parsed() -> None:
-    assert len(DOC_ROWS) == 17
+    assert len(DOC_ROWS) == 18
     assert DOC["create"] == (frozenset(), ("PENDING",), "TASK_CREATED")
 
 
@@ -79,7 +79,7 @@ def test_actor_kinds(command: TaskCommand, kind: ActorKind) -> None:
 
 
 def test_only_humans_merge_retry_cancel_answer_and_reject() -> None:
-    for cmd in ("merge", "retry", "cancel", "answer", "reject_merge", "assign"):
+    for cmd in ("merge", "retry", "cancel", "answer", "reject_merge", "assign", "rereview"):
         assert RULES[TaskCommand(cmd)].actors == {ActorKind.HUMAN}
 
 

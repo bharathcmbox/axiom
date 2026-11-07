@@ -71,6 +71,9 @@ stateDiagram-v2
 | S33 | Two developers run at once | Both finish, each on its own PR | tested | `test_from_a_plan_to_every_task_merged` |
 | S34 | Another merge makes a PR conflict | READY; rework merges the default branch and resolves it | tested, with real git | `test_a_real_conflict_is_handed_to_the_agent_with_its_markers` |
 | S35 | A QA task tries to change the code it tests | Nothing published | tested | `test_a_qa_agent_cannot_change_the_code_it_tests` |
+| S36 | A reviewer would be given too little | waits, or goes to you before spending | tested; found **live** (SOC-005) | `test_the_soc_005_sequence_end_to_end` |
+| S37 | A review failed, not the work | you rereview the same commit, no developer run | tested | `test_rereview_gets_fresh_reviews_on_the_same_commit_without_new_work` |
+| S38 | You merge or close while a task is with you | recorded; a merge is flagged | tested | `test_merging_an_escalated_task_is_recorded_and_flagged` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine

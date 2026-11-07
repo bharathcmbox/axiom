@@ -18,7 +18,7 @@ from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
 from axiom.config import get_settings
-from axiom.errors import AssignmentRejected, InvalidInput
+from axiom.errors import AssignmentRejected, InvalidInput, TooLittleBudget
 from axiom.state.db import Conn
 
 ZERO = Decimal("0")
@@ -86,9 +86,15 @@ def run_budget(conn: Conn, task_id: int, budget_usd: Decimal | None) -> Decimal:
     return available(conn, task_id, budget_usd, get_settings().max_run_budget_usd)
 
 
-def reserve(conn: Conn, row: dict[str, Any], run_cap: Decimal) -> Decimal:
+def reserve(
+    conn: Conn, row: dict[str, Any], run_cap: Decimal, *, minimum: Decimal = ZERO
+) -> Decimal:
     """Check budgets and return what the new run may spend, or raise AssignmentRejected. The
-    caller stores the result on the run in this transaction, while the lock is held."""
+    caller stores the result on the run in this transaction, while the lock is held.
+
+    Below `minimum` a run would burn money and fail (SOC-005 paid $1.11 for that). If what's
+    missing is only reserved, it may come back, so the claim waits. If the task simply hasn't got
+    it, waiting can't help: TooLittleBudget, before anything is spent."""
     conn.execute("SELECT pg_advisory_xact_lock(%s)", (BUDGET_LOCK_ID,))
     cap = get_settings().daily_budget_usd
     if daily_spent(conn) >= cap:
@@ -97,14 +103,21 @@ def reserve(conn: Conn, row: dict[str, Any], run_cap: Decimal) -> Decimal:
     if budget is not None and task_spent(conn, row["id"]) >= budget:
         raise AssignmentRejected(f"task {row['key']} has spent its budget of ${budget}")
     run = available(conn, row["id"], budget, run_cap)
-    if run <= ZERO:
+    if run <= ZERO or run < minimum:
+        if budget is not None and minimum > ZERO:
+            left = budget - task_spent(conn, row["id"])
+            if left < minimum and reserved(conn, row["id"]) == ZERO:
+                raise TooLittleBudget(
+                    f"task {row['key']} has ${left} left of its ${budget}, "
+                    f"and a run needs ${minimum}"
+                )
         raise AssignmentRejected(
             f"no budget free for {row['key']}: what is left is reserved by runs in flight"
         )
     return run
 
 
-def reserve_from_the_day(conn: Conn, run_cap: Decimal) -> Decimal:
+def reserve_from_the_day(conn: Conn, run_cap: Decimal, *, minimum: Decimal = ZERO) -> Decimal:
     """Like `reserve`, for work that belongs to no task: a planning run."""
     conn.execute("SELECT pg_advisory_xact_lock(%s)", (BUDGET_LOCK_ID,))
     cap = get_settings().daily_budget_usd
@@ -112,7 +125,7 @@ def reserve_from_the_day(conn: Conn, run_cap: Decimal) -> Decimal:
         raise AssignmentRejected(f"daily budget of ${cap} is spent")
     left = min(run_cap, cap - daily_spent(conn) - reserved(conn))
     run = max(left, ZERO).quantize(CENT, rounding=ROUND_DOWN)
-    if run <= ZERO:
+    if run <= ZERO or run < minimum:
         raise AssignmentRejected("no budget free: what is left is reserved by runs in flight")
     return run
 

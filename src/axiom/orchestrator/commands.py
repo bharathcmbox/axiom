@@ -137,6 +137,13 @@ def apply_locked(
     if command == TaskCommand.SUBMIT:
         _record_delivery(conn, task_id, payload)
 
+    no_pr = not row["pull_request_url"]
+    if command == TaskCommand.MERGE and state == TaskState.WAITING_FOR_HUMAN and no_pr:
+        raise InvalidInput(f"task {row['key']} has no pull request to merge")
+    if command == TaskCommand.REREVIEW:
+        _check_can_rereview(conn, row)
+        review_rounds += 1  # each round has its own reviews
+
     budget_exhausted = False
     if command in (TaskCommand.FAIL, TaskCommand.TIME_OUT):
         budget_exhausted = budgets.task_budget_exhausted(conn, task_id, row["budget_usd"])
@@ -182,11 +189,26 @@ def apply_locked(
     # Consequences, logged after the transition that caused them.
     if command == TaskCommand.SUBMIT:
         review_store.request_reviews(conn, row, payload.get("commit"))
+    elif command == TaskCommand.REREVIEW:
+        review_store.request_reviews(conn, row | {"review_rounds": review_rounds}, row["head_sha"])
     elif state == TaskState.IN_REVIEW:  # approve / request_changes / escalate / cancel
         review_store.supersede_open_reviews(conn, task_id, reason=str(command))
     if command == TaskCommand.MERGE:
         for dependent_id in pending_dependents(conn, task_id):
             promote_if_ready(conn, dependent_id)
+
+
+def _check_can_rereview(conn: Conn, row: dict[str, Any]) -> None:
+    """Only for reviews that failed: a question from the agent needs an answer, not a review."""
+    last = conn.execute(
+        """SELECT type FROM events WHERE task_id = %s AND to_state IS NOT NULL
+           ORDER BY id DESC LIMIT 1""",
+        (row["id"],),
+    ).fetchone()
+    if last is None or last["type"] != "TASK_ESCALATED" or not row["head_sha"]:
+        raise InvalidInput(f"task {row['key']} wasn't escalated from review, so answer it instead")
+    if budgets.task_budget_exhausted(conn, row["id"], row["budget_usd"]):
+        raise InvalidInput(f"task {row['key']} has spent its budget: raise it first")
 
 
 def _resolve_assignee(

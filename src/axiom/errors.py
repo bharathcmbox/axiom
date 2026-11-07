@@ -25,6 +25,10 @@ class DependenciesNotMet(AxiomError):
     pass
 
 
+class TooLittleBudget(AxiomError):
+    """A task's budget can't pay for a run and waiting won't help. Caught where it's raised."""
+
+
 class AssignmentRejected(AxiomError):
     """The agent cannot take this task (disabled, wrong role, at capacity)."""
 

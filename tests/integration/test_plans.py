@@ -216,6 +216,16 @@ def test_no_planning_when_the_day_is_spoken_for(
     assert _snapshot(db_plans, second) == before
 
 
+def test_no_planning_on_too_little(db_plans: Conn, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A run below the minimum would burn money and fail, so it waits instead."""
+    monkeypatch.setattr(get_settings(), "daily_budget_usd", Decimal("0.40"))
+    plan_id = _requested(db_plans)
+    before = _snapshot(db_plans, plan_id)
+    with pytest.raises(AssignmentRejected):
+        plans.claim_plan(db_plans, EM)
+    assert _snapshot(db_plans, plan_id) == before
+
+
 def test_planning_costs_count_toward_the_day(db_plans: Conn) -> None:
     before = budgets.daily_spent(db_plans)
     _proposed(db_plans)

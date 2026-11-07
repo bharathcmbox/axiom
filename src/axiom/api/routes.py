@@ -221,7 +221,7 @@ def submit_plan_route(plan_id: int, body: PlanSubmitIn, conn: ConnDep, actor: Ac
 @router.post("/plans/{plan_id}/fail", tags=["plans"])
 def fail_plan_route(plan_id: int, body: PlanFailIn, conn: ConnDep, actor: ActorDep) -> PlanOut:
     payload = {"cost": body.cost} if body.cost else None
-    plans.fail_plan_run(conn, actor, plan_id, body.error, payload)
+    plans.fail_plan_run(conn, actor, plan_id, body.error, payload, final=body.final)
     return PlanOut.model_validate(plans.get_plan(conn, plan_id))
 
 
@@ -451,7 +451,9 @@ def fail_review_route(
     review_id: int, body: ReviewFailIn, conn: ConnDep, actor: ActorDep
 ) -> DecisionOut:
     payload = {"cost": body.cost} if body.cost else None
-    decision = reviews.fail_review_run(conn, actor, review_id, body.error, payload)
+    decision = reviews.fail_review_run(
+        conn, actor, review_id, body.error, payload, final=body.final
+    )
     return DecisionOut(review_id=review_id, decision=decision)
 
 

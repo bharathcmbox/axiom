@@ -104,6 +104,7 @@ class PlanSubmitIn(BaseModel):
 class PlanFailIn(BaseModel):
     error: str = Field(min_length=1)
     cost: dict[str, Any] | None = None
+    final: bool = Field(default=False, description="Out of budget: don't retry")
 
 
 class PlanRejectIn(BaseModel):
@@ -285,6 +286,7 @@ class ReviewSubmitIn(BaseModel):
 class ReviewFailIn(BaseModel):
     error: str = Field(min_length=1)
     cost: dict[str, Any] | None = None
+    final: bool = Field(default=False, description="Out of budget: don't retry")
 
 
 class ReviewOut(BaseModel):

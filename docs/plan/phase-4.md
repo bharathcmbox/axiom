@@ -145,6 +145,9 @@ tag and are left out by default.
 | Parallel PRs can conflict after one merges | Sync reads `mergeable`; a conflicted PR gets `request_changes` with that as feedback, and rework merges `main` first |
 
 > **Added:** [hardening before T5](phase-4-hardening.md), approved 2026-11-06.
+>
+> **Budget:** the live spend cap is raised from $30 to **$35** (the human, 2026-11-07), so the smaller
+> budgets can be adjusted where the first real runs showed they were too tight.
 
 ### 4.4 Two live drills on the real repo
 

@@ -14,7 +14,7 @@ from psycopg.types.json import Jsonb
 
 from axiom.config import get_settings
 from axiom.contracts import InvalidResult, PlanTask, parse_plan
-from axiom.domain.plan_machine import PlanCommand, PlanState, next_plan_state
+from axiom.domain.plan_machine import MAX_PLAN_ATTEMPTS, PlanCommand, PlanState, next_plan_state
 from axiom.domain.roles import Actor, ActorKind, Role
 from axiom.errors import (
     AssignmentRejected,
@@ -255,7 +255,9 @@ def claim_plan(
         if held is not None and held["n"] >= agent.max_concurrent:
             raise AssignmentRejected(f"agent {agent.key} is at capacity")
         plan = _lock(conn, row["id"])
-        run_budget = budgets.reserve_from_the_day(conn, settings.plan_run_budget_usd)
+        run_budget = budgets.reserve_from_the_day(
+            conn, settings.plan_run_budget_usd, minimum=settings.plan_min_run_usd
+        )
         target = next_plan_state(PlanCommand.CLAIM, PlanState(plan["status"]), actor.kind)
         updated = conn.execute(
             """UPDATE plans SET status = %s, planner_agent_id = %s, run_budget_usd = %s,
@@ -389,8 +391,15 @@ def submit_plan(
 
 
 def fail_plan_run(
-    conn: Conn, actor: Actor, plan_id: int, error: str, payload: dict[str, Any] | None = None
+    conn: Conn,
+    actor: Actor,
+    plan_id: int,
+    error: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    final: bool = False,
 ) -> str:
+    """`final`: it ran out of budget, so a retry would fail the same way."""
     with conn.transaction():
         plan = _lock(conn, plan_id)
         next_plan_state(
@@ -401,7 +410,14 @@ def fail_plan_run(
         )
         _require_owner(actor, plan)
         return _retry_or_error(
-            conn, actor, plan, PlanCommand.FAIL_RUN, "PLAN_RUN_FAILED", error, payload or {}
+            conn,
+            actor,
+            plan,
+            PlanCommand.FAIL_RUN,
+            "PLAN_RUN_FAILED",
+            error,
+            payload or {},
+            final=final,
         )
 
 
@@ -415,10 +431,14 @@ def _retry_or_error(
     payload: dict[str, Any],
     *,
     feed_back: bool = False,
+    final: bool = False,
 ) -> str:
     attempts = plan["attempt_count"] + 1
     target = next_plan_state(
-        command, PlanState(plan["status"]), actor.kind, attempts_after=attempts
+        command,
+        PlanState(plan["status"]),
+        actor.kind,
+        attempts_after=MAX_PLAN_ATTEMPTS if final else attempts,
     )
     cost_usd, _, _ = budgets.parse_cost(payload)
     feedback = [f"Your last plan was refused: {error[:FEEDBACK_LIMIT]}"] if feed_back else []

@@ -44,6 +44,7 @@ class TaskCommand(StrEnum):
     REQUEST_CHANGES = "request_changes"
     REJECT_MERGE = "reject_merge"
     REPORT_CONFLICT = "report_conflict"
+    REREVIEW = "rereview"
     MERGE = "merge"
     RETRY = "retry"
     CANCEL = "cancel"
@@ -143,7 +144,22 @@ RULES: dict[TaskCommand, Rule] = {
             _S,
             "TASK_REOPENED",
         ),
-        Rule(TaskCommand.MERGE, frozenset({S.AWAITING_MERGE}), (S.DONE,), _H, "TASK_DONE"),
+        # A review failed for its own reasons, such as budget. Reviews again, without new work.
+        Rule(
+            TaskCommand.REREVIEW,
+            frozenset({S.WAITING_FOR_HUMAN}),
+            (S.IN_REVIEW,),
+            _H,
+            "TASK_REREVIEW_REQUESTED",
+        ),
+        # From WAITING_FOR_HUMAN: you merged a PR Axiom had escalated to you. Its guard needs a PR.
+        Rule(
+            TaskCommand.MERGE,
+            frozenset({S.AWAITING_MERGE, S.WAITING_FOR_HUMAN}),
+            (S.DONE,),
+            _H,
+            "TASK_DONE",
+        ),
         Rule(TaskCommand.RETRY, frozenset({S.FAILED}), (S.READY,), _H, "TASK_RETRIED"),
         Rule(TaskCommand.CANCEL, NON_TERMINAL_STATES, (S.CANCELLED,), _H, "TASK_CANCELLED"),
     )
