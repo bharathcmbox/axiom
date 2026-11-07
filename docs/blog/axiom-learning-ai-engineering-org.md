@@ -1,15 +1,17 @@
 ---
 title: "Axiom: what I learned building a small AI engineering organization"
 date: 2026-11-07
+draft: false
+description: "A learning project: a control plane that runs a small team of AI coding agents on a real repository, with a human as CTO. What it solves, how it differs from Claude Code and Codex, how it was built, and where it falls short."
 tags: [ai-agents, claude, software-engineering, security, learning]
 ---
-
-# Axiom: what I learned building a small AI engineering organization
 
 > **This is a learning project.** Axiom is not a product, not a service, and not ready for anyone's
 > production code. I built it to understand, hands-on, what it takes to let AI coding agents do real
 > work safely: who decides, who checks, what it costs, and where it breaks. Everything below is written
 > in that spirit, including the parts that didn't work.
+
+<!--more-->
 
 ## The problem
 
