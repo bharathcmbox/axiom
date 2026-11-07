@@ -49,7 +49,31 @@ catching the planted bug. But it missed about half of Fable's smaller findings o
 
 The model never holds a credential. It runs in a sandbox that reaches the model only through a metered proxy
 holding the API key, and other sites only through an allowlist. GitHub and the Docker socket are held by separate
-services. A prompt-injection drill was refused at every step. Preparing for it found a real sandbox escape (through
+services.
+
+```mermaid
+sequenceDiagram
+    participant W as Worker<br/>holds the GitHub token
+    participant S as Sandbox, where the model runs<br/>holds no credentials
+    participant P as Model proxy<br/>holds the Anthropic key
+    participant A as Anthropic
+    participant G as GitHub
+    W->>P: open a run: one model, one budget
+    P-->>W: a run token, valid for minutes
+    W->>S: start, with only the run token
+    S->>P: model request + run token
+    Note over P: checks the token's model, budget and expiry,<br/>removes it, adds the real key
+    P->>A: model request + API key
+    A-->>P: reply
+    P-->>S: reply, with its cost metered
+    S-->>W: changed files, nothing else
+    Note over W: checks the files: allowed paths,<br/>no secrets, tests pass on a clean copy
+    W->>G: push an axiom/* branch with the GitHub token
+```
+
+A stolen run token is worth one model and one budget for a few minutes, and works only from inside Axiom's internal
+networks: the proxy isn't reachable from outside.
+The sandbox has no route to GitHub at all: only the worker pushes, after checking the work. A prompt-injection drill was refused at every step. Preparing for it found a real sandbox escape (through
 git), which was fixed before it could be used. A live check (`make check-boundaries`) proves 33 limits from
 inside real containers. The largest remaining exposure is GitHub itself: a compromised agent could push harmful
 code to its branch. Reviews, CI and a human merge stand between that branch and `main`.
