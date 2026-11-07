@@ -18,6 +18,7 @@ HUMAN_STATES = frozenset({"AWAITING_MERGE", "WAITING_FOR_HUMAN", "FAILED"})
 # Human events that are the normal flow, not an intervention.
 ROUTINE_HUMAN_EVENTS = frozenset({"TASK_CREATED", "TASK_DONE", "DEFECT_RECORDED", "TASK_TAGGED"})
 FAILURE_EVENTS = frozenset({"EXECUTION_FAILED", "EXECUTION_TIMED_OUT"})
+MACHINE_STATES = AGENT_STATES | REVIEW_STATES
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,8 @@ class TaskMetrics:
     defects: int
     developer_cost_usd: Decimal
     review_cost_usd: Decimal
+    security_findings: int = 0  # reported by security reviews that ran (not carried forward)
+    security_blocking: int = 0  # of which high or critical
 
     @property
     def cost_usd(self) -> Decimal:
@@ -56,12 +59,41 @@ def time_in_states(events: list[dict[str, Any]], now: datetime) -> dict[str, flo
     return spent
 
 
+def state_intervals(
+    events: list[dict[str, Any]], states: frozenset[str], now: datetime
+) -> list[tuple[datetime, datetime]]:
+    """When the task was in any of `states`: (entered, left) pairs, from transition events."""
+    moves = [e for e in events if e.get("to_state")]
+    out = []
+    for i, e in enumerate(moves):
+        if e["to_state"] in states:
+            end = moves[i + 1]["occurred_at"] if i + 1 < len(moves) else now
+            out.append((e["occurred_at"], end))
+    return out
+
+
+def union_seconds(intervals: list[tuple[datetime, datetime]]) -> float:
+    """Length of time covered by at least one interval: overlapping work counted once."""
+    total, cur_start, cur_end = 0.0, None, None
+    for start, end in sorted(intervals):
+        if cur_end is None or start > cur_end:
+            if cur_end is not None and cur_start is not None:
+                total += (cur_end - cur_start).total_seconds()
+            cur_start, cur_end = start, end
+        else:
+            cur_end = max(cur_end, end)
+    if cur_end is not None and cur_start is not None:
+        total += (cur_end - cur_start).total_seconds()
+    return round(total, 3)
+
+
 def task_metrics(
     task: dict[str, Any],
     events: list[dict[str, Any]],
     developer_cost: Decimal,
     review_cost: Decimal,
     now: datetime,
+    security: tuple[int, int] = (0, 0),
 ) -> TaskMetrics:
     spent = time_in_states(events, now)
     first_ready = next((e["occurred_at"] for e in events if e.get("to_state") == "READY"), None)
@@ -99,6 +131,61 @@ def task_metrics(
         defects=sum(1 for e in events if e["type"] == "DEFECT_RECORDED"),
         developer_cost_usd=developer_cost,
         review_cost_usd=review_cost,
+        security_findings=security[0],
+        security_blocking=security[1],
+    )
+
+
+@dataclass(frozen=True)
+class PlanDelivery:
+    """SPEC section 2 at the level of a specification: how long from the spec to merged work, and
+    whether running tasks in parallel saved time."""
+
+    plan_id: int
+    tasks: int
+    merged: int
+    spec_to_first_pr_s: float | None  # plan requested -> first task submitted
+    spec_to_last_merge_s: float | None  # plan requested -> last task merged; None until all ended
+    machine_s_in_sequence: float  # agents' and reviewers' time, task by task, added up
+    machine_s_elapsed: float  # the same, overlapping time counted once
+    first_pass_rate: float | None
+    defects_after_merge: int
+
+    @property
+    def saved_by_parallel_s(self) -> float:
+        return round(self.machine_s_in_sequence - self.machine_s_elapsed, 3)
+
+
+def plan_delivery(
+    plan_id: int,
+    requested_at: datetime,
+    tasks: list[TaskMetrics],
+    task_events: dict[str, list[dict[str, Any]]],
+    now: datetime,
+) -> PlanDelivery:
+    merged = [t for t in tasks if t.merged]
+    ended = all(t.state in ("DONE", "CANCELLED") for t in tasks) and bool(merged)
+    events = [e for t in tasks for e in task_events.get(t.key, [])]
+    submitted = [e["occurred_at"] for e in events if e["type"] == "TASK_SUBMITTED"]
+    done = [e["occurred_at"] for e in events if e["type"] == "TASK_DONE"]
+    intervals = [
+        iv for t in tasks for iv in state_intervals(task_events.get(t.key, []), MACHINE_STATES, now)
+    ]
+    n = len(merged)
+    return PlanDelivery(
+        plan_id=plan_id,
+        tasks=len(tasks),
+        merged=n,
+        spec_to_first_pr_s=(
+            round((min(submitted) - requested_at).total_seconds(), 3) if submitted else None
+        ),
+        spec_to_last_merge_s=(
+            round((max(done) - requested_at).total_seconds(), 3) if ended and done else None
+        ),
+        machine_s_in_sequence=round(sum((b - a).total_seconds() for a, b in intervals), 3),
+        machine_s_elapsed=union_seconds(intervals),
+        first_pass_rate=round(sum(1 for t in merged if t.first_pass) / n, 3) if n else None,
+        defects_after_merge=sum(t.defects for t in merged),
     )
 
 
@@ -117,6 +204,8 @@ class Summary:
     defects_after_merge: int
     merged_before_gate: int
     verdicts: dict[str, int] = field(default_factory=dict)
+    security_findings_per_merged: float | None = None
+    security_blocking_per_merged: float | None = None
 
 
 def summarize(metrics: list[TaskMetrics], verdicts: dict[str, int] | None = None) -> Summary:
@@ -141,4 +230,10 @@ def summarize(metrics: list[TaskMetrics], verdicts: dict[str, int] | None = None
         defects_after_merge=sum(m.defects for m in merged),
         merged_before_gate=sum(1 for m in merged if m.merged_before_gate),
         verdicts=verdicts or {},
+        security_findings_per_merged=(
+            round(sum(m.security_findings for m in merged) / n, 3) if n else None
+        ),
+        security_blocking_per_merged=(
+            round(sum(m.security_blocking for m in merged) / n, 3) if n else None
+        ),
     )

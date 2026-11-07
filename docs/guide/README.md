@@ -1,6 +1,6 @@
 # The Axiom guide: how it is built and how it works
 
-This guide is for learning. It explains what Axiom is (Phases 1–3 are built), why it is built that
+This guide is for learning. It explains what Axiom is (Phases 1–4 are built), why it is built that
 way, and how each piece works, with a diagram for almost every idea. It assumes you know Python and SQL,
 but not Postgres locking or state-machine design.
 
@@ -30,6 +30,9 @@ Doing them is the fastest way to make the ideas stick.
 
 **Short on time?** Read 1, then 13, then 14. Come back to the others when you want to know how a
 piece works.
+
+To *use* Axiom rather than learn how it works, read the [user guide](../user-guide.md) and the
+[admin guide](../admin-guide.md); the [executive summary](../exec-summary.md) is the one-page version.
 
 The reference documents sit next to this guide:
 - [state-machines.md](../state-machines.md): the transition tables;

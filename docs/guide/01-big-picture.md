@@ -33,7 +33,7 @@ flowchart LR
 ```mermaid
 flowchart TB
     L1["<b>You</b><br/>direction · specifications · priorities · approvals"]
-    L2["<b>Axiom control plane</b>  ← Phases 1, 3<br/>backlog · state machines · leases · agent registry · reviews · aggregator · event log · REST API"]
+    L2["<b>Axiom control plane</b>  ← Phases 1, 3, 4<br/>backlog · state machines · leases · agent registry · plans · reviews · aggregator · budgets · metrics · event log · REST API"]
     L3["<b>Worker runtimes</b>  ← Phases 2, 3<br/>Claude Code via the Claude Agent SDK · Codex later"]
     L4["<b>Shared infrastructure</b>  ← Phases 2, 3<br/>GitHub branches, PRs, Issues mirror · GitHub Actions · containers + worktrees"]
     L1 --> L2 --> L3 --> L4
@@ -80,7 +80,7 @@ flowchart LR
     p1["<b>Phase 1</b><br/>Control plane skeleton<br/>✅ done"]
     p2["<b>Phase 2</b><br/>First worker<br/>Claude Code adapter,<br/>sandbox, PR<br/>✅ done"]
     p3["<b>Phase 3</b><br/>Quality organization<br/>reviewers, CI gate,<br/>changes-requested loop<br/>✅ done"]
-    p4["<b>Phase 4</b><br/>Engineering management<br/>spec decomposition, QA,<br/>dashboard, reports"]
+    p4["<b>Phase 4</b><br/>Engineering management<br/>planner, QA, parallel work,<br/>metrics, dashboard, report<br/>✅ done"]
     p5["<b>Phase 5</b><br/>Scale + diversify<br/>Codex review,<br/>continuous operation"]
     p1 --> p2 --> p3 --> p4 --> p5
 ```

@@ -38,7 +38,7 @@ docker compose exec api python -m axiom.registry.tokens revoke <id>
 | POST | `/reviews/{id}/submit` | Submit a review contract; response says what the aggregator did |
 | POST | `/reviews/{id}/fail` | Report a failed reviewer run (retried, ERROR after 3) |
 | GET | `/tasks/{key}/reviews` | All reviews of a task, by round |
-| GET | `/ui`, `/ui/tasks/{key}` | Read-only HTML dashboard; signs in at `/ui/login` with a token ([chapter 15](guide/15-metrics.md#the-dashboard)) |
+| GET | `/ui`, `/ui/tasks/{key}`, `/ui/plans/{id}` | Read-only HTML dashboard; signs in at `/ui/login` with a token ([chapter 15](guide/15-metrics.md#the-dashboard)) |
 | POST | `/executions/{id}/cost`, `/reviews/{id}/cost` | Cost of a run that ended without reporting; the first report wins (agents) |
 | POST | `/projects/{key}/python-version` | Which Python uv uses in this project's sandboxes: 3.12, 3.13 or 3.14 (humans only) |
 | POST | `/projects/{key}/plans` | Submit a specification for planning (humans only) |
@@ -46,15 +46,15 @@ docker compose exec api python -m axiom.registry.tokens revoke <id>
 | POST | `/plans/{id}/approve`, `/reject`, `/cancel` | Decide on a plan (humans only) |
 | POST | `/plans/claim`, `/plans/{id}/heartbeat`, `/submit`, `/fail`, `/cost` | A planner's work (agents with the engineering manager role) |
 | POST | `/projects/{key}/test-paths` | What QA tasks may touch in this project (humans only) |
-| GET | `/metrics?project=&include_demo=` | Delivery metrics computed from the event log |
+| GET | `/metrics?project=&include_demo=` | Delivery metrics computed from the event log: summary, per task, per approved plan |
 | POST | `/tasks/{key}/tags` | Set tags, e.g. `demo` to leave a task out of metrics (humans only) |
 | POST | `/tasks/{key}/defects` | Record a defect found after merge (humans only) |
 | POST | `/baselines` | Record a comparable hand-driven task (humans only) |
 
 Commands accepted on `/tasks/{key}/commands/{command}`: `assign`, `start`, `submit`,
 `ask_human`, `answer`, `fail`, `approve`, `request_changes`, `reject_merge`,
-`merge`, `retry`, `cancel`. (`claim` is `POST /claims`; `promote`, `time_out` and `escalate` are
-internal.) Since Phase 3, `approve` and `request_changes` are made by the aggregator; over HTTP
+`merge`, `retry`, `rereview`, `cancel`. (`claim` is `POST /claims`; `promote`, `time_out`,
+`escalate` and `report_conflict` are internal.) Since Phase 3, `approve` and `request_changes` are made by the aggregator; over HTTP
 only a human can issue them, as an override. See
 [state-machines.md](state-machines.md) for which actor may issue each one, and from which
 states.

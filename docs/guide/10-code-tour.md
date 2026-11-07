@@ -114,6 +114,8 @@ flowchart TB
 | `modelproxy/server.py`, `modelproxy/runs.py` | 320 | The only holder of the Anthropic key: run tokens, budgets, metering |
 | `launcher/spec.py`, `runner.py`, `server.py` | 300 | The only holder of the Docker socket: what may be started |
 | `orchestrator/plans.py`, `plan_rules.py`, `worker/plan_harness.py` | 900 | Plans: state, the rules, and the planner worker |
+| `metrics.py`, `orchestrator/measures.py`, `report.py`, `api/ui.py` | 900 | Metrics (pure) and what loads them; the daily report; the dashboard |
+| `drills/injection.py`, `drills/review_compare.py` | 500 | Live drills: the prompt-injection scorecard; rerunning past reviews on another model |
 | `sandbox/runner.py` | 270 | What runs inside the container |
 | `sync/service.py` | 200 | GitHub → task commands |
 

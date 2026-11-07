@@ -1,9 +1,9 @@
 # Axiom — an AI engineering organization (control plane)
 
 Axiom coordinates coding agents (Claude Code first, Codex later) through a backlog, state machines,
-leases, and an event log. See SPEC.md, docs/plan/ and docs/guide/. Phases 1 (control plane),
-2 (first worker) and 3 (independent review, CI gate, GitHub sync) are done; next is Phase 4
-(engineering management). Axiom is product-agnostic: no SOC/security-product concepts in this repo;
+leases, and an event log. See SPEC.md, docs/plan/, docs/guide/, and docs/user-guide.md and docs/admin-guide.md. Phases 1 (control plane),
+2 (first worker), 3 (independent review, CI gate, GitHub sync) and 4 (planning, QA, parallel work, metrics,
+hardening) are done; next is Phase 5 (scale and diversify). Axiom is product-agnostic: no SOC/security-product concepts in this repo;
 customer projects live in their own repos.
 
 ## Commands
@@ -16,6 +16,7 @@ customer projects live in their own repos.
 - `make demo-restart` — kill/restart durability demo
 - `make worker-tokens` / `make workers` / `make workers-down` — developers, reviewers, GitHub sync
 - `make report` — daily report from the event log (`PROJECT=SOC` to filter); dashboard at /ui
+- `make agents` / `make set-model AGENT=SEC-01 MODEL=…` — who runs on which model (ADR-009 enforced)
 - `make test-docker` — sandbox isolation tests; `make test-live` — real API (announce first, costs money)
 - `scripts/check_secrets.py` — run before committing (`make hooks` installs it as a git hook)
 - `make check-boundaries` — what a compromised worker can reach, from inside a real worker

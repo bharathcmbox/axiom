@@ -118,3 +118,66 @@ def test_summary_of_nothing_is_none_not_zero() -> None:
         and s.cost_per_merged_usd is None
         and s.review_share_of_cost is None
     )
+
+
+# ---- SPEC section 2 at the level of a specification (T11) ---------------------------------------
+
+from axiom.metrics import plan_delivery, state_intervals, union_seconds  # noqa: E402
+
+
+def test_overlapping_work_is_counted_once() -> None:
+    assert union_seconds([(at(0), at(10)), (at(5), at(15)), (at(20), at(30))]) == 25 * 60
+    assert union_seconds([]) == 0
+
+
+def test_machine_time_is_agent_and_review_time_only() -> None:
+    from axiom.metrics import MACHINE_STATES
+
+    spans = state_intervals(HISTORY, MACHINE_STATES, at(1000))
+    assert sum((b - a).total_seconds() for a, b in spans) == (10 + 5 + 10 + 5) * 60
+
+
+def _task(key: str, start: float, submit: float, done: float, rounds: int = 0) -> tuple[Any, Any]:
+    events = [
+        ev(0, "TASK_READY", "READY"),
+        ev(start, "AGENT_STARTED", "IN_PROGRESS", "agent:DEV-01"),
+        ev(submit, "TASK_SUBMITTED", "IN_REVIEW", "agent:DEV-01"),
+        ev(submit + 2, "REVIEW_APPROVED", "AWAITING_MERGE"),
+        ev(done, "TASK_DONE", "DONE", "human:b"),
+    ]
+    task = {"key": key, "state": "DONE", "review_rounds": rounds, "tags": []}
+    return task_metrics(task, events, Decimal(1), Decimal(1), at(1000)), events
+
+
+def test_parallel_tasks_save_the_time_they_overlap() -> None:
+    """Two tasks of 5 min work + 2 min review each, run side by side, then one after."""
+    a, ea = _task("A-1", 10, 15, 30)
+    b, eb = _task("A-2", 10, 15, 40, rounds=1)
+    c, ec = _task("A-3", 41, 46, 60)
+    d = plan_delivery(7, at(-5), [a, b, c], {"A-1": ea, "A-2": eb, "A-3": ec}, at(1000))
+    assert d.machine_s_in_sequence == 3 * 7 * 60
+    assert d.machine_s_elapsed == 2 * 7 * 60  # A-1 and A-2 overlapped entirely
+    assert d.saved_by_parallel_s == 7 * 60
+    assert d.spec_to_first_pr_s == 20 * 60 and d.spec_to_last_merge_s == 65 * 60
+    assert d.first_pass_rate == round(2 / 3, 3) and d.merged == 3
+
+
+def test_a_plan_isnt_delivered_until_every_task_has_ended() -> None:
+    a, ea = _task("A-1", 10, 15, 30)
+    waiting = task_metrics(
+        {"key": "A-2", "state": "PENDING", "review_rounds": 0, "tags": []},
+        [ev(0, "TASK_CREATED", "PENDING")], Decimal(0), Decimal(0), at(1000),
+    )  # fmt: skip
+    d = plan_delivery(7, at(0), [a, waiting], {"A-1": ea}, at(1000))
+    assert d.spec_to_last_merge_s is None and d.merged == 1
+
+
+def test_security_findings_are_per_merged_task() -> None:
+    merged = task_metrics(TASK, HISTORY, Decimal(1), Decimal(1), at(1000), security=(3, 1))
+    open_ = task_metrics(
+        TASK | {"key": "A-2", "state": "IN_REVIEW"}, HISTORY[:5], Decimal(1), Decimal(1),
+        at(1000), security=(5, 5),
+    )  # fmt: skip
+    s = summarize([merged, open_])
+    assert s.security_findings_per_merged == 3 and s.security_blocking_per_merged == 1
+    assert summarize([]).security_findings_per_merged is None

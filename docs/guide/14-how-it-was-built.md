@@ -53,9 +53,10 @@ flowchart LR
 | 1 | Schema, task + execution machines, leases, reaper, event log, REST API, Compose | Every legal and illegal transition tested from the table; SIGKILL demo with identical before/after snapshots; clean-clone smoke test |
 | 2 | Auth, budgets, sandbox + egress allowlist, worker, verification, publisher | [PR #1](https://github.com/bharathcmbox/tiny-agenticsoc/pull/1): a real agent, 51 s, $0.15, no human input |
 | 3 | Reviews, aggregator, read-only reviewers on another model, rework on the same PR, CI, GitHub sync | [PR #2](https://github.com/bharathcmbox/tiny-agenticsoc/pull/2): a planted bug caught blind, fixed, re-reviewed, merged by the human; $1.19 |
+| 4 | Metrics, dashboard and report; hardening (model proxy, launcher, sealed git, network split); planner, plan rules and approval; QA; parallel developers and conflicts; drills | The [exit run](../runs/2026-11-07-phase-4-exit-run.md): a five-task spec planned, approved, built in parallel, reviewed and merged in 65 minutes, $8.29 |
 
 Evidence and limitations for each: [phase-1](../plan/phase-1.md), [phase-2](../plan/phase-2.md),
-[phase-3](../plan/phase-3.md). Read the history with `git log --stat`; every commit is one task.
+[phase-3](../plan/phase-3.md), [phase-4](../plan/phase-4.md). Read the history with `git log --stat`; every commit is one task.
 
 ## Decisions that shaped it
 
@@ -146,12 +147,17 @@ containers and real runs. Live runs were few and capped, and were worth far more
 | SOC-001 (Phase 2) | $0.15 |
 | Reviewer live test (Phase 3) | $0.15 |
 | SOC-002: four reviews $1.02, rework $0.17 (Phase 3) | $1.19 |
-| **Total recorded** | **about $1.57** |
+| Prompt-injection drill, DRILL-001 and -002 (Phase 4) | $1.47 |
+| Edge drill, SOC-003 (Phase 4) | $0.70 |
+| Plan 1 and its tasks, SOC-004 and -005, with a rereview (Phase 4) | $3.42 |
+| Exit run: plan 2 and SOC-006 to -010 (Phase 4) | $8.29 |
+| Reviewer comparison, 31 reviews (Phase 4) | $7.91 |
+| **Total recorded** | **about $23.36** (Phase 4: $21.79) |
 
-These are the figures the runs reported; the Anthropic Console is the authority on what was billed.
-They are also a very small sample: **one reviewed task proves the loop works, not how well it
-works.** Whether agents beat one driven session (SPEC section 1) is still unanswered; Phases 4 and
-5 exist to measure it.
+These are the figures the model proxy metered (Phase 4) or the runs reported (before it); the Anthropic Console
+is the authority on what was billed. Phase 4's live cap was $35. Eight merged tasks and one planted bug show the
+system works, not how well it works at scale. Whether agents beat one driven session (SPEC section 1) is still
+unanswered: it needs hand-driven baselines, which Phase 5 collects.
 
 ## Try it
 

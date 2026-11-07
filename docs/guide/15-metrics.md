@@ -62,6 +62,37 @@ flowchart LR
 | `verdicts` | counts of PASS / FAIL | **Not quality:** a FAIL may be a false alarm |
 | `defects_after_merge` | DEFECT_RECORDED | Only as good as your recording |
 | `merged_before_gate` | merges flagged by the sync | How often the gate was skipped |
+| `security_findings_per_merged` | findings from security reviews that ran (a carried-forward PASS is a copy, not counted again), ÷ merged tasks; also the high or critical ones | How much the security reviewer finds, not how secure the code is |
+
+### From a specification to merged work
+
+Those are per task. SPEC also asks how long a whole specification takes, and whether parallel work helps
+without hurting quality. `collect_plans` measures each approved plan:
+
+| Metric | Definition |
+|---|---|
+| `spec_to_first_pr_s` | plan requested → first task submitted. Includes the time you took to approve |
+| `spec_to_last_merge_s` | plan requested → last task merged, once every task has ended |
+| `machine_s_in_sequence` | agents' and reviewers' time, added up task by task |
+| `machine_s_elapsed` | the same time with overlaps counted once: how long the machines actually took |
+| `saved_by_parallel_s` | the difference: what running tasks side by side saved |
+| `first_pass_rate`, `defects_after_merge` | the plan's tasks only, so speed can be read beside quality |
+
+```mermaid
+gantt
+    title Machine time: in sequence versus as run (plan 2)
+    dateFormat X
+    axisFormat %s
+    section Added up
+    17 m 14 s, task by task   :0, 1034
+    section As run
+    9 m 38 s, overlaps once   :0, 578
+```
+
+For plan 2, the exit run, that's 17 m 14 s of agent and review time done in 9 m 38 s: 7 m 35 s saved by running
+tasks side by side, at an 80% first pass rate (`test_parallel_tasks_save_the_time_they_overlap`,
+`test_delivery_is_measured_per_approved_plan`, `test_security_findings_count_each_look_once`). The minutes
+saved are small next to the time spent waiting for a human, which was most of the 65 minutes.
 
 ## Recording what only you know
 

@@ -20,10 +20,10 @@ def _require_human(actor: Actor) -> None:
         raise Forbidden("only humans record this")
 
 
-def collect(
-    conn: Conn, *, project_key: str | None = None, include_demo: bool = False
-) -> tuple[list[m.TaskMetrics], m.Summary, list[dict[str, Any]]]:
-    """Per-task metrics, their summary, and the recorded baselines."""
+def _load(
+    conn: Conn, project_key: str | None, include_demo: bool
+) -> tuple[list[m.TaskMetrics], dict[str, list[dict[str, Any]]], dict[str, int], datetime]:
+    """Per-task metrics, each task's events by key, review verdict counts, and the DB clock."""
     tasks = conn.execute(
         """SELECT t.* FROM tasks t JOIN projects p ON p.id = t.project_id
            WHERE (%(p)s::text IS NULL OR p.key = %(p)s)
@@ -44,14 +44,46 @@ def collect(
         (ids,),
     ):
         verdicts[r["verdict"]] = r["n"]
+    # Security findings from reviews that ran: a carried-forward PASS is a copy, not a new look.
+    security: dict[int, tuple[int, int]] = {}
+    for r in conn.execute(
+        """SELECT r.task_id,
+                  sum(jsonb_array_length(coalesce(r.contract->'findings', '[]'))) AS n,
+                  sum((SELECT count(*) FROM jsonb_array_elements(
+                         coalesce(r.contract->'findings', '[]')) f
+                       WHERE f->>'severity' IN ('high', 'critical'))) AS blocking
+           FROM reviews r
+           WHERE r.task_id = ANY(%s) AND r.role = 'security_reviewer' AND r.verdict IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM events e WHERE e.review_id = r.id
+                             AND e.type = 'REVIEW_CARRIED_FORWARD')
+           GROUP BY r.task_id""",
+        (ids,),
+    ):
+        security[r["task_id"]] = (int(r["n"]), int(r["blocking"]))
     now_row = conn.execute("SELECT now() AS now").fetchone()
     assert now_row is not None
     now: datetime = now_row["now"]
     zero = Decimal(0)
     per_task = [
-        m.task_metrics(t, events[t["id"]], dev.get(t["id"], zero), rev.get(t["id"], zero), now)
+        m.task_metrics(
+            t,
+            events[t["id"]],
+            dev.get(t["id"], zero),
+            rev.get(t["id"], zero),
+            now,
+            security.get(t["id"], (0, 0)),
+        )
         for t in tasks
     ]
+    by_key = {t["key"]: events[t["id"]] for t in tasks}
+    return per_task, by_key, verdicts, now
+
+
+def collect(
+    conn: Conn, *, project_key: str | None = None, include_demo: bool = False
+) -> tuple[list[m.TaskMetrics], m.Summary, list[dict[str, Any]]]:
+    """Per-task metrics, their summary, and the recorded baselines."""
+    per_task, _, verdicts, _ = _load(conn, project_key, include_demo)
     baselines = conn.execute(
         """SELECT e.occurred_at, e.actor, e.payload FROM events e
            LEFT JOIN projects p ON p.id = e.project_id
@@ -60,6 +92,28 @@ def collect(
         {"p": project_key},
     ).fetchall()
     return per_task, m.summarize(per_task, verdicts), baselines
+
+
+def collect_plans(
+    conn: Conn, *, project_key: str | None = None, include_demo: bool = False
+) -> list[m.PlanDelivery]:
+    """Delivery per approved plan: from the specification to merged work."""
+    per_task, events, _, now = _load(conn, project_key, include_demo)
+    plans = conn.execute(
+        """SELECT pl.id, pl.created_at, array_agg(t.key ORDER BY t.id) AS keys
+           FROM plans pl JOIN projects p ON p.id = pl.project_id
+           JOIN tasks t ON t.plan_id = pl.id
+           WHERE pl.status = 'APPROVED' AND (%(p)s::text IS NULL OR p.key = %(p)s)
+           GROUP BY pl.id ORDER BY pl.id""",
+        {"p": project_key},
+    ).fetchall()
+    by_key = {t.key: t for t in per_task}
+    out = []
+    for pl in plans:
+        tasks = [by_key[k] for k in pl["keys"] if k in by_key]
+        if tasks:
+            out.append(m.plan_delivery(pl["id"], pl["created_at"], tasks, events, now))
+    return out
 
 
 def _costs(conn: Conn, table: str, ids: list[int]) -> dict[int, Decimal]:

@@ -93,3 +93,73 @@ def test_only_humans_record_and_input_is_checked(org: Conn) -> None:
         record_baseline(org, HUMAN, project_key="AX", title="t", minutes=-1, cost_usd=Decimal(0))
     with pytest.raises(NotFound):
         record_defect(org, HUMAN, "AX-999", "d", "low")
+
+
+# ---- SPEC section 2: security findings per PR, and delivery per specification (T11) ------------
+
+LOW = {
+    "verdict": "PASS",
+    "summary": "fine",
+    "findings": [{"severity": "low", "issue": "log line", "required_change": "drop it"}],
+}
+
+
+def _submitted(db: Conn, key: str, commit: str = "a") -> None:
+    do(db, key, C.CLAIM)
+    do(db, key, C.START)
+    do(db, key, C.SUBMIT, payload={"summary": "s", "commit": commit, "cost": {"usd": "0.10"}})
+
+
+def test_security_findings_count_each_look_once(org: Conn) -> None:
+    """A rereview carries security's PASS forward with its findings: that's a copy, not a second
+    finding."""
+    from axiom.orchestrator.reviews import fail_review_run
+
+    key = new_task(org).key
+    _submitted(org, key)
+    sec = claim_review(org, SEC)
+    assert sec is not None
+    submit_review(org, SEC, sec.review_id, LOW, {"cost": {"usd": "0.30"}})
+    code = claim_review(org, REV)
+    assert code is not None
+    fail_review_run(org, REV, code.review_id, "budget exceeded", final=True)
+    do(org, key, C.REREVIEW)
+    again = claim_review(org, REV)
+    assert again is not None
+    submit_review(org, REV, again.review_id, PASS, {"cost": {"usd": "0.30"}})
+    do(org, key, C.MERGE)
+    [m], summary, _ = collect(org)
+    assert (m.security_findings, m.security_blocking) == (1, 0)
+    assert summary.security_findings_per_merged == 1
+
+
+def test_delivery_is_measured_per_approved_plan(org: Conn) -> None:
+    from axiom.orchestrator import plans
+    from axiom.orchestrator.measures import collect_plans
+    from axiom.registry.projects import set_test_paths
+    from tests.integration.test_plans import EM, GOOD
+
+    set_test_paths(org, HUMAN, "AX", ["agent/tests/**"])
+    plan_id = int(
+        plans.request_plan(
+            org, HUMAN, project_key="AX", specification="Build it.", budget_usd=Decimal(10)
+        )["id"]
+    )
+    assert plans.claim_plan(org, EM) is not None
+    plans.submit_plan(org, EM, plan_id, GOOD, {"cost": {"usd": "0.40"}})
+    plans.approve_plan(org, HUMAN, plan_id)
+    keys = [r["key"] for r in org.execute(
+        "SELECT key FROM tasks WHERE plan_id = %s ORDER BY id", (plan_id,))]  # fmt: skip
+    impl = keys[0]
+    _submitted(org, impl)
+    for actor in (REV, SEC):
+        claimed = claim_review(org, actor)
+        assert claimed is not None
+        submit_review(org, actor, claimed.review_id, PASS, {"cost": {"usd": "0.20"}})
+    do(org, impl, C.MERGE)
+    [d] = collect_plans(org)
+    assert (d.plan_id, d.tasks, d.merged) == (plan_id, 3, 1)
+    assert d.spec_to_first_pr_s is not None and d.spec_to_first_pr_s >= 0
+    assert d.spec_to_last_merge_s is None  # two tasks still to go
+    assert d.machine_s_in_sequence >= d.machine_s_elapsed >= 0
+    assert collect_plans(org, project_key="NOPE") == []

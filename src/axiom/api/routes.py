@@ -506,6 +506,11 @@ def metrics_route(
             for m in per_task
         ],
         "baselines": baselines,
+        "plans": [
+            {k: _jsonable(v) for k, v in asdict(d).items()}
+            | {"saved_by_parallel_s": d.saved_by_parallel_s}
+            for d in measures.collect_plans(conn, project_key=project, include_demo=include_demo)
+        ],
     }
 
 

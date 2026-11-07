@@ -1,7 +1,7 @@
 # Architecture
 
 The control plane first (Phase 1), then workers and sandboxes (Phase 2), then reviews, the
-aggregator and the GitHub sync (Phase 3), at the end of this page. To learn it, read
+aggregator and the GitHub sync (Phase 3), then planning, QA and hardening (Phase 4), at the end of this page. To learn it, read
 [the guide](guide/README.md).
 
 Axiom's control plane is a single FastAPI process in front of PostgreSQL. All state lives in
@@ -124,3 +124,21 @@ human merges on GitHub → sync → merge → DONE, recorded as human:github-<lo
 them. Lock order everywhere: task row → execution or review row → agent row → advisory lock.
 Detail: [guide chapter 12](guide/12-reviews-and-ci.md); every scenario:
 [chapter 13](guide/13-scenarios.md).
+
+## Planning, QA, parallel work and metrics (Phase 4, ADR-011 to ADR-017)
+
+```
+human → spec + budget → plans table (own state machine, leases)
+planner worker (EM-01, Opus 5.5) → read-only sandbox → plan contract
+plan_rules (pure) → broken: back to the planner | ok: PROPOSED → human approves → every task created, or none
+tasks → up to two developers at once on independent tasks; QA tasks wait for the work they test
+sync sees mergeable=false → report_conflict → the agent merges main and resolves the markers on the same PR
+metrics (pure, from the event log) → per task, per plan (spec to merge, time saved by parallel work) → /metrics, report, /ui
+```
+
+Hardening: one service holds each secret or capability. `model-proxy` holds the Anthropic key and meters every
+run (ADR-015), `sandbox-launcher` holds the Docker socket (ADR-016), and the harness uses a sealed copy of `.git`
+(ADR-014). Workers sit on internal networks and reach only GitHub (ADR-017). Budgets are reserved at claim time;
+a review gets its share of what the task has left (ADR-013). Reviewer models are set per agent, and the registry
+enforces that they differ from the developers' (ADR-009). Detail: [guide chapter 16](guide/16-planning.md),
+[chapter 15](guide/15-metrics.md), [chapter 11](guide/11-workers-and-sandbox.md).

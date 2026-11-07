@@ -1,6 +1,6 @@
 # Phase 4 plan: engineering management
 
-Status: **approved 2026-11-06**, with defaults for Q1–Q6, Q8 and Q9, and a revised Q7 (below).
+Status: **complete 2026-11-07** (exit criteria below, each with its evidence). Approved 2026-11-06, with defaults for Q1–Q6, Q8 and Q9, and a revised Q7 (below).
 Credits: $197 of Anthropic credits expire 2026-11-19. **Phase 4 API spend cap: $30**; the rest is
 for other projects. Live work finishes before that date.
 Goal (SPEC.md): give Axiom a spec; it proposes a task breakdown; you approve it; agents deliver it,
@@ -202,12 +202,12 @@ Every task: lint, the full suite, one commit, plus its guide section and diagram
 ## 6. Phase 4 exit criteria
 
 - [x] A multi-task spec is delivered end to end: planned, approved by you, developed in parallel where independent, reviewed, merged by you (T10): [run record](../runs/2026-11-07-phase-4-exit-run.md).
-- [ ] Nothing runs before you approve the plan; a bad plan cannot reach you (T6, T7).
-- [ ] Every SPEC section 2 metric is computed from the event log and reported, with the exit run's real numbers (T1, T2, T10).
+- [x] Nothing runs before you approve the plan; a bad plan cannot reach you (T6, T7): tasks exist only after a human's approval, all or none (`test_only_a_human_can_decide`, `test_a_failure_midway_through_approval_creates_nothing`); a plan that breaks a rule goes back to the planner (`test_an_invalid_plan_never_reaches_a_human`); live, both real plans were approved by you before anything ran.
+- [x] Every SPEC section 2 metric is computed from the event log and reported, with the exit run's real numbers (T1, T2, T10, T11): cycle time per task and per specification, first-pass rate and rework, security findings per PR, cost per merged task, human interventions, defects after merge, and time saved by parallel work beside quality ([chapter 15](../guide/15-metrics.md#from-a-specification-to-merged-work); `make report PROJECT=SOC`). The exit check found the last three missing; they were added in T11.
 - [x] The prompt-injection drill is run and its result recorded, whatever it is (T4): [result](../drills/2026-11-06-prompt-injection.md).
-- [ ] Real CI failure sends work back, and closing a PR cancels the task, both for real (T5).
-- [ ] Known cost gaps closed: killed runs estimated, reviews within task budgets (T3).
-- [ ] QA tasks can't change implementation files (T6, T9).
+- [x] Real CI failure sends work back, and closing a PR cancels the task, both for real (T5): [edge drill](../drills/2026-11-06-edge-drill.md), SOC-003, PR #5.
+- [x] Known cost gaps closed: killed runs estimated, reviews within task budgets (T3): `test_killed_run_estimate_is_close_to_what_a_real_run_cost`, `test_a_missing_cost_is_estimated_and_marked`, `test_a_review_run_is_capped_by_what_the_task_has_left`; review budgets then tuned from live runs (ADR-013, revisions 1 and 2).
+- [x] QA tasks can't change implementation files (T6, T9): plans keep QA inside the project's test paths (`test_qa_may_not_change_anything_else`), and verification refuses anything else (`test_a_qa_agent_cannot_change_the_code_it_tests`); live, SOC-005, SOC-009 and SOC-010 changed test files only.
 
 ## 7. Exit spec (for tiny-agenticsoc)
 

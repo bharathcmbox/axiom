@@ -56,7 +56,7 @@ code to its branch. Reviews, CI and a human merge stand between that branch and 
 
 ## Cost to build
 
-The API cost of building and proving all four phases was about $24: under $2 for Phases 1–3, and about $22 for
+The API cost of building and proving all four phases was about $23: under $2 for Phases 1–3, and $21.79 for
 Phase 4, including drills and the reviewer comparison. That's within a $35 cap. Every figure comes from the
 metered proxy and the event log.
 

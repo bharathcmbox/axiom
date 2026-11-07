@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from axiom.config import get_settings
-from axiom.metrics import Summary, TaskMetrics
+from axiom.metrics import PlanDelivery, Summary, TaskMetrics
 from axiom.orchestrator import budgets, measures
 from axiom.orchestrator.plans import list_plans
 from axiom.state.db import Conn, connect
@@ -48,6 +48,10 @@ def fmt_duration(seconds: float | None) -> str:
     return f"{minutes}m {secs:02d}s"
 
 
+def _num(value: float | None) -> str:
+    return NONE if value is None else f"{value:g}"
+
+
 def fmt_pct(value: float | None) -> str:
     return NONE if value is None else f"{value * 100:.0f}%"
 
@@ -66,6 +70,7 @@ def render_report(
     today_events: dict[str, int],
     title: str = "Axiom daily report",
     plans: list[dict[str, Any]] | None = None,
+    deliveries: list[PlanDelivery] | None = None,
 ) -> str:
     lines = [f"# {title}", ""]
     waiting = [t for t in tasks if t.state in NEEDS_YOU]
@@ -99,9 +104,23 @@ def render_report(
         f"- Human interventions per merged task: {interventions}",
         f"- Reviews' share of cost: {fmt_pct(summary.review_share_of_cost)}",
         f"- Review verdicts: {summary.verdicts or NONE} (a FAIL may be a false alarm)",
+        f"- Security findings per merged task: {_num(summary.security_findings_per_merged)} "
+        f"(high or critical: {_num(summary.security_blocking_per_merged)})",
         f"- Defects found after merge: {summary.defects_after_merge}",
         f"- Merged before the gate: {summary.merged_before_gate}",
     ]
+    if deliveries:
+        lines += ["", "## Specifications delivered", ""]
+        for d in deliveries:
+            lines.append(
+                f"- Plan {d.plan_id}: {d.merged} of {d.tasks} tasks merged; spec to first PR "
+                f"{fmt_duration(d.spec_to_first_pr_s)}, to last merge "
+                f"{fmt_duration(d.spec_to_last_merge_s)}; agents and reviewers "
+                f"{fmt_duration(d.machine_s_in_sequence)} one after another, "
+                f"{fmt_duration(d.machine_s_elapsed)} as run (parallel work saved "
+                f"{fmt_duration(d.saved_by_parallel_s)}); first pass {fmt_pct(d.first_pass_rate)}, "
+                f"defects after merge {d.defects_after_merge}"
+            )
     lines += ["", "## Baselines (hand-driven, for comparison)", ""]
     if baselines:
         for b in baselines:
@@ -128,6 +147,7 @@ def build_report(conn: Conn, project_key: str | None = None) -> str:
         daily_cap=get_settings().daily_budget_usd,
         today_events={r["type"]: r["n"] for r in rows},
         plans=list_plans(conn, project_key=project_key),
+        deliveries=measures.collect_plans(conn, project_key=project_key),
         title=f"Axiom daily report: {project_key}" if project_key else "Axiom daily report",
     )
 
