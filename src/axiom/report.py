@@ -16,7 +16,8 @@ from axiom.state.db import Conn, connect
 
 NEEDS_YOU = {
     "AWAITING_MERGE": "merge it, comment `/axiom changes …`, or close the PR",
-    "WAITING_FOR_HUMAN": "answer it, or cancel it",
+    "WAITING_FOR_HUMAN": "read why in its timeline, then answer, rereview, merge or close its PR, "
+    "or cancel it",
     "FAILED": "raise its budget and retry, or cancel it",
 }
 

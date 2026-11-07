@@ -128,6 +128,14 @@ def test_report(api_tokens: Conn) -> None:
     assert "without these, the main question can't be answered" in report
 
 
+def test_an_escalated_task_lists_every_way_out(api_tokens: Conn) -> None:
+    """Since rereview and merging from WAITING_FOR_HUMAN, "answer or cancel" was no longer true."""
+    drive_to(api_tokens, TaskState.WAITING_FOR_HUMAN)
+    report = build_report(api_tokens, "AX")
+    line = next(x for x in report.splitlines() if "WAITING_FOR_HUMAN" in x)
+    assert all(word in line for word in ("timeline", "answer", "rereview", "merge", "cancel"))
+
+
 def test_report_with_nothing_to_do(org: Conn) -> None:
     report = build_report(org)
     assert "## Needs you\n\nNothing." in report and "Cost per merged task (all spend): -" in report
