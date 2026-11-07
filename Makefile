@@ -4,7 +4,7 @@ DOCKER_GID := $(shell stat -c %g /var/run/docker.sock 2>/dev/null || echo 999)
 AXIOM_WORKSPACES_DIR ?= $(HOME)/.axiom/work
 export AXIOM_UID AXIOM_GID DOCKER_GID AXIOM_WORKSPACES_DIR
 
-.PHONY: check-boundaries hooks report worker-tokens workers workers-down db up down logs test test-docker test-live sandbox-image lint fmt migrate seed smoke demo-restart
+.PHONY: agents set-model check-boundaries hooks report worker-tokens workers workers-down db up down logs test test-docker test-live sandbox-image lint fmt migrate seed smoke demo-restart
 
 db:
 	docker compose up -d --wait db
@@ -76,6 +76,22 @@ workers-down:
 # The daily report: plain numbers from the event log, no LLM.
 report:
 	docker compose exec -T api python -m axiom.report $(PROJECT)
+
+# Human commands through the API. HUMAN_ENV is a chmod-600 file with HTOK=<your human token>.
+HUMAN_ENV ?= $(HOME)/.axiom/human.env
+API ?= http://127.0.0.1:8000
+
+agents:
+	@. $(HUMAN_ENV) && curl -sS --fail-with-body -H "Authorization: Bearer $$HTOK" $(API)/agents \
+	  | python3 -c 'import json,sys; [print(*(a[k] for k in sys.argv[1:])) for a in json.load(sys.stdin)]' key role model enabled \
+	  | sed 's/ None / (worker-default) /' | column -t
+
+# make set-model AGENT=SEC-01 MODEL=claude-sonnet-5-5   (MODEL=default clears it)
+set-model:
+	@test -n "$(AGENT)" -a -n "$(MODEL)" || { echo "usage: make set-model AGENT=SEC-01 MODEL=claude-sonnet-5-5"; exit 2; }
+	@. $(HUMAN_ENV) && curl -sS --fail-with-body -X POST -H "Authorization: Bearer $$HTOK" \
+	  -H 'content-type: application/json' $(API)/agents/$(AGENT)/model \
+	  -d '{"model": $(if $(filter default,$(MODEL)),null,"$(MODEL)")}' && echo
 
 # Optional, once per clone: refuse a commit containing a real secret from .env.
 hooks:

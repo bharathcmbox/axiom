@@ -642,6 +642,17 @@ half of Fable's smaller findings, mostly about whether tests really test. Fable 
 but once chose FAIL for an issue it had rated `low` the first time. Eight PRs are a small sample. The models aren't
 changed; the [comparison](../runs/2026-11-07-reviewer-comparison.md) suggests a split for you to decide on.
 
+Each reviewer's model is a setting on its agent, picked up at its next review without a restart:
+
+```bash
+make agents                                            # who runs on what
+make set-model AGENT=SEC-01 MODEL=claude-sonnet-5-5    # security reviews on Sonnet
+make set-model AGENT=SEC-01 MODEL=default              # back to the worker's default (Fable)
+```
+
+The registry refuses a reviewer on a model a developer or QA agent uses, and the reverse (ADR-009,
+`test_a_reviewer_cant_run_on_the_model_that_writes_the_code`). Every change is an `AGENT_MODEL_CHANGED` event.
+
 ## Try it
 
 1. `uv run pytest tests/unit/test_review_machine.py -v`: every review command × state, checked

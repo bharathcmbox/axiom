@@ -17,6 +17,36 @@ from axiom.state.db import Conn
 
 AGENT_KEY = re.compile(r"^[A-Z]+-[0-9]{2}$")
 
+# ADR-009: work is reviewed on a model other than the one that wrote it. Agents with no model run
+# on their worker's default, so these stand in for them (worker/__main__.py, review_harness.py).
+MODEL_LOCK_ID = 727_002
+MAKERS = frozenset({Role.DEVELOPER, Role.QA})
+REVIEWERS = frozenset({Role.CODE_REVIEWER, Role.SECURITY_REVIEWER})
+DEFAULT_MODEL = {Role.DEVELOPER: "claude-opus-5-5", Role.QA: "claude-opus-5-5",
+                 Role.CODE_REVIEWER: "claude-fable-5-1",
+                 Role.SECURITY_REVIEWER: "claude-fable-5-1"}  # fmt: skip
+
+
+def effective_model(role: Role, model: str | None) -> str | None:
+    return model or DEFAULT_MODEL.get(role)
+
+
+def _check_reviewed_on_another_model(conn: Conn, key: str, role: Role, model: str | None) -> None:
+    """Refuse a reviewer on a model that writes code, or a code writer on a reviewer's model."""
+    if role not in MAKERS | REVIEWERS:
+        return
+    # Two changes at once could each pass against the other's old model: serialize them.
+    conn.execute("SELECT pg_advisory_xact_lock(%s)", (MODEL_LOCK_ID,))
+    mine = effective_model(role, model)
+    others = MAKERS if role in REVIEWERS else REVIEWERS
+    for row in conn.execute("SELECT key, role, model FROM agents WHERE key <> %s", (key,)):
+        other = Role(row["role"])
+        if other in others and effective_model(other, row["model"]) == mine:
+            raise InvalidInput(
+                f"{key} ({role}) can't run on {mine}: {row['key']} ({other}) does, and work "
+                "must be reviewed on a different model from the one that wrote it (ADR-009)"
+            )
+
 
 @dataclass(frozen=True)
 class Agent:
@@ -68,6 +98,7 @@ def register_agent(
     require_not_agent(actor)
     role_, runtime_ = _validate(key, role, runtime, max_concurrent)
     with conn.transaction():
+        _check_reviewed_on_another_model(conn, key, role_, model)
         try:
             row = conn.execute(
                 """INSERT INTO agents (key, role, runtime, model, instructions_path,
@@ -142,6 +173,7 @@ def set_model(conn: Conn, actor: Actor, key: str, model: str | None) -> Agent:
         old = row["model"]
         if old == model:
             return Agent.from_row(row)
+        _check_reviewed_on_another_model(conn, key, Role(row["role"]), model)
         row = conn.execute(
             "UPDATE agents SET model = %s WHERE id = %s RETURNING *", (model, row["id"])
         ).fetchone()

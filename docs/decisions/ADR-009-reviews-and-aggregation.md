@@ -26,3 +26,10 @@ task, or as separate work. The decision to send work back or forward could be ma
   agent can approve.
 - The Phase 1 invariant (executing ⇔ one active execution) is unaffected.
 - Review cost is visible per review and per task.
+
+## Revision (2026-11-07): the different model is enforced
+"Reviewers on a different model" was a convention in `config/agents.toml`, nothing checked it. Each agent's model
+can be changed (`POST /agents/{key}/model`, `make set-model`), and the T10b comparison suggested running the two
+reviewer roles on different models, so the rule is now checked where models are set: the registry refuses a
+reviewer on a model any developer or QA agent runs on, and the reverse, counting an agent with no model as its
+worker's default. The two reviewer roles may share a model or not.

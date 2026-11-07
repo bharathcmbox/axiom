@@ -180,3 +180,74 @@ def test_set_model_writes_an_event_and_is_human_only(db: Conn, human: Actor) -> 
         set_model(db, Actor(ActorKind.AGENT, "REV-01"), "REV-01", "claude-opus-5-5")
     with pytest.raises(InvalidInput):
         set_model(db, human, "REV-01", "Robert'); DROP TABLE agents;--")
+
+
+# ---- ADR-009: reviewed on a different model ---------------------------------------------------
+
+
+def _team(db: Conn, human: Actor) -> None:
+    register_agent(db, human, key="DEV-01", role="developer", runtime="claude_code",
+                   model="claude-opus-5-5")  # fmt: skip
+    register_agent(db, human, key="QA-01", role="qa", runtime="claude_code")  # default: Opus
+    register_agent(db, human, key="REV-01", role="code_reviewer", runtime="claude_code",
+                   model="claude-fable-5-1")  # fmt: skip
+    register_agent(db, human, key="SEC-01", role="security_reviewer", runtime="claude_code",
+                   model="claude-fable-5-1")  # fmt: skip
+
+
+def _models(db: Conn) -> dict[str, str | None]:
+    return {r["key"]: r["model"] for r in db.execute("SELECT key, model FROM agents")}
+
+
+def test_security_reviews_can_move_to_sonnet_while_code_review_stays_on_fable(
+    db: Conn, human: Actor
+) -> None:
+    """The split suggested by the T10b comparison: one call, effective at the next review."""
+    from axiom.registry.agents import set_model
+
+    _team(db, human)
+    assert set_model(db, human, "SEC-01", "claude-sonnet-5-5").model == "claude-sonnet-5-5"
+    assert _models(db)["REV-01"] == "claude-fable-5-1"
+    changed = [e for e in list_events(db) if e["type"] == "AGENT_MODEL_CHANGED"]
+    assert changed[-1]["payload"] == {"from": "claude-fable-5-1", "to": "claude-sonnet-5-5"}
+
+
+def test_a_reviewer_cant_run_on_the_model_that_writes_the_code(db: Conn, human: Actor) -> None:
+    from axiom.registry.agents import set_model
+
+    _team(db, human)
+    before, events = _models(db), len(list_events(db))
+    with pytest.raises(InvalidInput, match="ADR-009"):
+        set_model(db, human, "SEC-01", "claude-opus-5-5")
+    assert _models(db) == before and len(list_events(db)) == events
+
+
+def test_a_developer_cant_move_onto_a_reviewers_model(db: Conn, human: Actor) -> None:
+    from axiom.registry.agents import set_model
+
+    _team(db, human)
+    before, events = _models(db), len(list_events(db))
+    with pytest.raises(InvalidInput, match="REV-01"):
+        set_model(db, human, "DEV-01", "claude-fable-5-1")
+    assert _models(db) == before and len(list_events(db)) == events
+
+
+def test_a_default_model_counts_too(db: Conn, human: Actor) -> None:
+    """QA-01 has no model, so it runs on its worker's default, Opus: a reviewer can't take it,
+    and clearing a reviewer's model puts it back on Fable, which is fine."""
+    from axiom.registry.agents import set_model
+
+    _team(db, human)
+    set_model(db, human, "DEV-01", "claude-sonnet-5-5")  # no maker left on Opus by name
+    with pytest.raises(InvalidInput, match="QA-01"):
+        set_model(db, human, "REV-01", "claude-opus-5-5")
+    assert set_model(db, human, "REV-01", None).model is None
+
+
+def test_a_reviewer_cant_be_registered_on_a_developers_model(db: Conn, human: Actor) -> None:
+    _team(db, human)
+    events = len(list_events(db))
+    with pytest.raises(InvalidInput, match="ADR-009"):
+        register_agent(db, human, key="REV-02", role="code_reviewer", runtime="claude_code",
+                       model="claude-opus-5-5")  # fmt: skip
+    assert "REV-02" not in _models(db) and len(list_events(db)) == events

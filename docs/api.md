@@ -24,7 +24,7 @@ docker compose exec api python -m axiom.registry.tokens revoke <id>
 | POST | `/projects/{key}/require-ci` | Turn the CI gate on or off (humans only) |
 | POST / GET | `/agents`, `/agents/{key}` | Register / list (`?role=&enabled=`) / get agents |
 | POST | `/agents/{key}/enable`, `/agents/{key}/disable` | Toggle an agent |
-| POST | `/agents/{key}/model` | Change an agent's model (humans only) |
+| POST | `/agents/{key}/model` | Change an agent's model (humans only; a reviewer may not share a model with a developer or QA agent, ADR-009) |
 | POST | `/projects/{key}/tasks` | Create a task (the task contract); returns PENDING or READY |
 | GET | `/tasks?project=&state=`, `/tasks/{key}` | List / get tasks |
 | POST | `/tasks/{key}/commands/{command}` | Apply a command (body: `agent_key`, `payload`, `lease_seconds`) |
