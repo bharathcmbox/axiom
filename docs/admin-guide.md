@@ -10,8 +10,8 @@ Axiom runs on one machine with Docker. Everything below assumes you're in the re
 
 ```mermaid
 flowchart TB
+    you(["You: browser, curl, make<br/>wherever the API's URL is reachable<br/>(by default 127.0.0.1: this machine only)"])
     subgraph host["Your machine (Docker)"]
-        you(["You: browser, curl, make"])
         subgraph backend["backend network (internal: no internet)"]
             api["api<br/>REST, dashboard, reaper"]
             db[("postgres<br/>the source of truth")]
@@ -69,6 +69,12 @@ flowchart TB
     class mp model
     class wp wproxy
     class sp sproxy
+    style host fill:#ffffff,stroke:#6b7280
+    style backend fill:#ffffff,stroke:#9ca3af,stroke-dasharray:4 3
+    style workers fill:#ffffff,stroke:#9ca3af,stroke-dasharray:4 3
+    style sandbox fill:#ffffff,stroke:#9ca3af,stroke-dasharray:4 3
+    style gateways fill:#ffffff,stroke:#9ca3af,stroke-dasharray:4 3
+    style internet fill:#ffffff,stroke:#6b7280
     linkStyle 0 stroke:#6b7280,stroke-width:2px
     linkStyle 1,2,3,4 stroke:#2563eb,stroke-width:2px
     linkStyle 5,6 stroke:#7c3aed,stroke-width:2px
@@ -82,7 +88,8 @@ flowchart TB
 
 Each box's outgoing arrows share its border color: blue for the agent workers, red for sandboxes, and so on.
 
-Everything inside the outer box runs on your machine; only the three gateways reach the internet, each for one
+Everything inside "Your machine" runs there. You reach it through the API's URL, which listens on 127.0.0.1
+only, so by default from that machine (or an SSH tunnel to it). Only the three gateways reach the internet, each for one
 purpose. The three networks are Docker `internal` networks, with no route out. A few services sit on more than one
 of them, and are drawn in the one that matters most: `api` and `github-sync` join both `backend` and `workers`; the
 `model-proxy` joins `workers` and `sandbox`; `worker-egress-proxy` joins `workers`, and `egress-proxy` joins
