@@ -10,7 +10,7 @@ For every task in IN_REVIEW, AWAITING_MERGE or WAITING_FOR_HUMAN with a pull req
                                  -> report_conflict: back to READY, and rework merges it first
 - "Request changes" review on the submitted commit
                                  -> reject_merge / request_changes (human)
-- `/axiom changes <text>` comment by owner/collaborator
+- `/axiom changes <text>` comment (reviews and comments: owners, members, collaborators only)
                                  -> the same, with <text> as feedback
 - CI runs for the submitted commit -> record_ci, then the aggregator decides
 
@@ -81,6 +81,10 @@ def _human_change_request(
     submitted = _last_submit(conn, task["id"])
     found: tuple[datetime, str, str] | None = None
     for r in reviews:
+        # Anyone can review a public repository's PR: only owners, members and collaborators count,
+        # as for `/axiom changes`. A stranger's text would otherwise reach the developer agent.
+        if r.get("author_association") not in TRUSTED_ASSOCIATIONS:
+            continue
         if r.get("state") == "CHANGES_REQUESTED" and r.get("commit_id") == task["head_sha"]:
             when = _ts(r["submitted_at"])
             if found is None or when > found[0]:

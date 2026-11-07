@@ -33,6 +33,9 @@ coding agents on a real repository, with me as the CTO. I started with code beca
 tests pass or fail, and a reviewer can point at a line. But the questions aren't specific to code, and my
 longer-term goal is an architecture that can take on non-coding work too.
 
+I built Axiom for under $25 in model API costs. Its test bed was `tiny-agenticsoc`, a small security-operations
+project of mine that served as patient zero: every real task, review and drill in this post ran against it.
+
 ## What Axiom does
 
 You give Axiom a specification. A planner agent reads the repository and proposes a set of tasks.

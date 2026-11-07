@@ -76,6 +76,7 @@ stateDiagram-v2
 | S38 | You merge or close while a task is with you | recorded; a merge is flagged | tested | `test_merging_an_escalated_task_is_recorded_and_flagged` |
 | S39 | A review needs more than $1, and you raised the budget | the rereview gets what's left, up to $2.50 | tested; found **live** (exit run, SOC-009) | `test_a_rereview_gets_what_the_raised_budget_left_not_a_fixed_dollar` |
 | S40 | You put a reviewer on the developers' model | refused, nothing changed | tested | `test_a_reviewer_cant_run_on_the_model_that_writes_the_code` |
+| S41 | A stranger asks for changes on a public repository's PR | ignored, nothing changed | tested | `test_a_strangers_request_changes_review_is_ignored` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine

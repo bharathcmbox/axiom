@@ -446,6 +446,12 @@ Comments are ignored if they come from someone without write access, if they are
 the latest submission (they were about an earlier round), or if they don't start with
 `/axiom changes`.
 
+The same rule applies to "Request changes" reviews: only an owner, member or collaborator counts. On a public
+repository anyone can review a pull request, and without this rule a stranger's review would send the work back
+with their text in the developer agent's prompt
+(`test_a_strangers_request_changes_review_is_ignored`). It was found while checking the repositories before
+making them public.
+
 ### Merging before the gate
 
 Without GitHub Pro nothing *stops* you merging a PR whose reviews or CI are not finished

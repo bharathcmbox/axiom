@@ -293,6 +293,12 @@ doesn't see them. They have their own caps, and are announced before they run.
 4. Look at what the old value could reach in the meantime: GitHub's audit log, the Anthropic Console's usage.
 5. Record what happened. A run that saw a credential should be treated as compromised.
 
+**Before making a repository public** (Axiom's, or a project's it works on): scan its whole history for
+secrets, not just the current files, since making it public publishes every commit. Only owners, members and
+collaborators can send Axiom's work back from GitHub (`/axiom changes` or a "Request changes" review), so a
+stranger's review or comment is ignored. A project's CI should run with read-only permissions and no secrets on
+pull requests, since anyone can open one.
+
 What a compromised sandbox could still do is listed in [chapter 11](guide/11-workers-and-sandbox.md). The
 largest remaining way out is GitHub, through what a worker legitimately pushes. That's why reviews, CI, and a
 human merge stand between a branch and `main`.
