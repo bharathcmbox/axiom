@@ -10,37 +10,69 @@ Axiom runs on one machine with Docker. Everything below assumes you're in the re
 
 ```mermaid
 flowchart TB
-    subgraph host["Your machine"]
-        you(["You: browser, curl, make"])
-        subgraph backend["backend network (internal)"]
-            api["api<br/>REST, dashboard, reaper"]
-            db[("postgres<br/>the source of truth")]
-        end
-        subgraph workers["workers network (internal)"]
-            dev["worker-dev-01, -02"]
-            qa["worker-qa-01"]
-            em["planner-em-01"]
-            rev["reviewer-rev-01, reviewer-sec-01"]
-            sync["github-sync"]
-        end
-        mp["model-proxy<br/>the only holder of the Anthropic key"]
-        la["sandbox-launcher<br/>the only holder of the Docker socket"]
-        wp["worker-egress-proxy<br/>GitHub only"]
-        sp["egress-proxy<br/>package indexes only"]
-        sb["sandbox containers, one per run:<br/>no credentials"]
+    you(["You: browser, curl, make"])
+    subgraph backend["backend network (internal)"]
+        api["api<br/>REST, dashboard, reaper"]
+        db[("postgres<br/>the source of truth")]
     end
+    subgraph workers["workers network (internal)"]
+        w["Agent workers<br/>dev-01, dev-02, qa-01,<br/>em-01, rev-01, sec-01"]
+        sync["github-sync"]
+    end
+    la["sandbox-launcher<br/>the only holder of the Docker socket"]
+    sb["sandboxes, one per run<br/>no credentials"]
+    mp["model-proxy<br/>the only holder of the Anthropic key"]
+    wp["worker-egress-proxy<br/>GitHub only"]
+    sp["egress-proxy<br/>package indexes only"]
     gh[(GitHub)]
     an[(Anthropic API)]
+    pypi[(PyPI)]
+
     you --> api
-    dev & qa & em & rev --> api
+    w --> api
+    w -->|"start a sandbox"| la
+    w -->|"open a metered run"| mp
+    w -->|"clone, push axiom/*"| wp
     sync --> db
+    sync -->|"read only"| wp
     api --- db
-    dev & qa & em & rev -->|"start a sandbox"| la --> sb
-    dev & qa & em & rev -->|"open a metered run"| mp
-    sb -->|"run token"| mp --> an
+    la --> sb
+    sb -->|"run token"| mp
     sb --> sp
-    dev & qa & em & rev & sync --> wp --> gh
+    mp --> an
+    wp --> gh
+    sp --> pypi
+
+    classDef you stroke:#6b7280,stroke-width:2px
+    classDef worker stroke:#2563eb,stroke-width:2px
+    classDef sync stroke:#7c3aed,stroke-width:2px
+    classDef api stroke:#374151,stroke-width:2px
+    classDef launcher stroke:#ea580c,stroke-width:2px
+    classDef sandbox stroke:#dc2626,stroke-width:2px
+    classDef model stroke:#16a34a,stroke-width:2px
+    classDef wproxy stroke:#0891b2,stroke-width:2px
+    classDef sproxy stroke:#a16207,stroke-width:2px
+    class you you
+    class w worker
+    class sync sync
+    class api api
+    class la launcher
+    class sb sandbox
+    class mp model
+    class wp wproxy
+    class sp sproxy
+    linkStyle 0 stroke:#6b7280,stroke-width:2px
+    linkStyle 1,2,3,4 stroke:#2563eb,stroke-width:2px
+    linkStyle 5,6 stroke:#7c3aed,stroke-width:2px
+    linkStyle 7 stroke:#374151,stroke-width:2px
+    linkStyle 8 stroke:#ea580c,stroke-width:2px
+    linkStyle 9,10 stroke:#dc2626,stroke-width:2px
+    linkStyle 11 stroke:#16a34a,stroke-width:2px
+    linkStyle 12 stroke:#0891b2,stroke-width:2px
+    linkStyle 13 stroke:#a16207,stroke-width:2px
 ```
+
+Each box's outgoing arrows share its border color: blue for the agent workers, red for sandboxes, and so on.
 
 | Service | Holds | Reaches |
 |---|---|---|
@@ -181,9 +213,10 @@ The registry refuses a reviewer on a model that any developer or QA agent uses, 
 reviewed on a different model from the one that wrote it (ADR-009). An agent with no model runs on its worker's
 default: Opus 5.5 for developers, QA and the planner, Fable 5.1 for reviewers.
 
-Which model for which role? The [reviewer comparison](runs/2026-11-07-reviewer-comparison.md) is the evidence so
-far: Sonnet 5.5 caught the planted bug and agreed on every verdict at about a seventh of Fable's cost, but missed
-about half of Fable's smaller findings on test quality.
+Which model for which role? Sonnet 5.5 reviews cost about a seventh of Fable 5.1's. In a side-by-side test it
+caught the same serious bug and reached the same verdicts, but missed about half of Fable's smaller findings,
+mostly on test quality ([comparison](runs/2026-11-07-reviewer-comparison.md)). A reasonable split is Sonnet for
+security reviews and Fable for code reviews.
 
 Disable an agent (it stops claiming work) with `POST /agents/{key}/disable`, and enable it again with `/enable`.
 New agents can be added to `config/agents.toml` and seeded. A new worker also needs a service in
@@ -226,7 +259,7 @@ doesn't see them. They have their own caps, and are announced before they run.
 
 | Check | When |
 |---|---|
-| `make check-boundaries` | After changing compose, networks or images: runs inside real worker and sync containers and checks what a compromised worker could reach (33 checks) |
+| `make check-boundaries` | After changing compose, networks or images: runs inside real worker and sync containers and checks what a compromised worker could reach |
 | `make test-docker` | After changing the sandbox: isolation tests against real containers |
 | `scripts/check_secrets.py` | Before every commit (`make hooks` installs it) |
 

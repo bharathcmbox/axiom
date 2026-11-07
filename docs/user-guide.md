@@ -24,8 +24,8 @@ flowchart TB
     merge --> next["Tasks waiting on it start"]
 ```
 
-On the Phase 4 exit run, a five-task spec took 65 minutes from request to the last merge and cost $8.29. Agents
-took about 3 minutes per task. The rest was waiting for a human to read and merge.
+Agents usually take minutes per task. Most of the elapsed time is waiting for you: to approve the plan, read each
+pull request, and merge it.
 
 ## Before you start
 
@@ -54,8 +54,8 @@ curl "${H[@]}" $A/projects/APP/plans -d '{"budget_usd": 15, "specification":
 or commands if you know them. The planner reads the repository (read-only) and splits the work into at most 8
 tasks: each with a specification, acceptance criteria, the files it may change, a budget, and what it waits for.
 
-**The budget** is the most all the tasks may total. Real tasks have cost $1.20–$2.50 each, reviews included, so
-allow about $2.50 a task.
+**The budget** is the most all the tasks may total. Allow about $2.50 a task, reviews included (see
+[Costs](#costs)).
 
 **Before you see it,** plain code has checked the plan: no cycles, safe paths, no `.github/` or `.git/`, QA
 only in the project's test paths, tasks that run in parallel never share a file, budgets within your limit, and
@@ -142,18 +142,23 @@ is recorded and flagged as "merged before the gate".
 
 ## Costs
 
-| Item | Real cost so far |
-|---|---|
-| A plan | $0.21–$0.45 |
-| A developer run | $0.29–$0.55 |
-| A review (Fable 5.1) | $0.26–$0.72 |
-| A whole task, reviews included | $1.18–$2.50 |
-| Reviews' share of a task | about three quarters |
+Typical costs for small, well-scoped changes (a few files, a few hundred lines):
+
+| Item | Typical cost | Budget to allow |
+|---|---|---|
+| A plan | $0.20–$0.50 | the plan's own limit covers it |
+| A developer run | $0.30–$0.60 | — |
+| A review, with Fable 5.1 | $0.25–$0.75 | at least $1 per review |
+| A whole task, two reviews included | $1.20–$2.50 | $2.50; $3.50 for large test suites |
+
+Reviews are usually about three quarters of a task's cost, so the reviewer model matters most: Sonnet 5.5 costs
+roughly a seventh as much per review. Your administrator can change it
+([admin guide](admin-guide.md#6-agents-and-models)). Larger changes cost more; size the budget to the diff, not
+the title.
 
 Budgets stop work before money is spent, not after: per run, per task and per day. A task out of budget comes to
-you; it doesn't quietly overspend. Reviews are most of the cost, so the reviewer model matters most. See the
-[reviewer comparison](runs/2026-11-07-reviewer-comparison.md) and the
-[admin guide](admin-guide.md#6-agents-and-models) for changing it.
+you; it doesn't quietly overspend. If that happens, raise its budget and continue (see
+[When something comes to you](#when-something-comes-to-you)).
 
 ## Good habits
 
