@@ -92,8 +92,57 @@ way. The point was to build them myself, see which ones mattered, and measure th
 
 ## How the sandbox never sees a credential
 
-This part taught me the most. The model runs in a container that holds **no** credentials. Two things it
-needs are handled outside it:
+This part taught me the most. To explain it, I need to introduce the pieces first.
+
+### The pieces, and where they run
+
+Everything in Axiom runs on one machine, as Docker containers started by Docker Compose. Only two things live
+elsewhere, on the internet: the model API that the agents call, and GitHub, where the code is.
+
+- **The control plane** is a small web service and a PostgreSQL database. It holds the backlog, the state
+  machines and the event log, and it's what I talk to, from a browser or the command line.
+- **A worker** is a long-running container, one per agent: two developers, a QA agent, a planner and two
+  reviewers. A worker is ordinary, deterministic Python. It asks the control plane for work, prepares a copy
+  of the repository, checks what comes back, and pushes to GitHub. It holds the GitHub token. It never runs
+  the model itself.
+- **A sandbox** is a short-lived container that a worker asks for, one per run. This is where the model
+  actually works: Claude Code, reading and editing a copy of the repository. It is thrown away when the run
+  ends.
+- **The model proxy** is a small service that holds the model API key, and nothing else. Every model request
+  from a sandbox goes through it.
+- **A run token** is what a sandbox gets instead of a key: a random string that the proxy accepts for one
+  model, up to one budget, for a few minutes.
+- **The sandbox launcher** is the only service allowed to start containers. Workers ask it for a sandbox
+  instead of holding that power themselves.
+
+Containers sit on separate internal Docker networks with no route to the internet. Three small proxies are
+the only way out, each for one purpose: one for the model API, one for GitHub (for workers only), and one for
+package downloads (for sandboxes only).
+
+```mermaid
+flowchart LR
+    me(["Me: browser, command line"])
+    subgraph machine["One machine, Docker"]
+        cp["Control plane<br/>web service + database"]
+        w["Workers<br/>one per agent,<br/>hold the GitHub token"]
+        l["Sandbox launcher"]
+        s["Sandboxes<br/>one per run,<br/>no credentials"]
+        p["Model proxy<br/>holds the API key"]
+    end
+    subgraph internet["Internet"]
+        api[("Model API")]
+        gh[("GitHub")]
+    end
+    me --> cp
+    w --> cp
+    w --> l --> s
+    s --> p --> api
+    w --> gh
+```
+
+### One run, step by step
+
+The model runs in a sandbox that holds **no** credentials. Two things it needs are handled outside it:
 
 ```mermaid
 sequenceDiagram
@@ -122,9 +171,9 @@ sequenceDiagram
 - **GitHub:** the sandbox has no route to GitHub at all. A deterministic worker outside the sandbox holds
   the token. It checks the changed files (allowed paths, no secrets, no symlinks, tests passing on a clean
   copy) and only then pushes, to `axiom/*` branches only. There is no code path that merges.
-- **Everything else:** a separate launcher is the only service with the Docker socket. Internal networks
-  keep workers away from the database, and keep sandboxes away from everything except the model proxy and
-  a package-index proxy.
+- **Everything else:** because only the launcher can start containers, and the networks are internal, a
+  misled model in a sandbox can reach the model proxy and the package proxy, and nothing else. Workers can't
+  reach the database either: they go through the control plane's API like any other client.
 
 ## How I built it
 
