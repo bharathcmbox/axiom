@@ -6,6 +6,9 @@ description: "A learning project: a control plane that runs a small team of AI c
 tags: [ai-agents, claude, software-engineering, security, learning]
 ---
 
+<!-- ARCHIVE: do not edit. Published at https://bharathcmbox.github.io/posts/axiom/ ; the maintained copy is
+     content/posts/axiom/index.md in github.com/bharathcmbox/bharathcmbox.github.io. -->
+
 > **This is a learning project.** Axiom is not a product, not a service, and not ready for anyone's
 > production code. I built it to understand, hands-on, what it takes to let AI coding agents do real
 > work safely: who decides, who checks, what it costs, and where it breaks. Everything below is written
