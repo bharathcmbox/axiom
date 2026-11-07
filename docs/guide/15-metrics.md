@@ -180,6 +180,25 @@ Two early hints, from a sample of one: **reviews are most of the cost** (86% her
 is the bottleneck by a factor of over 20.** Both are exactly what SPEC wanted to find out, and both
 need more data before they mean much.
 
+## The exit run's numbers
+
+Phase 4's exit run (a five-task plan, [run record](../runs/2026-11-07-phase-4-exit-run.md)) gave the same two
+answers on more data:
+
+| | Plan 2 |
+|---|---|
+| Tasks merged | 5 of 5, none before the gate |
+| Plan + developers + reviews | $0.45 + $2.06 + $5.78 = **$8.29** |
+| Reviews' share of task cost | 74% |
+| Rework rounds | 0 |
+| Escalations | 1 (a review ran out of its run cap) |
+| Agents' time to a ready PR | 2 m 23 s to 3 m 54 s |
+| Waiting for you to merge | 13 to 27 minutes |
+
+Reviews are still about three quarters of the cost, and you're still the bottleneck, now by about tenfold. The
+report after the run (all real SOC tasks, eight in all) gives $1.40 per merged task and 75% first-pass
+acceptance. There's no hand-driven baseline yet, so these numbers can't say whether agents beat one session.
+
 ## Try it
 
 1. `curl "${H[@]}" "localhost:8000/metrics?project=SOC&include_demo=true" | python3 -m json.tool`

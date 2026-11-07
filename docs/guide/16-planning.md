@@ -271,6 +271,42 @@ the project's test paths, and verification enforces that (`test_a_qa_agent_canno
 prompt asks for tests written from the specification. If a test shows a real bug, it asks you rather than weakening
 the test. The whole path from a spec to every task merged is in `test_from_a_plan_to_every_task_merged`.
 
+### The exit run: a whole spec, delivered
+
+On Nov 7 the Phase 4 exit spec went through all of this for real: EM-01 split it into three developer tasks and
+two QA tasks, you approved the plan as proposed, and you merged five PRs. It took 65 minutes from the request to
+the last merge, and cost $8.29, of which $0.45 was the plan. The [run record](../runs/2026-11-07-phase-4-exit-run.md)
+has every number.
+
+```mermaid
+gantt
+    title Plan 2, Nov 7 (UTC): agents' work, then waiting for you
+    dateFormat HH:mm:ss
+    axisFormat %H:%M
+    section SOC-006
+    develop and review   :a1, 17:01:27, 143s
+    waiting for you      :17:03:50, 824s
+    section SOC-007
+    develop and review   :b1, 17:01:28, 198s
+    waiting for you      :17:04:46, 800s
+    section SOC-009 QA
+    develop and review   :c1, 17:17:39, 214s
+    budget, to you       :crit, 17:21:13, 1580s
+    waiting for you      :17:47:33, 241s
+    section SOC-008 docs
+    develop and review   :d1, 17:18:11, 234s
+    waiting for you      :17:22:05, 1639s
+    section SOC-010 QA
+    develop and review   :e1, 17:19:53, 187s
+    waiting for you      :17:23:00, 1619s
+```
+
+Two developers started a second apart, and the second wave started as soon as you merged the first. No rework, no
+conflict, every review a PASS. One task came to you: SOC-009's code review ran out of its fixed $1.00 run cap on
+537 lines of tests. You raised the budget and issued `rereview`; the security PASS carried over and only the code
+review ran again. That showed one gap: raising the task's budget doesn't raise a review run's cap. It's an open
+item.
+
 ## What these rules don't do
 
 They check a plan's shape, not whether it's any good. A plan can pass every rule and still be the wrong

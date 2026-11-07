@@ -125,6 +125,7 @@ flowchart LR
 | Reservations starved a reviewer ($0.28 for a job costing $0.40), and it was retried with less. A task cost $1.69 against $1.50, with $0.72 wasted | The first real QA run, plan 1 | A minimum run budget, no retry when out of budget (ADR-013) |
 | A failed review forced a developer rerun, and sync couldn't see a merge of an escalated PR | The same run | `rereview`; sync watches WAITING_FOR_HUMAN |
 | The first report flattered the system: "$0.03 per merged task" came from old demo tasks | Reading its output on real data | Demo tasks tagged, the demo script tags its own |
+| A review's run cap is fixed at $1.00: raising a task's budget let a rereview start but gave it no more room | The exit run, SOC-009 (537 lines of tests) | Open: size a review run from what the task has left |
 
 **Process mistakes** also happened, and are worth knowing:
 - Commits went through twice with failing lint, because piping `make lint` into `tail` hid its exit

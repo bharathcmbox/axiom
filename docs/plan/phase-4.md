@@ -201,7 +201,7 @@ Every task: lint, the full suite, one commit, plus its guide section and diagram
 
 ## 6. Phase 4 exit criteria
 
-- [ ] A multi-task spec is delivered end to end: planned, approved by you, developed in parallel where independent, reviewed, merged by you (T10).
+- [x] A multi-task spec is delivered end to end: planned, approved by you, developed in parallel where independent, reviewed, merged by you (T10): [run record](../runs/2026-11-07-phase-4-exit-run.md).
 - [ ] Nothing runs before you approve the plan; a bad plan cannot reach you (T6, T7).
 - [ ] Every SPEC section 2 metric is computed from the event log and reported, with the exit run's real numbers (T1, T2, T10).
 - [x] The prompt-injection drill is run and its result recorded, whatever it is (T4): [result](../drills/2026-11-06-prompt-injection.md).
