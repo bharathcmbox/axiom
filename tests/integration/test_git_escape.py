@@ -239,6 +239,17 @@ def test_the_github_token_reaches_git_only_when_it_is_needed(tmp_path: Path) -> 
     assert f"AXIOM_GIT_TOKEN={FAKE}" in _git_env(tmp_path, token=FAKE)
 
 
+def test_git_still_gets_the_way_out_through_the_workers_proxy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Workers have no other route: without these, every clone and push would fail."""
+    monkeypatch.setenv("HTTPS_PROXY", "http://worker-egress-proxy:3128")
+    monkeypatch.setenv("NO_PROXY", "api")
+    run_git("git", "init", "-q", cwd=tmp_path)
+    env = _git_env(tmp_path)
+    assert "HTTPS_PROXY=http://worker-egress-proxy:3128" in env and "NO_PROXY=api" in env
+
+
 def test_a_real_clone_still_works_with_the_reduced_environment(tmp_path: Path) -> None:
     repo = _sealed_repo(tmp_path)
     copy = tmp_path / "copy"

@@ -8,6 +8,7 @@ Prints only PASS or FAIL lines and exits non-zero on any FAIL. Never prints a cr
 import os
 import shutil
 import socket
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -33,7 +34,7 @@ def http_status(url: str, *, direct: bool = False) -> str:
     except urllib.error.HTTPError as e:
         return str(e.code)
     except OSError as e:
-        return f"blocked: {type(getattr(e, 'reason', e)).__name__}"
+        return f"blocked: {getattr(e, 'reason', e)}"
 
 
 def tcp_open(host: str, port: int) -> bool:
@@ -104,20 +105,47 @@ def launcher() -> None:
         shutil.rmtree(run, ignore_errors=True)
 
 
-def egress() -> None:
+def _shared_egress() -> None:
     check("GitHub reachable through the proxy", http_status("https://api.github.com/") == "200")
-    check("other hosts refused by the proxy", http_status("https://example.com/") == "403")
-    check("Anthropic refused by the proxy", http_status("https://api.anthropic.com/") == "403")
+    # A refused HTTPS tunnel shows up as an error carrying the proxy's refusal, not as a status.
+    for name, url in (
+        ("other hosts", "https://example.com/"),
+        ("Anthropic", "https://api.anthropic.com/"),
+    ):
+        status = http_status(url)
+        check(f"{name} refused by the proxy", "403 Filtered" in status, status[:60])
     check(
         "no direct internet", http_status("https://example.com/", direct=True).startswith("blocked")
     )
     check("no raw internet", not tcp_open("1.1.1.1", 443))
+
+
+def egress() -> None:
+    """A worker. Git is checked with no token: this shows the route, and sends no credential."""
+    _shared_egress()
     check("the database is out of reach", not tcp_open("db", 5432))
     check(
         "the Axiom API is reachable", http_status("http://api:8000/healthz", direct=True) == "200"
     )
     status = http_status("http://model-proxy:8080/healthz", direct=True)
     check("the model proxy is reachable", status == "200")
+    done = subprocess.run(
+        ["git", "ls-remote", "https://github.com/git/git.git", "HEAD"],
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    check("git reaches GitHub through the proxy", done.returncode == 0)
+
+
+def sync() -> None:
+    """GitHub sync: needs the database, and nothing else but GitHub."""
+    docker_power()
+    anthropic_key()
+    _shared_egress()
+    check("the database is reachable", tcp_open("db", 5432))
+    check("no model proxy admin token", "AXIOM_MODEL_PROXY_ADMIN_TOKEN" not in os.environ)
+    check("no launcher token", "AXIOM_LAUNCHER_TOKEN" not in os.environ)
 
 
 CHECKS = {
@@ -125,6 +153,7 @@ CHECKS = {
     "key": anthropic_key,
     "launcher": launcher,
     "egress": egress,
+    "sync": sync,
 }
 
 if __name__ == "__main__":

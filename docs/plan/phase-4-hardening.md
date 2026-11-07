@@ -5,6 +5,8 @@ H1 done: [ADR-015](../decisions/ADR-015-the-model-proxy-holds-the-anthropic-key.
 Opus 5.5 and Fable 5.1 metered identically to the SDK ($0.0596412 and $0.15388175).
 H2 done: [ADR-016](../decisions/ADR-016-only-the-launcher-holds-the-docker-socket.md), and it closed a
 symlink route to the worker's tokens found on the way.
+H3 done: [ADR-017](../decisions/ADR-017-workers-reach-only-github.md). `make check-boundaries` checks it
+from inside real worker and sync containers.
 
 The drill and the git escape (ADR-014) showed two things. Agents can be asked to steal what is within
 reach, and the code around the sandbox is part of the attack surface. So: put nothing worth stealing

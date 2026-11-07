@@ -19,7 +19,16 @@ from pathlib import Path
 
 _HELPER = '!f() { echo username=x-access-token; echo "password=$AXIOM_GIT_TOKEN"; }; f'
 HARNESS_GIT_DIR = "harness.git"  # next to repo/ and out/, which are all the sandbox gets mounted
-_PASSED_ENV = ("PATH", "LANG", "LC_ALL", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR")
+_PASSED_ENV = (
+    "PATH",
+    "LANG",
+    "LC_ALL",
+    "TMPDIR",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "HTTPS_PROXY",  # workers reach GitHub only through their allowlist proxy
+    "NO_PROXY",
+)
 
 
 class GitError(Exception):

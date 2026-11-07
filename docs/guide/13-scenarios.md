@@ -64,6 +64,7 @@ stateDiagram-v2
 | S26 | A sandbox plants a link to the worker's environment | refused, nothing read | tested | `test_a_symlink_to_the_environment_reveals_nothing` |
 | S27 | A compromised worker asks for a host mount | refused, no container | tested + `make check-boundaries` | `test_a_host_mount_cannot_be_requested_over_http` |
 | S28 | A worker is killed mid-run | its sandbox is killed too | tested | `test_a_killed_worker_leaves_no_sandbox_behind` |
+| S29 | A compromised worker tries to reach another host | refused by its proxy, no direct route | `make check-boundaries`, in real containers | `test_git_still_gets_the_way_out_through_the_workers_proxy` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
@@ -311,6 +312,7 @@ Knowing the edges is part of understanding the system:
 - **A transcript estimate can be forged,** if the proxy's record is gone too. It's marked as an estimate.
 - **The worker is still valuable:** it holds its GitHub and agent tokens, and can start sandboxes and
   open budgeted runs. It no longer has the Docker socket (ADR-016).
+- **GitHub is a way out for a compromised worker.** Its proxy filters by host, not repository (ADR-017).
 - **The launcher holds the Docker socket,** in effect root on this machine. It runs no LLM or
   repository code and can't be reached from a sandbox.
 - **Prompt-injection resistance is one small run,** with a crude payload (see the drill).

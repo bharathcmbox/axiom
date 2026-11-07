@@ -2,7 +2,8 @@
 FROM alpine:3.22
 RUN apk add --no-cache tinyproxy
 COPY tinyproxy.conf /etc/tinyproxy/tinyproxy.conf
-COPY allowlist /etc/tinyproxy/allowlist
+ARG ALLOWLIST=allowlist
+COPY ${ALLOWLIST} /etc/tinyproxy/allowlist
 EXPOSE 3128
 USER tinyproxy
 CMD ["tinyproxy", "-d", "-c", "/etc/tinyproxy/tinyproxy.conf"]

@@ -33,6 +33,7 @@ flowchart TB
             proxy["egress-proxy<br/>allowlist: PyPI"]
             mp["model-proxy<br/>holds the Anthropic key"]
             la["sandbox-launcher<br/>holds the Docker socket"]
+            wp["worker-egress-proxy<br/>allowlist: GitHub"]
         end
         sbx["sandbox container<br/>one per execution<br/>Claude Agent SDK"]
         ws[("~/.axiom/work/<br/>SOC-001-e1/{repo,out}")]
@@ -42,7 +43,7 @@ flowchart TB
     w1 -->|"HTTP + bearer token"| api
     w2 -->|"HTTP + bearer token"| api
     api --- db
-    w1 -->|"clone / push axiom/*,<br/>open PR"| gh
+    w1 -->|"clone / push axiom/*,<br/>open PR"| wp --> gh
     w1 -->|"start this workspace"| la
     la -->|"docker run"| sbx
     sbx --- ws
@@ -214,6 +215,50 @@ flowchart LR
 ```
 
 `make check-boundaries` runs from inside a real worker container and tries these for real.
+
+## Who can reach what
+
+Each service sits only on the networks it needs (ADR-017). `workers` and `sandbox` are internal: they
+have no route out, so a proxy is the only exit.
+
+```mermaid
+flowchart TB
+    subgraph sbn["sandbox network, internal"]
+        s["Sandbox"]
+    end
+    subgraph wn["workers network, internal"]
+        w["Workers"]
+        l["Launcher"]
+        sy["GitHub sync"]
+    end
+    subgraph bn["backend network, internal"]
+        db[("Database")]
+    end
+    api["API"]
+    mp["Model proxy"]
+    ep["Egress proxy<br/>PyPI only"]
+    wp["Worker egress proxy<br/>GitHub only"]
+    s --> mp
+    s --> ep
+    w --> api
+    w --> mp
+    w --> l
+    w --> wp
+    sy --> wp
+    sy --> db
+    api --> db
+    mp --> an["Anthropic"]
+    ep --> py["PyPI"]
+    wp --> gh["GitHub"]
+```
+
+| From | Anthropic | GitHub | PyPI | Anything else | Database |
+|---|---|---|---|---|---|
+| Sandbox | through the model proxy, with a run token | no | yes | no | no |
+| Worker | no | yes | no | no | no |
+| GitHub sync | no | yes | no | no | yes |
+
+GitHub is still a way out: the proxy can't tell one repository from another.
 
 ## Reading what a sandbox wrote
 

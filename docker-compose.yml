@@ -10,6 +10,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres:/docker-entrypoint-initdb.d:ro
+    # default: for its published port. Workers aren't on either network, so they can't reach it.
+    networks: [default, backend]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U axiom -d axiom"]
       interval: 2s
@@ -25,6 +27,7 @@ services:
       AXIOM_REAPER_INTERVAL_SECONDS: ${AXIOM_REAPER_INTERVAL_SECONDS:-5}
     ports:
       - "127.0.0.1:${AXIOM_API_PORT:-8000}:8000"
+    networks: [default, backend, workers]
     depends_on:
       db:
         condition: service_healthy
@@ -44,7 +47,7 @@ services:
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AXIOM_MODEL_PROXY_ADMIN_TOKEN: ${AXIOM_MODEL_PROXY_ADMIN_TOKEN:-}
-    networks: [default, sandbox]
+    networks: [default, sandbox, workers]
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -72,6 +75,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}:${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}
+    networks: [workers]
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -81,6 +85,17 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
+
+  # The way out for workers and GitHub sync: GitHub only (ADR-017). Not the sandbox's proxy, whose
+  # allowlist must not include GitHub.
+  worker-egress-proxy:
+    build:
+      context: docker/egress-proxy
+      args:
+        ALLOWLIST: allowlist.workers
+    profiles: [workers]
+    networks: [default, workers]
     restart: unless-stopped
 
   # Workers (profile "workers"): `make workers`. One service per agent identity. No Docker socket:
@@ -105,12 +120,17 @@ services:
       AXIOM_FAKE_EDITS_FILE: ${AXIOM_FAKE_EDITS_FILE:-}
       AXIOM_KEEP_WORKSPACES: ${AXIOM_KEEP_WORKSPACES:-0}
       AXIOM_DRILL_CANARY: ${AXIOM_DRILL_CANARY:-}
+      HTTPS_PROXY: http://worker-egress-proxy:3128
+      NO_PROXY: api,model-proxy,sandbox-launcher
     volumes:
       - ${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}:${AXIOM_WORKSPACES_DIR:-/tmp/axiom-work}
+    networks: [workers]
     depends_on:
       api:
         condition: service_healthy
       egress-proxy:
+        condition: service_started
+      worker-egress-proxy:
         condition: service_started
       model-proxy:
         condition: service_healthy
@@ -153,12 +173,17 @@ services:
     environment:
       AXIOM_DATABASE_URL: postgresql://axiom:axiom@db:5432/axiom
       AXIOM_GITHUB_TOKEN: ${AXIOM_GITHUB_TOKEN:-}
+      HTTPS_PROXY: http://worker-egress-proxy:3128
+      NO_PROXY: db,api
       AXIOM_SYNC_INTERVAL_SECONDS: ${AXIOM_SYNC_INTERVAL_SECONDS:-30}
     healthcheck:
       disable: true
+    networks: [backend, workers]
     depends_on:
       api:
         condition: service_healthy
+      worker-egress-proxy:
+        condition: service_started
     restart: unless-stopped
 
   # Built, never started by `up`: `docker compose --profile tools build sandbox`.
@@ -171,6 +196,12 @@ services:
 
 networks:
   default:
+  # Internal, like sandbox: workers and sync have no route out but their proxy (ADR-017).
+  workers:
+    internal: true
+  # Only what needs the database: the API and GitHub sync.
+  backend:
+    internal: true
   # No route to the outside world: sandboxes reach the internet only via egress-proxy.
   sandbox:
     name: ${AXIOM_SANDBOX_NETWORK:-axiom_sandbox}

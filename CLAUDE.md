@@ -40,7 +40,8 @@ customer projects live in their own repos.
   credentials into a sandbox. Pushes only to `axiom/*`; no merge code path (ADR-007).
   Never trust what a sandbox leaves behind: harness git uses its own sealed `.git`, with an
   allowlisted environment (ADR-014), and files from `out/` are read only with `read_from_sandbox`.
-  Only `launcher/` has the Docker socket (ADR-016). Any potential credential exposure stops work
+  Only `launcher/` has the Docker socket (ADR-016). Workers and sync reach only GitHub (ADR-017).
+  Any potential credential exposure stops work
   and goes to the human.
 - Budgets are enforced at claim time and per run (`orchestrator/budgets.py`); reviews count too.
   Claims reserve their run budget (ADR-013). A cost from a transcript is marked `cost_estimated`.

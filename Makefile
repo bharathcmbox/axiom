@@ -71,7 +71,7 @@ workers: sandbox-image
 	docker compose --profile workers up -d --build --wait worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
 
 workers-down:
-	docker compose --profile workers stop model-proxy sandbox-launcher worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
+	docker compose --profile workers stop model-proxy sandbox-launcher worker-egress-proxy worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
 
 # The daily report: plain numbers from the event log, no LLM.
 report:
@@ -85,4 +85,5 @@ hooks:
 # What a compromised worker can reach, from inside a real worker container. No model calls.
 check-boundaries:
 	mkdir -p $(AXIOM_WORKSPACES_DIR)
-	docker compose --profile workers run --rm --build -T worker-dev-01 python - docker key launcher $(BOUNDARIES) < scripts/check_boundaries.py
+	docker compose --profile workers run --rm --build -T worker-dev-01 python - docker key launcher egress < scripts/check_boundaries.py
+	docker compose --profile workers run --rm --build -T github-sync python - sync < scripts/check_boundaries.py
