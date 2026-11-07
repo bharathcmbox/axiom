@@ -230,8 +230,8 @@ I expect about 3 or 4 tasks (the planner decides), some independent, and one QA 
 | T4 injection drill | $1–2 |
 | T5 edge drill | under $1 |
 | T8 planner check | under $1 |
-| T10 exit: plan + about 4 tasks, each developer + 2 reviews, some rework | $4–8 |
-| T10b reviewer comparison | $2–5 |
+| T10 exit: plan + about 4 tasks, each developer + 2 reviews, some rework | $4–8 (actual $8.29: [record](../runs/2026-11-07-phase-4-exit-run.md)) |
+| T10b reviewer comparison | $2–5 (actual $7.91, with a Fable rerun added: [record](../runs/2026-11-07-reviewer-comparison.md)) |
 | **Total** | **about $8–17; hard cap $30** |
 
 Caps: $3 per task and $15 per day as now, and a $15 limit for the exit plan. My previous estimate

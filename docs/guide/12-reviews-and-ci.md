@@ -614,6 +614,34 @@ Things worth noticing:
 
 The run also found two real bugs in Axiom itself. See [chapter 14](14-how-it-was-built.md).
 
+## Which model should review? Sonnet against Fable
+
+Reviewers run on Fable 5.1. In Phase 4, sixteen past reviews (both roles on eight PRs, SOC-002's planted bug among
+them) were run again: once on Sonnet 5.5, and once more on Fable, to see how much one model varies from run to run.
+`src/axiom/drills/review_compare.py` rebuilds exactly the commit and diff each reviewer saw, and runs the same
+sandboxed review through the model proxy. It writes to a file and never touches a task or a review
+(`test_a_snapshot_is_the_reviewed_commit_and_its_diff_after_the_branch_is_gone`,
+`test_the_drill_stops_starting_runs_at_its_cap`, `test_a_credential_in_a_review_is_redacted_and_stops_the_drill`).
+
+```mermaid
+xychart-beta
+    title "Cost of the same 16 reviews (US dollars)"
+    x-axis ["Fable, original", "Fable, again", "Sonnet"]
+    y-axis "USD" 0 --> 8
+    bar [7.18, 6.93, 0.98]
+```
+
+| | Fable, again | Sonnet |
+|---|---|---|
+| Verdicts agreeing with the original | 14 of 15 | 15 of 15 |
+| Planted bug | caught | caught |
+| Original findings reproduced | 12 of 15 | 7 of 15 |
+
+Sonnet caught the bug that mattered and agreed on every verdict, for about a seventh of the cost. It missed about
+half of Fable's smaller findings, mostly about whether tests really test. Fable found mostly the same things twice,
+but once chose FAIL for an issue it had rated `low` the first time. Eight PRs are a small sample. The models aren't
+changed; the [comparison](../runs/2026-11-07-reviewer-comparison.md) suggests a split for you to decide on.
+
 ## Try it
 
 1. `uv run pytest tests/unit/test_review_machine.py -v`: every review command × state, checked
