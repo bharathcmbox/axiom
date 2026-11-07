@@ -89,7 +89,8 @@ def create_project(
 
 
 def set_python_version(conn: Conn, actor: Actor, key: str, version: str | None) -> Project:
-    """Which Python uv uses in this project's sandboxes. None: the sandbox's own (3.14)."""
+    """Which Python uv uses in this project's sandboxes, to match its CI. None leaves it to uv,
+    which prefers the image's newest managed Python (3.13), not the system's 3.14. Set it."""
     require_not_agent(actor)
     if version is not None and version not in SANDBOX_PYTHONS:
         raise InvalidInput(f"python_version must be one of {', '.join(SANDBOX_PYTHONS)}")

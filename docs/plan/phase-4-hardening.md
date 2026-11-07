@@ -7,6 +7,8 @@ H2 done: [ADR-016](../decisions/ADR-016-only-the-launcher-holds-the-docker-socke
 symlink route to the worker's tokens found on the way.
 H3 done: [ADR-017](../decisions/ADR-017-workers-reach-only-github.md). `make check-boundaries` checks it
 from inside real worker and sync containers.
+H4: the whole layout ran end to end in the [T5 drill](../drills/2026-11-06-edge-drill.md). ADRs and guide
+are done; the README's diagram is refreshed at T11.
 
 The drill and the git escape (ADR-014) showed two things. Agents can be asked to steal what is within
 reach, and the code around the sandbox is part of the attack surface. So: put nothing worth stealing

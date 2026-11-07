@@ -38,7 +38,7 @@ stateDiagram-v2
 |---|---|---|---|---|
 | S1 | Everything is fine | AWAITING_MERGE, waits for you | **live** (round 2 of SOC-002) | `test_two_passes_approve_the_task` |
 | S2 | A reviewer finds a bug | READY, findings as feedback, same PR | **live** (SOC-002) | `test_buggy_change_caught_reworked_approved_merged` |
-| S3 | CI fails | READY, failure as feedback | tested | `test_red_ci_sends_the_work_back` |
+| S3 | CI fails | READY, failure as feedback | **live** ([T5 drill](../drills/2026-11-06-edge-drill.md)) | `test_red_ci_sends_the_work_back` |
 | S4 | The agent's work fails Axiom's own checks | nothing published; retry | **live** (tests failed, SOC-002); others tested | `test_bad_runs_fail_without_publishing`, `test_failing_verified_tests_block_publishing` |
 | S5 | The agent or its run fails | retry, then FAILED | tested | `test_fail_retries_then_fails_after_max_retries` |
 | S6 | A worker dies mid-run | lease expires, another worker takes over | tested (real SIGKILL) | `test_killed_worker_process_is_recovered_by_another_worker` |
@@ -49,7 +49,7 @@ stateDiagram-v2
 | S11 | You merge | DONE, recorded as you | **live** (SOC-002) | `test_merge_on_github_finishes_the_task` |
 | S11b | You merge before the gate | DONE, flagged | tested | `test_merging_before_the_gate_is_recorded_as_a_human_override` |
 | S12 | Three rounds and still failing | WAITING_FOR_HUMAN | tested | `test_third_failed_round_escalates_to_a_human` |
-| S13 | You close the PR | CANCELLED | tested | `test_closing_the_pr_cancels_the_task` |
+| S13 | You close the PR | CANCELLED | **live** ([T5 drill](../drills/2026-11-06-edge-drill.md)) | `test_closing_the_pr_cancels_the_task` |
 | S14 | Axiom itself crashes | nothing lost | tested + demo (real SIGKILL) | `test_restart_preserves_all_state` |
 | S15 | A reviewer finishes after being superseded | verdict ignored, cost recorded | **live** (SOC-002) | `test_superseded_review_still_reports_its_cost_but_not_its_verdict` |
 | S16 | A run is killed partway | cost estimated from its transcript, marked as an estimate | tested | `test_a_lost_lease_still_reports_what_the_run_cost`, `test_a_restarted_worker_costs_the_run_it_lost_when_killed` |
