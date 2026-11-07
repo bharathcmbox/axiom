@@ -10,23 +10,31 @@ Axiom runs on one machine with Docker. Everything below assumes you're in the re
 
 ```mermaid
 flowchart TB
-    you(["You: browser, curl, make"])
-    subgraph backend["backend network (internal)"]
-        api["api<br/>REST, dashboard, reaper"]
-        db[("postgres<br/>the source of truth")]
+    subgraph host["Your machine (Docker)"]
+        you(["You: browser, curl, make"])
+        subgraph backend["backend network (internal: no internet)"]
+            api["api<br/>REST, dashboard, reaper"]
+            db[("postgres<br/>the source of truth")]
+        end
+        subgraph workers["workers network (internal: no internet)"]
+            w["Agent workers<br/>dev-01, dev-02, qa-01,<br/>em-01, rev-01, sec-01"]
+            sync["github-sync"]
+            la["sandbox-launcher<br/>the only holder of the Docker socket"]
+        end
+        subgraph sandbox["sandbox network (internal: no internet)"]
+            sb["sandboxes, one per run<br/>no credentials"]
+        end
+        subgraph gateways["Gateways: the only containers that reach the internet"]
+            mp["model-proxy<br/>the only holder of the Anthropic key"]
+            wp["worker-egress-proxy<br/>GitHub only"]
+            sp["egress-proxy<br/>package indexes only"]
+        end
     end
-    subgraph workers["workers network (internal)"]
-        w["Agent workers<br/>dev-01, dev-02, qa-01,<br/>em-01, rev-01, sec-01"]
-        sync["github-sync"]
+    subgraph internet["Internet"]
+        gh[(GitHub)]
+        an[(Anthropic API)]
+        pypi[(PyPI)]
     end
-    la["sandbox-launcher<br/>the only holder of the Docker socket"]
-    sb["sandboxes, one per run<br/>no credentials"]
-    mp["model-proxy<br/>the only holder of the Anthropic key"]
-    wp["worker-egress-proxy<br/>GitHub only"]
-    sp["egress-proxy<br/>package indexes only"]
-    gh[(GitHub)]
-    an[(Anthropic API)]
-    pypi[(PyPI)]
 
     you --> api
     w --> api
@@ -73,6 +81,13 @@ flowchart TB
 ```
 
 Each box's outgoing arrows share its border color: blue for the agent workers, red for sandboxes, and so on.
+
+Everything inside the outer box runs on your machine; only the three gateways reach the internet, each for one
+purpose. The three networks are Docker `internal` networks, with no route out. A few services sit on more than one
+of them, and are drawn in the one that matters most: `api` and `github-sync` join both `backend` and `workers`; the
+`model-proxy` joins `workers` and `sandbox`; `worker-egress-proxy` joins `workers`, and `egress-proxy` joins
+`sandbox`. So a worker can't reach the database, and a sandbox can reach only the model proxy and the package proxy
+(ADR-017).
 
 | Service | Holds | Reaches |
 |---|---|---|
