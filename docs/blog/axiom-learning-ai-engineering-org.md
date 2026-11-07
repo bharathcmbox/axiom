@@ -9,7 +9,8 @@ tags: [ai-agents, claude, software-engineering, security, learning]
 > **This is a learning project.** Axiom is not a product, not a service, and not ready for anyone's
 > production code. I built it to understand, hands-on, what it takes to let AI coding agents do real
 > work safely: who decides, who checks, what it costs, and where it breaks. Everything below is written
-> in that spirit, including the parts that didn't work.
+> in that spirit, including the parts that didn't work. The code and all its documentation are public:
+> [github.com/bharathcmbox/axiom](https://github.com/bharathcmbox/axiom).
 
 <!--more-->
 
@@ -33,7 +34,7 @@ coding agents on a real repository, with me as the CTO. I started with code beca
 tests pass or fail, and a reviewer can point at a line. But the questions aren't specific to code, and my
 longer-term goal is an architecture that can take on non-coding work too.
 
-I built Axiom for under $25 in model API costs. Its test bed was `tiny-agenticsoc`, a small security-operations
+I built Axiom for under $25 in model API costs. Its test bed was [`tiny-agenticsoc`](https://github.com/bharathcmbox/tiny-agenticsoc), a small security-operations
 project of mine that served as patient zero: every real task, review and drill in this post ran against it.
 
 ## What Axiom does
@@ -240,9 +241,10 @@ one small task at a time; code, tests and documentation together; lint and the f
 commit; one commit per task. Every transition needs a test for the legal path *and* a test proving that an
 illegal attempt changes nothing and writes no event. The suite is now about 1,700 tests.
 
-Documentation was part of every task, not an afterthought. The guide has 16 chapters, with diagrams checked
-by a parser in the test suite, a "scenario atlas" of every situation a task can meet with the test that
-proves each one, and a chapter listing the mistakes.
+Documentation was part of every task, not an afterthought. [The guide](https://github.com/bharathcmbox/axiom/blob/main/docs/guide/README.md) has 16 chapters,
+with diagrams checked by a parser in the test suite, a [scenario atlas](https://github.com/bharathcmbox/axiom/blob/main/docs/guide/13-scenarios.md) of every
+situation a task can meet with the test that proves each one, and
+[a chapter listing the mistakes](https://github.com/bharathcmbox/axiom/blob/main/docs/guide/14-how-it-was-built.md).
 
 ## What the real runs taught me
 
@@ -271,11 +273,13 @@ I also compared reviewer models on the same sixteen past reviews. A cheaper mode
 the planted bug and agreed with every verdict, at about a seventh of the cost of the stronger one (Claude
 Fable 5.1). But it missed about half of the smaller findings, mostly about whether tests really test
 anything. The stronger model, run twice, found mostly the same things both times, but once changed its
-verdict by rating the same issue more severely. One run of one model isn't a measurement.
+verdict by rating the same issue more severely. One run of one model isn't a measurement
+([the full comparison](https://github.com/bharathcmbox/axiom/blob/main/docs/runs/2026-11-07-reviewer-comparison.md)).
 
 **The numbers, for scale:** eight real tasks merged, about $1.40 per merged task all-in, 75% accepted on the
 first review. The final five-task specification took 65 minutes from request to last merge, and cost $8.29.
-The total API spend for building and proving all four phases was about $23.
+The total API spend for building and proving all four phases was about $23. The final run is written up, step
+by step, in [the run record](https://github.com/bharathcmbox/axiom/blob/main/docs/runs/2026-11-07-phase-4-exit-run.md).
 
 ## Limitations
 
@@ -324,6 +328,21 @@ that lets you check all of it afterwards.
 
 If you build something similar, my one piece of advice is the pattern from the mistakes list: **run it for
 real, early and small.** The tests told me the code was right. The real runs told me where it was wrong.
+
+## Explore the code
+
+Everything is on GitHub, under [bharathcmbox/axiom](https://github.com/bharathcmbox/axiom):
+
+- [Executive summary](https://github.com/bharathcmbox/axiom/blob/main/docs/exec-summary.md): the one-page version of this post, with the numbers.
+- [User guide](https://github.com/bharathcmbox/axiom/blob/main/docs/user-guide.md): how to work with Axiom day to day, from a specification to a merged
+  pull request, and what to do when something comes to you.
+- [Admin guide](https://github.com/bharathcmbox/axiom/blob/main/docs/admin-guide.md): installing and running it, credentials, models, budgets, and security
+  operations.
+- [The guide](https://github.com/bharathcmbox/axiom/blob/main/docs/guide/README.md): 16 chapters on how it's built, with diagrams.
+- [Architecture decisions](https://github.com/bharathcmbox/axiom/tree/main/docs/decisions): why each choice was made.
+- [Runs and drills](https://github.com/bharathcmbox/axiom/tree/main/docs/runs): the exit run and the reviewer comparison, and
+  [the drills](https://github.com/bharathcmbox/axiom/tree/main/docs/drills), including the prompt-injection drill.
+- [tiny-agenticsoc](https://github.com/bharathcmbox/tiny-agenticsoc): the project Axiom worked on, with every agent's pull request.
 
 *Axiom is a personal learning project. Nothing here is a recommendation to run AI agents unattended on
 code that matters.*
