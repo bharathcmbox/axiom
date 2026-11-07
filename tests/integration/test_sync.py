@@ -28,6 +28,7 @@ PASS = {"verdict": "PASS", "summary": "ok", "findings": []}
 
 class FakeGitHub:
     def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
         self.pr: dict[str, Any] = {"number": 7, "state": "open", "merged": False}
         self.reviews: list[dict[str, Any]] = []
         self.comments: list[dict[str, Any]] = []
@@ -57,6 +58,8 @@ def gh() -> Iterator[tuple[FakeGitHub, GitHubReader]]:
                 body = state.reviews
             elif path.endswith("/issues/7/comments"):
                 body = state.comments
+            elif path.endswith("/issues/7/events"):
+                body = state.events
             elif path.endswith("/actions/runs"):
                 sha = dict(p.split("=") for p in query.split("&"))["head_sha"]
                 body = {"workflow_runs": state.runs.get(sha, [])}
@@ -189,6 +192,120 @@ def test_closing_the_pr_cancels_the_task(org: Conn, gh: tuple[FakeGitHub, GitHub
     state.pr |= {"state": "closed", "merged": False}
     assert sync_once(org, reader) == {key: "cancelled"}
     assert get_task(org, key).state == S.CANCELLED
+
+
+def _cancelled_by(db: Conn, key: str) -> str:
+    return next(e["actor"] for e in events_for(db, key) if e["type"] == "TASK_CANCELLED")
+
+
+def test_closing_records_who_closed_it(org: Conn, gh: tuple[FakeGitHub, GitHubReader]) -> None:
+    state, reader = gh
+    key = _submitted(org)
+    state.pr |= {"state": "closed", "merged": False}
+    state.events = [
+        {"event": "closed", "actor": {"login": "someone-earlier"}},
+        {"event": "reopened", "actor": {"login": "someone-earlier"}},
+        {"event": "closed", "actor": {"login": "bharathcmbox"}},
+    ]
+    sync_once(org, reader)
+    assert _cancelled_by(org, key) == "human:github-bharathcmbox"
+
+
+def test_a_close_is_still_recorded_if_the_closer_cant_be_read(
+    org: Conn, gh: tuple[FakeGitHub, GitHubReader], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state, reader = gh
+    key = _submitted(org)
+    state.pr |= {"state": "closed", "merged": False}
+
+    def unreadable(*args: Any) -> None:
+        raise GitHubReadError("GitHub GET -> 403")
+
+    monkeypatch.setattr(reader, "closed_by", unreadable)
+    assert sync_once(org, reader) == {key: "cancelled"}
+    assert _cancelled_by(org, key) == "human:github-unknown"
+
+
+# ---- conflicts with the default branch ------------------------------------------------------
+
+
+def test_a_conflict_in_review_sends_the_work_back(
+    org: Conn, gh: tuple[FakeGitHub, GitHubReader]
+) -> None:
+    state, reader = gh
+    key = _submitted(org)
+    state.pr["mergeable"] = False
+    assert sync_once(org, reader) == {key: "conflict"}
+    task = get_task(org, key)
+    assert task.state == S.READY and task.review_rounds == 1
+    event = next(e for e in reversed(events_for(org, key)) if e["type"] == "TASK_REOPENED")
+    assert event["actor"] == "system:github-sync" and event["payload"]["conflict"] is True
+    assert "conflicts with the default branch" in event["payload"]["feedback"][0]
+    assert org.execute("SELECT count(*) AS n FROM reviews WHERE status = 'PENDING'").fetchone() == {
+        "n": 0
+    }
+
+
+def test_a_conflict_awaiting_merge_sends_the_work_back(
+    org: Conn, gh: tuple[FakeGitHub, GitHubReader]
+) -> None:
+    """The usual way it happens: another PR merged while this one waited for you."""
+    state, reader = gh
+    key = _submitted(org, require_ci=False)
+    _pass_reviews(org)
+    assert get_task(org, key).state == S.AWAITING_MERGE
+    state.pr["mergeable"] = False
+    assert sync_once(org, reader) == {key: "conflict"}
+    assert get_task(org, key).state == S.READY
+
+
+def test_a_conflict_beats_green_ci(org: Conn, gh: tuple[FakeGitHub, GitHubReader]) -> None:
+    """A PR that can't merge must not reach you as ready to merge."""
+    state, reader = gh
+    key = _submitted(org)
+    _pass_reviews(org)
+    state.runs[get_task(org, key).head_sha or ""] = [_run("completed", "success")]
+    state.pr["mergeable"] = False
+    assert sync_once(org, reader) == {key: "conflict"}
+
+
+@pytest.mark.parametrize("value", [None, True])
+def test_no_conflict_means_nothing_happens(
+    org: Conn, gh: tuple[FakeGitHub, GitHubReader], value: bool | None
+) -> None:
+    """None: GitHub is still working it out. Only False is a conflict."""
+    state, reader = gh
+    key = _submitted(org)
+    state.pr["mergeable"] = value
+    assert sync_once(org, reader) == {key: "nothing to do"}
+    assert get_task(org, key).state == S.IN_REVIEW
+
+
+def test_a_merged_pr_isnt_mistaken_for_a_conflict(
+    org: Conn, gh: tuple[FakeGitHub, GitHubReader]
+) -> None:
+    state, reader = gh
+    key = _submitted(org, require_ci=False)
+    _pass_reviews(org)
+    state.pr |= {
+        "state": "closed",
+        "merged": True,
+        "mergeable": False,
+        "merged_by": {"login": "bharathcmbox"},
+    }
+    assert sync_once(org, reader) == {key: "merged"}
+
+
+def test_a_human_request_takes_priority_over_a_conflict(
+    org: Conn, gh: tuple[FakeGitHub, GitHubReader]
+) -> None:
+    """So your words aren't lost: they'd be about the same rework."""
+    state, reader = gh
+    key = _submitted(org)
+    state.pr["mergeable"] = False
+    state.comments = [_comment("/axiom changes rename it")]
+    assert "changes requested" in sync_once(org, reader)[key]
+    assert get_task(org, key).state == S.READY
 
 
 # ---- humans asking for changes --------------------------------------------------------------

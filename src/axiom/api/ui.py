@@ -96,8 +96,9 @@ def login_form() -> HTMLResponse:
         "Axiom: sign in",
         '<form method="post" action="/ui/login"><p>API token: '
         '<input type="password" name="token" size="50" autofocus> '
-        '<button>Sign in</button></p></form><p class="muted">Issue one with '
-        "<code>docker compose exec api python -m axiom.registry.tokens issue human:you</code></p>",
+        '<button>Sign in</button></p></form><p class="muted">Issue one from your terminal, in the '
+        "axiom folder: <code>docker compose exec api python -m axiom.registry.tokens issue "
+        "human:your-name</code></p>",
     )
 
 

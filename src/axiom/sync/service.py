@@ -5,7 +5,9 @@ For every task in IN_REVIEW or AWAITING_MERGE with a pull request:
 
 - PR merged by a human           -> merge (DONE), actor human:github-<login>
     ...while still IN_REVIEW     -> approve (human override) + merge, flagged early
-- PR closed without merging      -> cancel
+- PR closed without merging      -> cancel, actor human:github-<login>
+- PR conflicts with the default branch
+                                 -> report_conflict: back to READY, and rework merges it first
 - "Request changes" review on the submitted commit
                                  -> reject_merge / request_changes (human)
 - `/axiom changes <text>` comment by owner/collaborator
@@ -131,10 +133,15 @@ def sync_task(conn: Conn, reader: GitHubReader, key: str) -> str:
         return "merged (early)" if early else "merged"
 
     if pr.get("state") == "closed":
+        try:
+            actor = github_actor(reader.closed_by(owner, repo, number))
+        except GitHubReadError as e:  # who did it is worth knowing, not worth blocking on
+            log.warning("%s: could not read who closed PR %s: %s", key, number, e)
+            actor = github_actor(None)
         with conn.transaction():
             row = lock_task(conn, key)
             payload = {"source": "github", "pr": number, "reason": "PR closed"}
-            apply_locked(conn, row, TaskCommand.CANCEL, github_actor(None), payload=payload)
+            apply_locked(conn, row, TaskCommand.CANCEL, actor, payload=payload)
         return "cancelled"
 
     request = _human_change_request(
@@ -151,6 +158,22 @@ def sync_task(conn: Conn, reader: GitHubReader, key: str) -> str:
             payload = {"source": "github", "pr": number, "feedback": [f"{login} on GitHub: {text}"]}
             apply_locked(conn, row, command, github_actor(login), payload=payload)
         return f"changes requested by {login}"
+
+    # False means conflicts. None means GitHub is still working it out, so look again next pass.
+    if pr.get("mergeable") is False:
+        with conn.transaction():
+            row = lock_task(conn, key)
+            payload = {
+                "source": "github",
+                "pr": number,
+                "conflict": True,
+                "feedback": [
+                    f"PR #{number} now conflicts with the default branch, probably because other "
+                    "work was merged. This run starts with the default branch merged in."
+                ],
+            }
+            apply_locked(conn, row, TaskCommand.REPORT_CONFLICT, SYNC, payload=payload)
+        return "conflict"
 
     if task["head_sha"]:
         status, details = ci_status(reader.workflow_runs(owner, repo, task["head_sha"]))

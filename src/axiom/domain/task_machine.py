@@ -43,6 +43,7 @@ class TaskCommand(StrEnum):
     APPROVE = "approve"
     REQUEST_CHANGES = "request_changes"
     REJECT_MERGE = "reject_merge"
+    REPORT_CONFLICT = "report_conflict"
     MERGE = "merge"
     RETRY = "retry"
     CANCEL = "cancel"
@@ -132,6 +133,14 @@ RULES: dict[TaskCommand, Rule] = {
             frozenset({S.AWAITING_MERGE}),
             (S.READY,),
             _H,
+            "TASK_REOPENED",
+        ),
+        # Only sends work back, so the sync may do it. It can't merge or approve anything.
+        Rule(
+            TaskCommand.REPORT_CONFLICT,
+            frozenset({S.IN_REVIEW, S.AWAITING_MERGE}),
+            (S.READY,),
+            _S,
             "TASK_REOPENED",
         ),
         Rule(TaskCommand.MERGE, frozenset({S.AWAITING_MERGE}), (S.DONE,), _H, "TASK_DONE"),

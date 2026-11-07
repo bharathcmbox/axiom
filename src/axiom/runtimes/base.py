@@ -32,6 +32,7 @@ class RunRequest:
     project_guidance: str | None = None  # e.g. the repo's CLAUDE.md, passed as untrusted text
     previous_feedback: list[str] = field(default_factory=list)  # review findings, answers
     round: int = 1  # review round this work is for (> 1 means rework on an existing branch)
+    role: str = "developer"
     python_version: str | None = None  # for uv; set by the harness, not sent to the sandbox
 
 
@@ -117,6 +118,7 @@ def request_to_dict(req: RunRequest) -> dict[str, Any]:
         "max_turns": req.max_turns,
         "previous_feedback": req.previous_feedback,
         "round": req.round,
+        "role": req.role,
     }
 
 
@@ -135,6 +137,7 @@ def request_from_dict(data: dict[str, Any], workspace: Path, output_dir: Path) -
         max_turns=int(data.get("max_turns", 60)),
         previous_feedback=list(data.get("previous_feedback", [])),
         round=int(data.get("round", 1)),
+        role=str(data.get("role", "developer")),
     )
 
 

@@ -24,6 +24,7 @@ from axiom.worker.feedback import feedback_from_events
 from axiom.worker.publish import PullRequest, pr_body, push_branch
 from axiom.worker.recover_costs import recover_costs
 from axiom.worker.verify import check_changes, commit, credentials_in, redact, run_tests
+from axiom.workspaces.git import git
 from axiom.workspaces.manager import Workspace, prepare_workspace, remove_workspace
 
 log = logging.getLogger("axiom.worker")
@@ -161,6 +162,12 @@ class Worker:
     def _request(self, task: dict[str, Any], ws: Workspace, project: dict[str, Any]) -> RunRequest:
         agent = self.api.agent(self.config.agent_key)
         feedback = feedback_from_events(self.api.events(task["key"]))
+        if ws.conflicted:
+            feedback.append(
+                "The default branch was merged in, leaving conflict markers in: "
+                f"{', '.join(ws.conflicted)}. Resolve them, keeping both sides' intent. A file you "
+                "may not change can't be resolved here: return needs_input and say so."
+            )
         return RunRequest(
             task_key=task["key"],
             title=task["title"],
@@ -174,6 +181,7 @@ class Worker:
             effort=self.config.effort,
             previous_feedback=feedback,
             round=task["review_rounds"] + 1,
+            role=task["assigned_role"],
             python_version=project.get("python_version"),
         )
 
@@ -218,7 +226,13 @@ class Worker:
             )
             return
 
-        check = check_changes(ws.repo, ws.base_sha, task["allowed_paths"])
+        check = check_changes(
+            ws.repo,
+            ws.base_sha,
+            task["allowed_paths"],
+            conflicted=ws.conflicted,
+            may_be_empty=ws.merged_default,  # updating the branch can be all the work there was
+        )
         if not check.ok:
             self._try_fail(key, "verification failed: " + "; ".join(check.problems),
                            cost | {"problems": check.problems})  # fmt: skip
@@ -230,12 +244,15 @@ class Worker:
             kinds = ", ".join(leaked)
             self._try_fail(key, f"verification failed: result text looks like a {kinds}", cost)
             return
-        sha = commit(
-            ws.repo,
-            f"{key}: {task['title']}\n\n{outcome.result.summary}\n\n"
-            f"Axiom execution e{execution_id} by agent {self.config.agent_key}.",
-            f"Axiom agent {self.config.agent_key} <axiom@localhost>",
-        )
+        if check.changes:
+            sha = commit(
+                ws.repo,
+                f"{key}: {task['title']}\n\n{outcome.result.summary}\n\n"
+                f"Axiom execution e{execution_id} by agent {self.config.agent_key}.",
+                f"Axiom agent {self.config.agent_key} <axiom@localhost>",
+            )
+        else:
+            sha = git(["rev-parse", "HEAD"], cwd=ws.repo)
         verified = None
         if project.get("test_command"):
             tests = run_tests(ws.repo, ws.root / "verify", test_command(project),

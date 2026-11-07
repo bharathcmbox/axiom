@@ -30,7 +30,7 @@ stateDiagram-v2
     IN_REVIEW --> AWAITING_MERGE: approve<br/>(all reviews PASS + CI green)
     IN_REVIEW --> READY: request_changes<br/>(a review FAILs or CI red)
     IN_REVIEW --> WAITING_FOR_HUMAN: escalate<br/>(round cap, review ERROR)
-    AWAITING_MERGE --> READY: reject_merge (human)
+    AWAITING_MERGE --> READY: reject_merge (human)<br/>or report_conflict (sync)
     AWAITING_MERGE --> DONE: merge (human)
     DONE --> [*]
     CANCELLED --> [*]
@@ -68,6 +68,7 @@ Terminal states: **DONE**, **CANCELLED**. FAILED is not terminal; a human can `r
 | 14 | `retry` → TASK_RETRIED | FAILED | READY | human | — | `attempt_count = 0` |
 | 15 | `cancel` → TASK_CANCELLED | any non-terminal | CANCELLED | human | — | active execution → CANCELLED; open reviews superseded |
 | 16 | `escalate` → TASK_ESCALATED | IN_REVIEW | WAITING_FOR_HUMAN | system (aggregator) | review round cap reached, or a review ERROR | open reviews superseded; reason stored |
+| 17 | `report_conflict` → TASK_REOPENED | IN_REVIEW, AWAITING_MERGE | READY | system (github-sync) | GitHub says the PR conflicts with the default branch | `review_rounds += 1`; open reviews superseded; the next run merges the default branch first |
 
 For `fail` and `time_out`, the target is READY while `attempt_count` (after the increment) is
 ≤ `max_retries` **and** the task's budget is not exhausted (summed execution cost < `budget_usd`);

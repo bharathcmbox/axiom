@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from axiom.paths import is_allowed, is_secret
-from axiom.runtimes.base import CommandRunner
+from axiom.runtimes.base import CommandRunner, read_from_sandbox
 from axiom.workspaces.git import clone_source, git
 
 # Patterns for credentials in added lines. Specific formats only, to keep false positives rare.
@@ -120,7 +120,34 @@ def nested_git(repo: Path) -> list[str]:
     return sorted(found)
 
 
-def check_changes(repo: Path, base_sha: str, allowed_paths: list[str]) -> ChangeCheck:
+CONFLICT_MARKER = re.compile(r"^(<{7}|>{7})( |$)", re.M)
+
+
+def unresolved_conflicts(repo: Path, paths: tuple[str, ...]) -> list[str]:
+    """Which of the files a merge left conflicted still hold markers. The repository is the
+    agent's, so these are read like anything else it could have written."""
+    left = []
+    for path in paths:
+        try:
+            text = read_from_sandbox(repo / path, 16 * 1024 * 1024).decode(errors="replace")
+        except FileNotFoundError:
+            continue  # deleting the file is one way to resolve it
+        except OSError:
+            left.append(path)  # a link or the like: not a resolution
+            continue
+        if CONFLICT_MARKER.search(text):
+            left.append(path)
+    return left
+
+
+def check_changes(
+    repo: Path,
+    base_sha: str,
+    allowed_paths: list[str],
+    *,
+    conflicted: tuple[str, ...] = (),
+    may_be_empty: bool = False,
+) -> ChangeCheck:
     nested = nested_git(repo)
     if nested:
         return ChangeCheck(
@@ -128,8 +155,10 @@ def check_changes(repo: Path, base_sha: str, allowed_paths: list[str]) -> Change
         )
     changes = staged_changes(repo, base_sha)
     check = ChangeCheck(changes)
-    if not changes:
+    if not changes and not may_be_empty:
         check.problems.append("no changes were made")
+    for path in unresolved_conflicts(repo, conflicted):
+        check.problems.append(f"{path}: conflict with the default branch not resolved")
     for c in changes:
         for path in filter(None, (c.path, c.old_path)):
             if is_secret(path):

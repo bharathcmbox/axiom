@@ -159,6 +159,67 @@ task, and stayed at $3.50 of a $6 limit. Its risks were honest, including that o
 meant two more documents, and which it had chosen. This is one small plan, so it says little about how well the
 planner does on larger or vaguer work.
 
+## Running the plan: parallel work, conflicts, QA
+
+Approved tasks run through the usual loop. Up to two developers work at once, on tasks with no order between
+them. A task waiting on another stays PENDING until that one is merged, which is how QA waits for the work it
+tests.
+
+```mermaid
+flowchart TB
+    a["app: developer"] --> ra["review + CI"] --> ma["you merge"]
+    b["guide: developer"] --> rb["review + CI"] --> mb["you merge"]
+    ma --> q["QA task released<br/>once both are merged"]
+    mb --> q
+    q --> rq["review + CI"] --> mq["you merge"] --> done(["Spec delivered"])
+```
+
+### When merged work makes another PR conflict
+
+The rules keep parallel tasks from sharing files, but another merge can still conflict: a human's commit, say, or
+a file nobody predicted. GitHub says so with `mergeable: false`, and the sync acts on it, before CI, because a PR
+that can't merge must not reach you as ready to merge.
+
+```mermaid
+sequenceDiagram
+    participant G as GitHub
+    participant S as Sync
+    participant A as Axiom
+    participant W as Worker
+    participant D as Agent
+    G->>S: this PR: mergeable false
+    S->>A: report_conflict: READY, with feedback
+    W->>A: claim the task again
+    W->>W: clone the branch, merge the default branch,<br/>commit it, markers and all
+    W->>D: resolve the markers in these files
+    D-->>W: done
+    W->>W: any markers left? nothing published if so
+    W->>G: push to the same branch and PR
+    Note over A: Fresh reviews and CI on the new commit
+```
+
+`report_conflict` only sends work back, and only the sync can issue it. Merging and approving stay out of its
+reach, and `reject_merge` stays human-only.
+
+| What happens | Result | Test |
+|---|---|---|
+| A PR conflicts in review, or while waiting for you | READY, reviews superseded | `test_a_conflict_awaiting_merge_sends_the_work_back` |
+| GitHub is still working it out (`null`) | Nothing yet | `test_no_conflict_means_nothing_happens` |
+| Conflict and green CI together | Conflict wins | `test_a_conflict_beats_green_ci` |
+| The agent resolves it | Same PR, with the default branch in its history | `test_a_real_conflict_is_handed_to_the_agent_with_its_markers` |
+| The agent leaves markers in | Nothing published; a failed attempt | `test_unresolved_markers_are_never_published` |
+| The default branch changed other files | Not counted as the agent's work | `test_main_s_changes_are_not_counted_as_the_agents` |
+
+A conflict counts as a review round, so repeated ones bring the round cap closer. A conflict in a file the task
+may not change can't be resolved by its agent: it's told to ask you.
+
+### QA tasks
+
+A QA task is an ordinary task with role `qa`, taken by `QA-01` through the same harness. A plan can only keep it to
+the project's test paths, and verification enforces that (`test_a_qa_agent_cannot_change_the_code_it_tests`). Its
+prompt asks for tests written from the specification. If a test shows a real bug, it asks you rather than weakening
+the test. The whole path from a spec to every task merged is in `test_from_a_plan_to_every_task_merged`.
+
 ## What these rules don't do
 
 They check a plan's shape, not whether it's any good. A plan can pass every rule and still be the wrong

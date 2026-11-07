@@ -145,6 +145,14 @@ services:
       AXIOM_AGENT_KEY: DEV-02
       AXIOM_AGENT_TOKEN: ${AXIOM_DEV02_TOKEN:-}
 
+  # QA tasks are ordinary tasks with role qa: the same harness, and a plan keeps them to test paths.
+  worker-qa-01:
+    <<: *worker
+    environment:
+      <<: *worker-env
+      AXIOM_AGENT_KEY: QA-01
+      AXIOM_AGENT_TOKEN: ${AXIOM_QA01_TOKEN:-}
+
   # Reviewers (ADR-009): read-only review runs on Claude Fable 5.1, one service per identity.
   reviewer-rev-01:
     <<: *worker

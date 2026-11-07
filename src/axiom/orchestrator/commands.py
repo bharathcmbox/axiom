@@ -141,7 +141,11 @@ def apply_locked(
     if command in (TaskCommand.FAIL, TaskCommand.TIME_OUT):
         budget_exhausted = budgets.task_budget_exhausted(conn, task_id, row["budget_usd"])
         attempt_count += 1
-    elif command in (TaskCommand.REQUEST_CHANGES, TaskCommand.REJECT_MERGE):
+    elif command in (
+        TaskCommand.REQUEST_CHANGES,
+        TaskCommand.REJECT_MERGE,
+        TaskCommand.REPORT_CONFLICT,
+    ):
         review_rounds += 1
     elif command == TaskCommand.RETRY:
         attempt_count = 0

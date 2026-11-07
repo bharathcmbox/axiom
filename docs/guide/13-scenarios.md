@@ -68,6 +68,9 @@ stateDiagram-v2
 | S30 | A plan breaks the rules | failed attempt, its problems fed back, you never see it | tested | `test_an_invalid_plan_never_reaches_a_human` |
 | S31 | Approval fails midway | no tasks, plan still PROPOSED | tested | `test_a_failure_midway_through_approval_creates_nothing` |
 | S32 | A real planner turns a spec into a plan | PROPOSED, nothing created | **live** (plan 1, $0.21) | `test_a_good_plan_reaches_a_human_and_creates_nothing` |
+| S33 | Two developers run at once | Both finish, each on its own PR | tested | `test_from_a_plan_to_every_task_merged` |
+| S34 | Another merge makes a PR conflict | READY; rework merges the default branch and resolves it | tested, with real git | `test_a_real_conflict_is_handed_to_the_agent_with_its_markers` |
+| S35 | A QA task tries to change the code it tests | Nothing published | tested | `test_a_qa_agent_cannot_change_the_code_it_tests` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
@@ -320,5 +323,4 @@ Knowing the edges is part of understanding the system:
   repository code and can't be reached from a sandbox.
 - **Prompt-injection resistance is one small run,** with a crude payload (see the drill).
 - **A dependency that gets cancelled** leaves its dependents PENDING until you cancel them.
-- **A pull request that conflicts after another merges** isn't detected yet (Phase 4 T9).
 - **A task with no CI workflow and `require_ci` on** waits forever (S3).

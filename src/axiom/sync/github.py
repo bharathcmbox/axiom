@@ -54,6 +54,12 @@ class GitHubReader:
     def comments(self, owner: str, repo: str, number: int) -> list[dict[str, Any]]:
         return self._get(f"/repos/{owner}/{repo}/issues/{number}/comments?per_page=100")  # type: ignore[no-any-return]
 
+    def closed_by(self, owner: str, repo: str, number: int) -> str | None:
+        """Who closed a PR: a PR's own data doesn't say, but its events do."""
+        events = self._get(f"/repos/{owner}/{repo}/issues/{number}/events?per_page=100")
+        closes = [e for e in events if e.get("event") == "closed"]
+        return (closes[-1].get("actor") or {}).get("login") if closes else None
+
     def workflow_runs(self, owner: str, repo: str, head_sha: str) -> list[dict[str, Any]]:
         data = self._get(f"/repos/{owner}/{repo}/actions/runs?head_sha={head_sha}&per_page=50")
         return list(data.get("workflow_runs", []))

@@ -28,6 +28,7 @@ DEFAULT_ACTOR: dict[TaskCommand, Actor] = {
     C.FAIL: DEV1,
     C.TIME_OUT: REAPER,
     C.APPROVE: HUMAN,
+    C.REPORT_CONFLICT: Actor(ActorKind.SYSTEM, "github-sync"),
     C.REQUEST_CHANGES: HUMAN,
     C.REJECT_MERGE: HUMAN,
     C.MERGE: HUMAN,

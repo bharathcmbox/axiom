@@ -16,7 +16,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from axiom.workspaces.git import git, seal
+from axiom.workspaces.git import GitError, git, seal
 
 BRANCH_PREFIX = "axiom/"
 COMMITTER_NAME = "Axiom"
@@ -39,6 +39,8 @@ class Workspace:
     branch: str
     base_sha: str  # where this round starts: changes are checked against this commit
     continued: bool = False  # True when building on an earlier round's branch
+    merged_default: bool = False  # the default branch was merged in, so there's a commit to push
+    conflicted: tuple[str, ...] = ()  # files left holding conflict markers for the agent to resolve
 
 
 def branch_name(task_key: str, execution_id: int) -> str:
@@ -81,10 +83,34 @@ def prepare_workspace(
     exclude.parent.mkdir(parents=True, exist_ok=True)
     with exclude.open("a") as f:
         f.write("\n# added by Axiom: tool caches\n" + "\n".join(LOCAL_EXCLUDES) + "\n")
+    merged, conflicted = False, tuple[str, ...]()
+    if continued and start != default_branch:
+        merged, conflicted = _merge_default(repo, repo_url, default_branch, token)
     base_sha = git(["rev-parse", "HEAD"], cwd=repo)
     seal(repo)
     return Workspace(root=root, repo=repo, out=out, branch=branch, base_sha=base_sha,
-                     continued=continued)  # fmt: skip
+                     continued=continued, merged_default=merged, conflicted=conflicted)  # fmt: skip
+
+
+def _merge_default(
+    repo: Path, repo_url: str, default_branch: str, token: str | None
+) -> tuple[bool, tuple[str, ...]]:
+    """Bring rework up to date, so a PR that conflicts can become mergeable again. Conflicts are
+    committed with their markers: the agent's changes are checked against this commit, so what it
+    must do is resolve them, and what the default branch brought isn't counted as its work."""
+    git(["fetch", "--quiet", repo_url, f"refs/heads/{default_branch}"], cwd=repo, token=token)
+    before = git(["rev-parse", "HEAD"], cwd=repo)
+    message = f"Merge {default_branch} into this branch"
+    try:
+        git(["merge", "--quiet", "--no-edit", "-m", message, "FETCH_HEAD"], cwd=repo)
+        return git(["rev-parse", "HEAD"], cwd=repo) != before, ()
+    except GitError:
+        conflicted = tuple(git(["diff", "--name-only", "--diff-filter=U"], cwd=repo).split("\n"))
+        if conflicted == ("",):
+            raise
+        git(["add", "--all"], cwd=repo)
+        git(["commit", "--quiet", "--no-verify", "-m", f"{message} (conflicts)"], cwd=repo)
+        return True, conflicted
 
 
 def _remote_has_branch(repo_url: str, branch: str, token: str | None) -> bool:
