@@ -11,6 +11,7 @@ from typing import Any
 from axiom.config import get_settings
 from axiom.metrics import Summary, TaskMetrics
 from axiom.orchestrator import budgets, measures
+from axiom.orchestrator.plans import list_plans
 from axiom.state.db import Conn, connect
 
 NEEDS_YOU = {
@@ -19,6 +20,10 @@ NEEDS_YOU = {
     "FAILED": "raise its budget and retry, or cancel it",
 }
 
+PLAN_NEEDS_YOU = {
+    "PROPOSED": "read it, then approve, reject with feedback, or cancel",
+    "ERROR": "planning failed three times: read why, then submit a new spec",
+}
 TODAY_EVENTS = (
     "TASK_SUBMITTED",
     "REVIEW_SUBMITTED",
@@ -59,13 +64,21 @@ def render_report(
     daily_cap: Decimal,
     today_events: dict[str, int],
     title: str = "Axiom daily report",
+    plans: list[dict[str, Any]] | None = None,
 ) -> str:
     lines = [f"# {title}", ""]
     waiting = [t for t in tasks if t.state in NEEDS_YOU]
+    plans_waiting = [p for p in plans or [] if p["status"] in PLAN_NEEDS_YOU]
     lines += ["## Needs you", ""]
+    if plans_waiting:
+        lines += [
+            f"- **Plan {p['id']}** ({p['project_key']}) is {p['status']}: "
+            f"{PLAN_NEEDS_YOU[p['status']]}"
+            for p in plans_waiting
+        ]
     if waiting:
         lines += [f"- **{t.key}** is {t.state}: {NEEDS_YOU[t.state]}" for t in waiting]
-    else:
+    if not waiting and not plans_waiting:
         lines.append("Nothing.")
     lines += ["", "## Today", "", f"- Spend: {fmt_usd(today_spent)} of {fmt_usd(daily_cap)}"]
     lines += [f"- {k}: {today_events[k]}" for k in TODAY_EVENTS if today_events.get(k)]
@@ -113,6 +126,7 @@ def build_report(conn: Conn, project_key: str | None = None) -> str:
         today_spent=budgets.daily_spent(conn),
         daily_cap=get_settings().daily_budget_usd,
         today_events={r["type"]: r["n"] for r in rows},
+        plans=list_plans(conn, project_key=project_key),
         title=f"Axiom daily report: {project_key}" if project_key else "Axiom daily report",
     )
 

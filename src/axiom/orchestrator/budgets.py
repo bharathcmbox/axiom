@@ -42,6 +42,7 @@ def daily_spent(conn: Conn) -> Decimal:
         """WITH day AS (SELECT date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS d)
            SELECT (SELECT coalesce(sum(cost_usd), 0) FROM executions, day WHERE started_at >= day.d)
                 + (SELECT coalesce(sum(cost_usd), 0) FROM reviews, day WHERE created_at >= day.d)
+                + (SELECT coalesce(sum(cost_usd), 0) FROM plans, day WHERE created_at >= day.d)
                   AS s"""
     ).fetchone()
     assert row is not None
@@ -56,7 +57,9 @@ def reserved(conn: Conn, task_id: int | None = None) -> Decimal:
                      AND (%(t)s::bigint IS NULL OR task_id = %(t)s))
                 + (SELECT coalesce(sum(run_budget_usd), 0) FROM reviews
                    WHERE status = 'CLAIMED'
-                     AND (%(t)s::bigint IS NULL OR task_id = %(t)s)) AS s""",
+                     AND (%(t)s::bigint IS NULL OR task_id = %(t)s))
+                + (SELECT coalesce(sum(run_budget_usd), 0) FROM plans
+                   WHERE status = 'CLAIMED' AND %(t)s::bigint IS NULL) AS s""",
         {"t": task_id},
     ).fetchone()
     assert row is not None
@@ -98,6 +101,19 @@ def reserve(conn: Conn, row: dict[str, Any], run_cap: Decimal) -> Decimal:
         raise AssignmentRejected(
             f"no budget free for {row['key']}: what is left is reserved by runs in flight"
         )
+    return run
+
+
+def reserve_from_the_day(conn: Conn, run_cap: Decimal) -> Decimal:
+    """Like `reserve`, for work that belongs to no task: a planning run."""
+    conn.execute("SELECT pg_advisory_xact_lock(%s)", (BUDGET_LOCK_ID,))
+    cap = get_settings().daily_budget_usd
+    if daily_spent(conn) >= cap:
+        raise AssignmentRejected(f"daily budget of ${cap} is spent")
+    left = min(run_cap, cap - daily_spent(conn) - reserved(conn))
+    run = max(left, ZERO).quantize(CENT, rounding=ROUND_DOWN)
+    if run <= ZERO:
+        raise AssignmentRejected("no budget free: what is left is reserved by runs in flight")
     return run
 
 

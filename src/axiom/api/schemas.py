@@ -40,11 +40,77 @@ class ProjectOut(_Out):
     test_command: str | None
     require_ci: bool
     python_version: str | None
+    test_paths: list[str]
     created_at: datetime
 
 
 class RequireCiIn(BaseModel):
     require_ci: bool
+
+
+class TestPathsIn(BaseModel):
+    test_paths: list[str] = Field(examples=[["agent/tests/**"]])
+
+
+class PlanIn(BaseModel):
+    specification: str = Field(min_length=1, max_length=20000)
+    budget_usd: Decimal = Field(gt=0, description="The most the plan's tasks may total")
+
+
+class PlanOut(_Out):
+    id: int
+    project_key: str
+    specification: str
+    budget_usd: Decimal
+    status: str
+    planner_key: str | None = None
+    attempt_count: int
+    feedback: list[str]
+    contract: dict[str, Any] | None
+    error: str | None
+    cost_usd: Decimal | None
+    cost_estimated: bool
+    created_by: str
+    created_at: datetime
+    decided_by: str | None
+    decided_at: datetime | None
+    task_keys: dict[str, str] = {}
+
+
+class PlanClaimIn(BaseModel):
+    lease_seconds: int | None = Field(default=None, gt=0)
+
+
+class PlanAssignmentOut(_Out):
+    plan_id: int
+    project_key: str
+    repo_url: str | None
+    default_branch: str
+    specification: str
+    budget_usd: Decimal
+    test_paths: list[str]
+    feedback: list[str]
+    previous_plan: dict[str, Any] | None
+    lease_expires_at: datetime
+    run_budget_usd: Decimal
+
+
+class PlanSubmitIn(BaseModel):
+    contract: dict[str, Any] = Field(description="Plan contract: summary, tasks, risks")
+    cost: dict[str, Any] | None = None
+
+
+class PlanFailIn(BaseModel):
+    error: str = Field(min_length=1)
+    cost: dict[str, Any] | None = None
+
+
+class PlanRejectIn(BaseModel):
+    feedback: str = Field(min_length=1, description="What should change: the next attempt reads it")
+
+
+class PlanCancelIn(BaseModel):
+    reason: str | None = None
 
 
 class PythonVersionIn(BaseModel):

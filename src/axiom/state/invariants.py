@@ -19,7 +19,25 @@ def check_invariants(conn: Conn) -> list[str]:
     violations += _retry_counters(conn)
     violations += _agent_assignments(conn)
     violations += _reviews(conn)
+    violations += _plans(conn)
     return violations
+
+
+def _plans(conn: Conn) -> list[str]:
+    """Only an approved plan has tasks, and it has exactly the tasks it proposed."""
+    rows = conn.execute(
+        """SELECT p.id, p.status,
+                  jsonb_array_length(coalesce(p.contract->'tasks', '[]')) AS proposed,
+                  (SELECT count(*) FROM tasks t WHERE t.plan_id = p.id) AS created
+           FROM plans p"""
+    ).fetchall()
+    out = []
+    for r in rows:
+        if r["status"] != "APPROVED" and r["created"]:
+            out.append(f"plan {r['id']} is {r['status']} but has {r['created']} task(s)")
+        if r["status"] == "APPROVED" and r["created"] != r["proposed"]:
+            out.append(f"plan {r['id']} proposed {r['proposed']} tasks but has {r['created']}")
+    return out
 
 
 def _reviews(conn: Conn) -> list[str]:

@@ -110,7 +110,12 @@ def test_unknown_task_is_404(browser: TestClient) -> None:
 def test_only_login_is_not_a_get() -> None:
     """Read from the router: FastAPI 0.162's app.routes wraps it, and would make this vacuous."""
     routes = [r for r in ui_router.routes if isinstance(r, APIRoute)]
-    assert {r.path for r in routes} == {"/ui", "/ui/login", "/ui/tasks/{key}"}
+    assert {r.path for r in routes} == {
+        "/ui",
+        "/ui/login",
+        "/ui/tasks/{key}",
+        "/ui/plans/{plan_id}",
+    }
     assert {r.path for r in routes if r.methods - {"GET", "HEAD"}} == {"/ui/login"}
 
 

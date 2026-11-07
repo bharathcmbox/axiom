@@ -41,6 +41,11 @@ docker compose exec api python -m axiom.registry.tokens revoke <id>
 | GET | `/ui`, `/ui/tasks/{key}` | Read-only HTML dashboard; signs in at `/ui/login` with a token ([chapter 15](guide/15-metrics.md#the-dashboard)) |
 | POST | `/executions/{id}/cost`, `/reviews/{id}/cost` | Cost of a run that ended without reporting; the first report wins (agents) |
 | POST | `/projects/{key}/python-version` | Which Python uv uses in this project's sandboxes: 3.12, 3.13 or 3.14 (humans only) |
+| POST | `/projects/{key}/plans` | Submit a specification for planning (humans only) |
+| GET | `/plans?project=&status=`, `/plans/{id}`, `/plans/{id}/events` | Read plans |
+| POST | `/plans/{id}/approve`, `/reject`, `/cancel` | Decide on a plan (humans only) |
+| POST | `/plans/claim`, `/plans/{id}/heartbeat`, `/submit`, `/fail` | A planner's work (agents with the engineering manager role) |
+| POST | `/projects/{key}/test-paths` | What QA tasks may touch in this project (humans only) |
 | GET | `/metrics?project=&include_demo=` | Delivery metrics computed from the event log |
 | POST | `/tasks/{key}/tags` | Set tags, e.g. `demo` to leave a task out of metrics (humans only) |
 | POST | `/tasks/{key}/defects` | Record a defect found after merge (humans only) |

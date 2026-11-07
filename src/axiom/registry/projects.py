@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 from axiom.domain.roles import Actor
 from axiom.errors import AlreadyExists, InvalidInput, NotFound
 from axiom.events.log import append_event
+from axiom.paths import is_secret, normalize
 from axiom.registry.guards import require_not_agent
 from axiom.state.db import Conn
 
@@ -32,6 +33,7 @@ class Project:
     test_command: str | None
     require_ci: bool
     python_version: str | None
+    test_paths: list[str]
     created_at: datetime
 
     @classmethod
@@ -112,6 +114,37 @@ def set_python_version(conn: Conn, actor: Actor, key: str, version: str | None) 
             type="PROJECT_PYTHON_CHANGED",
             project_id=project.id,
             payload={"python_version": version},
+        )
+    return project
+
+
+def set_test_paths(conn: Conn, actor: Actor, key: str, test_paths: list[str]) -> Project:
+    """What a QA task may touch in this project. No test paths: plans can't include QA tasks."""
+    require_not_agent(actor)
+    clean = []
+    for path in test_paths:
+        stem = path.split("*", 1)[0].strip("/")
+        if normalize(path) is None or ".." in path.split("/") or not stem or is_secret(path):
+            raise InvalidInput(f"test path {path!r} must be a directory or file in the repository")
+        clean.append(path)
+    with conn.transaction():
+        row = conn.execute("SELECT * FROM projects WHERE key = %s FOR UPDATE", (key,)).fetchone()
+        if row is None:
+            raise NotFound(f"project {key} not found")
+        if row["test_paths"] == clean:
+            return Project.from_row(row)
+        row = conn.execute(
+            "UPDATE projects SET test_paths = %s WHERE id = %s RETURNING *",
+            (Jsonb(clean), row["id"]),
+        ).fetchone()
+        assert row is not None
+        project = Project.from_row(row)
+        append_event(
+            conn,
+            actor=actor,
+            type="PROJECT_TEST_PATHS_CHANGED",
+            project_id=project.id,
+            payload={"test_paths": clean},
         )
     return project
 

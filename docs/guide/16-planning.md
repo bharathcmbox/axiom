@@ -69,6 +69,54 @@ also share it, so this plan is refused. Patterns are compared conservatively. Wh
 same file, they count as overlapping: a false alarm costs a planning retry, and a miss costs a merge
 conflict.
 
+## Approval: all or none
+
+Approval is the only way plan text becomes work. It runs the rules again, because limits or test paths may
+have changed since the plan was proposed, then creates every task in one transaction, with you as their
+creator. So the rule "only humans create tasks" still holds.
+
+```mermaid
+sequenceDiagram
+    actor Y as You
+    participant A as Axiom
+    participant DB as PostgreSQL
+    Y->>A: POST /plans/7/approve
+    A->>DB: BEGIN, lock plan 7
+    A->>A: is it PROPOSED? do the rules still pass?
+    A->>DB: create tasks in dependency order,<br/>each remembering plan 7
+    A->>DB: plan 7 is APPROVED, event PLAN_APPROVED
+    A->>DB: COMMIT
+    Note over DB: any failure: ROLLBACK,<br/>no tasks, plan still PROPOSED
+    A-->>Y: the plan, with its task keys
+```
+
+A failure midway leaves nothing behind (`test_a_failure_midway_through_approval_creates_nothing`), and
+tasks then run under all the usual limits: budgets, leases, reviews, CI, and you merging.
+
+## Reading and deciding
+
+The dashboard shows the plan at `/ui/plans/{id}`, and it appears under "Needs you". Deciding happens on
+the API, because the dashboard can't change anything.
+
+```bash
+curl "${H[@]}" localhost:8000/projects/SOC/test-paths -d '{"test_paths": ["agent/tests/**"]}'
+curl "${H[@]}" localhost:8000/projects/SOC/plans -d '{"specification": "...", "budget_usd": "15"}'
+curl "${H[@]}" localhost:8000/plans/7/approve -X POST
+curl "${H[@]}" localhost:8000/plans/7/reject -d '{"feedback": "Split the CLI change out"}'
+curl "${H[@]}" localhost:8000/plans/7/cancel -X POST
+```
+
+| What happens | Result | Test |
+|---|---|---|
+| A proposal breaks the rules | Failed attempt; its problems go to the next one; you never see it | `test_an_invalid_plan_never_reaches_a_human` |
+| Three failed attempts | ERROR, and it shows under "Needs you" | `test_three_invalid_plans_end_in_error` |
+| You reject it | Back to the planner with your words; attempts start over | `test_rejecting_feeds_back_and_starts_the_attempts_over` |
+| A planner stops heartbeating | Its lease expires and the plan goes back | `test_an_expired_lease_returns_the_plan` |
+| An agent tries to approve | Refused, nothing changes | `test_only_a_human_can_decide` |
+
+A planning run counts against the day's budget, up to $1 per attempt. It isn't charged to the plan's limit,
+which covers the tasks.
+
 ## What these rules don't do
 
 They check a plan's shape, not whether it's any good. A plan can pass every rule and still be the wrong

@@ -41,6 +41,8 @@ class Task:
     head_sha: str | None
     ci_status: str | None
     ci_sha: str | None
+    plan_id: int | None
+    plan_ref: str | None
     dependencies: tuple[str, ...]
     budget_spent_usd: Decimal
     run_budget_usd: Decimal

@@ -19,13 +19,15 @@ class Reaper:
         self._thread = threading.Thread(target=self._run, name="axiom-reaper", daemon=True)
 
     def sweep(self) -> list[str]:
-        """Time out expired execution leases and expired review leases."""
+        """Time out expired leases: executions, reviews and plans."""
+        from axiom.orchestrator.plans import expire_plan_leases
         from axiom.orchestrator.reviews import expire_review_leases
 
         with self._pool.connection() as conn:
             tasks = expire_leases(conn)
             reviews = expire_review_leases(conn)
-        return tasks + [f"review:{r}" for r in reviews]
+            plans = expire_plan_leases(conn)
+        return tasks + [f"review:{r}" for r in reviews] + [f"plan:{p}" for p in plans]
 
     def start(self) -> None:
         self._thread.start()

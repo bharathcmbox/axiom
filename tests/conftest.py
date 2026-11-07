@@ -91,6 +91,7 @@ TEST_TOKENS = {
     "agent:DEV-02": "axm_test-agent-dev02",
     "agent:REV-01": "axm_test-agent-rev01",
     "agent:SEC-01": "axm_test-agent-sec01",
+    "agent:EM-01": "axm_test-agent-em01",
 }
 
 

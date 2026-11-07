@@ -23,6 +23,14 @@ from axiom.api.schemas import (
     HeartbeatOut,
     LateCostIn,
     LateCostOut,
+    PlanAssignmentOut,
+    PlanCancelIn,
+    PlanClaimIn,
+    PlanFailIn,
+    PlanIn,
+    PlanOut,
+    PlanRejectIn,
+    PlanSubmitIn,
     ProjectIn,
     ProjectOut,
     PythonVersionIn,
@@ -35,11 +43,12 @@ from axiom.api.schemas import (
     TagsIn,
     TaskIn,
     TaskOut,
+    TestPathsIn,
 )
 from axiom.domain.roles import Actor
 from axiom.domain.task_machine import TaskCommand, TaskState
 from axiom.events.log import list_events
-from axiom.orchestrator import measures, reviews
+from axiom.orchestrator import measures, plans, reviews
 from axiom.orchestrator.assignment import claim_next
 from axiom.orchestrator.commands import apply_command, record_execution_cost
 from axiom.orchestrator.leases import heartbeat
@@ -140,6 +149,102 @@ def set_python_version_route(
     return ProjectOut.model_validate(
         projects.set_python_version(conn, actor, key, body.python_version)
     )
+
+
+@router.post("/projects/{key}/test-paths", tags=["projects"])
+def set_test_paths_route(key: str, body: TestPathsIn, conn: ConnDep, actor: ActorDep) -> ProjectOut:
+    """What a QA task may touch in this project (humans only)."""
+    return ProjectOut.model_validate(projects.set_test_paths(conn, actor, key, body.test_paths))
+
+
+@router.post("/projects/{key}/plans", tags=["plans"], status_code=201)
+def request_plan_route(key: str, body: PlanIn, conn: ConnDep, actor: ActorDep) -> PlanOut:
+    """Submit a spec for planning (humans only). Nothing runs until you approve the plan."""
+    plan = plans.request_plan(
+        conn, actor, project_key=key, specification=body.specification, budget_usd=body.budget_usd
+    )
+    return PlanOut.model_validate(plans.get_plan(conn, plan["id"]))
+
+
+@router.get("/plans", tags=["plans"])
+def list_plans_route(
+    conn: ConnDep,
+    project: Annotated[str | None, Query()] = None,
+    status: Annotated[str | None, Query()] = None,
+) -> list[PlanOut]:
+    return [
+        PlanOut.model_validate(p)
+        for p in plans.list_plans(conn, project_key=project, status=status)
+    ]
+
+
+@router.post("/plans/claim", tags=["plans"], responses={204: {"description": "No plan"}})
+def claim_plan_route(
+    conn: ConnDep, actor: ActorDep, response: Response, body: PlanClaimIn | None = None
+) -> PlanAssignmentOut | None:
+    """A planner agent claims the oldest requested plan."""
+    assignment = plans.claim_plan(conn, actor, lease_seconds=(body or PlanClaimIn()).lease_seconds)
+    if assignment is None:
+        response.status_code = 204
+        return None
+    return PlanAssignmentOut.model_validate(assignment, from_attributes=True)
+
+
+@router.get("/plans/{plan_id}", tags=["plans"])
+def get_plan_route(plan_id: int, conn: ConnDep) -> PlanOut:
+    return PlanOut.model_validate(plans.get_plan(conn, plan_id))
+
+
+@router.get("/plans/{plan_id}/events", tags=["plans"])
+def plan_events_route(plan_id: int, conn: ConnDep) -> list[EventOut]:
+    return [EventOut.model_validate(e) for e in plans.plan_events(conn, plan_id)]
+
+
+@router.post("/plans/{plan_id}/heartbeat", tags=["plans"])
+def plan_heartbeat_route(
+    plan_id: int, conn: ConnDep, actor: ActorDep, body: PlanClaimIn | None = None
+) -> dict[str, Any]:
+    expires = plans.plan_heartbeat(
+        conn, actor, plan_id, lease_seconds=(body or PlanClaimIn()).lease_seconds
+    )
+    return {"plan_id": plan_id, "lease_expires_at": expires}
+
+
+@router.post("/plans/{plan_id}/submit", tags=["plans"])
+def submit_plan_route(plan_id: int, body: PlanSubmitIn, conn: ConnDep, actor: ActorDep) -> PlanOut:
+    """A planner submits its proposal. If it fails the checks, it counts as a failed attempt."""
+    payload = {"cost": body.cost} if body.cost else None
+    plans.submit_plan(conn, actor, plan_id, body.contract, payload)
+    return PlanOut.model_validate(plans.get_plan(conn, plan_id))
+
+
+@router.post("/plans/{plan_id}/fail", tags=["plans"])
+def fail_plan_route(plan_id: int, body: PlanFailIn, conn: ConnDep, actor: ActorDep) -> PlanOut:
+    payload = {"cost": body.cost} if body.cost else None
+    plans.fail_plan_run(conn, actor, plan_id, body.error, payload)
+    return PlanOut.model_validate(plans.get_plan(conn, plan_id))
+
+
+@router.post("/plans/{plan_id}/approve", tags=["plans"])
+def approve_plan_route(plan_id: int, conn: ConnDep, actor: ActorDep) -> PlanOut:
+    """Create the plan's tasks, all or none (humans only)."""
+    plans.approve_plan(conn, actor, plan_id)
+    return PlanOut.model_validate(plans.get_plan(conn, plan_id))
+
+
+@router.post("/plans/{plan_id}/reject", tags=["plans"])
+def reject_plan_route(plan_id: int, body: PlanRejectIn, conn: ConnDep, actor: ActorDep) -> PlanOut:
+    """Send it back with what should change (humans only)."""
+    plans.reject_plan(conn, actor, plan_id, body.feedback)
+    return PlanOut.model_validate(plans.get_plan(conn, plan_id))
+
+
+@router.post("/plans/{plan_id}/cancel", tags=["plans"])
+def cancel_plan_route(
+    plan_id: int, conn: ConnDep, actor: ActorDep, body: PlanCancelIn | None = None
+) -> PlanOut:
+    plans.cancel_plan(conn, actor, plan_id, (body or PlanCancelIn()).reason)
+    return PlanOut.model_validate(plans.get_plan(conn, plan_id))
 
 
 @router.post("/projects/{key}/require-ci", tags=["projects"])

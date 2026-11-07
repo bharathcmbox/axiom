@@ -16,10 +16,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from axiom.config import get_settings
 from axiom.domain.roles import Actor
 from axiom.events.log import list_events
-from axiom.orchestrator import budgets, measures, reviews
+from axiom.orchestrator import budgets, measures, plans, reviews
 from axiom.orchestrator.tasks import get_task, list_tasks
 from axiom.registry.tokens import authenticate
-from axiom.report import NEEDS_YOU, fmt_duration, fmt_pct, fmt_usd
+from axiom.report import NEEDS_YOU, PLAN_NEEDS_YOU, fmt_duration, fmt_pct, fmt_usd
 from axiom.state.db import Conn
 
 ui_router = APIRouter(prefix="/ui", include_in_schema=False)
@@ -125,7 +125,17 @@ def overview(conn: ConnDep, user: UserDep, include_demo: bool = False) -> HTMLRe
         f"{e(NEEDS_YOU[t.state])}</li>"
         for t in waiting
     )
-    needs_html = f"<div class='needs'><b>Needs you</b><ul>{needs}</ul></div>" if waiting else ""
+    open_plans = [p for p in plans.list_plans(conn) if p["status"] in PLAN_NEEDS_YOU]
+    needs = (
+        "".join(
+            f"<li><a href='/ui/plans/{p['id']}'>Plan {p['id']}</a> {state_tag(p['status'])} "
+            f"{e(p['project_key'])}: {e(PLAN_NEEDS_YOU[p['status']])}</li>"
+            for p in open_plans
+        )
+        + needs
+    )
+    has_needs = waiting or open_plans
+    needs_html = f"<div class='needs'><b>Needs you</b><ul>{needs}</ul></div>" if has_needs else ""
     spent, cap = budgets.daily_spent(conn), get_settings().daily_budget_usd
     cards = [
         ("Spent today", f"{fmt_usd(spent)} of {fmt_usd(cap)}"),
@@ -203,6 +213,58 @@ def task_page(key: str, conn: ConnDep, user: UserDep) -> HTMLResponse:
         "<h2>Developer runs</h2><table><tr><th>#</th><th>Agent</th><th>Status</th><th>Cost</th>"
         f"<th>Error</th></tr>{exec_rows}</table>"
         f"<h2>Timeline</h2><table><tr><th>When</th><th>Event</th><th>State</th><th>Who</th></tr>{events}</table>",
+    )
+
+
+@ui_router.get("/plans/{plan_id}")
+def plan_page(plan_id: int, conn: ConnDep, user: UserDep) -> HTMLResponse:
+    """Everything needed to decide on a plan. Deciding happens on the API, not here."""
+    plan = plans.get_plan(conn, plan_id)
+    contract = plan["contract"] or {}
+    keys = plan["task_keys"]
+    rows = "".join(_plan_task(t, keys) for t in contract.get("tasks", []))
+    risks = "".join(f"<li>{e(r)}</li>" for r in contract.get("risks", []))
+    feedback = "".join(f"<li>{e(f)}</li>" for f in plan["feedback"])
+    tasks = contract.get("tasks", [])
+    total = sum(t.get("budget_usd", 0) for t in tasks)
+    decide = (
+        f"<p>Decide with the API: <code>POST /plans/{plan_id}/approve</code>, "
+        "<code>/reject</code> with feedback, or <code>/cancel</code>.</p>"
+        if plan["status"] == "PROPOSED"
+        else ""
+    )
+    return page(
+        f"Plan {plan_id}: {plan['project_key']}",
+        f"<p>{state_tag(plan['status'])} requested by {e(plan['created_by'])}"
+        + (f", decided by {e(plan['decided_by'])}" if plan["decided_by"] else "")
+        + "</p>"
+        f"<div class='cards'><div class='card'><b>{e(f'${total:.2f}')}</b>Tasks' budgets</div>"
+        f"<div class='card'><b>{fmt_usd(plan['budget_usd'])}</b>Plan's limit</div>"
+        f"<div class='card'><b>{cost_cell(plan)}</b>Planning cost</div>"
+        f"<div class='card'><b>{plan['attempt_count']}</b>Failed attempts</div></div>{decide}"
+        f"<h2>Specification</h2><pre>{e(plan['specification'])}</pre>"
+        + (f"<h2>Error</h2><pre>{e(plan['error'])}</pre>" if plan["error"] else "")
+        + (f"<h2>Summary</h2><p>{e(contract.get('summary'))}</p>" if contract else "")
+        + (
+            "<h2>Proposed tasks</h2><table><tr><th>Ref</th><th>Role</th><th>Title and spec</th>"
+            f"<th>May change</th><th>Waits for</th><th>Budget</th></tr>{rows}</table>"
+            if rows
+            else ""
+        )
+        + (f"<h2>Risks it names</h2><ul>{risks}</ul>" if risks else "")
+        + (f"<h2>Feedback so far</h2><ul>{feedback}</ul>" if feedback else ""),
+    )
+
+
+def _plan_task(t: dict[str, Any], keys: dict[str, str]) -> str:
+    ref = t.get("ref", "")
+    label = f"<a href='/ui/tasks/{quote(keys[ref])}'>{e(keys[ref])}</a>" if ref in keys else e(ref)
+    criteria = "".join(f"<li>{e(c)}</li>" for c in t.get("acceptance_criteria", []))
+    paths = "<br>".join(f"<code>{e(p)}</code>" for p in t.get("allowed_paths", []))
+    return (
+        f"<tr><td>{label}</td><td>{e(t.get('role'))}</td><td><b>{e(t.get('title'))}</b>"
+        f"<pre>{e(t.get('specification'))}</pre><ul>{criteria}</ul></td><td>{paths}</td>"
+        f"<td>{e(', '.join(t.get('depends_on', [])))}</td><td>{e(t.get('budget_usd'))}</td></tr>"
     )
 
 

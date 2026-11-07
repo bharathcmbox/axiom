@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     review_budget_usd: Decimal = Decimal("1.00")
     max_review_rounds: int = 3
     review_lease_seconds: int = 300
+    # Plans (ADR-011): the most one planning attempt may spend, and its lease.
+    plan_run_budget_usd: Decimal = Decimal("1.00")
+    plan_lease_seconds: int = 300
 
 
 @lru_cache
