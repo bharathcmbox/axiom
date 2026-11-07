@@ -93,6 +93,23 @@ class AxiomClient:
     def record_review_cost(self, review_id: int, cost: dict[str, Any]) -> None:
         self._call("POST", f"/reviews/{review_id}/cost", {"cost": cost})
 
+    def claim_plan(self, lease_seconds: int) -> dict[str, Any] | None:
+        return self._call("POST", "/plans/claim", {"lease_seconds": lease_seconds})  # type: ignore[no-any-return]
+
+    def plan_heartbeat(self, plan_id: int, lease_seconds: int) -> None:
+        self._call("POST", f"/plans/{plan_id}/heartbeat", {"lease_seconds": lease_seconds})
+
+    def submit_plan(self, plan_id: int, contract: dict[str, Any], cost: dict[str, Any]) -> str:
+        r = self._call("POST", f"/plans/{plan_id}/submit", {"contract": contract, "cost": cost})
+        return str(r["status"])
+
+    def fail_plan(self, plan_id: int, error: str, cost: dict[str, Any]) -> str:
+        r = self._call("POST", f"/plans/{plan_id}/fail", {"error": error, "cost": cost})
+        return str(r["status"])
+
+    def record_plan_cost(self, plan_id: int, cost: dict[str, Any]) -> None:
+        self._call("POST", f"/plans/{plan_id}/cost", {"cost": cost})
+
     def task_reviews(self, key: str) -> list[dict[str, Any]]:
         return self._call("GET", f"/tasks/{key}/reviews")  # type: ignore[no-any-return]
 

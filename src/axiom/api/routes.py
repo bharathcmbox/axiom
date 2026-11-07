@@ -225,6 +225,15 @@ def fail_plan_route(plan_id: int, body: PlanFailIn, conn: ConnDep, actor: ActorD
     return PlanOut.model_validate(plans.get_plan(conn, plan_id))
 
 
+@router.post("/plans/{plan_id}/cost", tags=["plans"])
+def record_plan_cost_route(
+    plan_id: int, body: LateCostIn, conn: ConnDep, actor: ActorDep
+) -> PlanOut:
+    """The cost of a planning run that ended without reporting."""
+    plans.record_plan_cost(conn, actor, plan_id, {"cost": body.cost})
+    return PlanOut.model_validate(plans.get_plan(conn, plan_id))
+
+
 @router.post("/plans/{plan_id}/approve", tags=["plans"])
 def approve_plan_route(plan_id: int, conn: ConnDep, actor: ActorDep) -> PlanOut:
     """Create the plan's tasks, all or none (humans only)."""

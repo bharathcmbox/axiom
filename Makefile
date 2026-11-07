@@ -59,7 +59,7 @@ worker-tokens: up
 	  grep -q "^$$var=." .env 2>/dev/null || { sed -i "/^$$var=/d" .env 2>/dev/null; \
 	    echo "$$var=$$(openssl rand -hex 32)" >> .env; echo "$$var added to .env"; }; \
 	done
-	@for a in DEV01:DEV-01 DEV02:DEV-02 REV01:REV-01 SEC01:SEC-01; do \
+	@for a in DEV01:DEV-01 DEV02:DEV-02 REV01:REV-01 SEC01:SEC-01 EM01:EM-01; do \
 	  var=AXIOM_$${a%%:*}_TOKEN; key=$${a#*:}; \
 	  if grep -q "^$$var=" .env 2>/dev/null; then echo "$$var already in .env"; \
 	  else tok=$$(docker compose exec -T api python -m axiom.registry.tokens issue agent:$$key --label worker); \
@@ -68,10 +68,10 @@ worker-tokens: up
 
 workers: sandbox-image
 	mkdir -p $(AXIOM_WORKSPACES_DIR)
-	docker compose --profile workers up -d --build --wait worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
+	docker compose --profile workers up -d --build --wait planner-em-01 worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
 
 workers-down:
-	docker compose --profile workers stop model-proxy sandbox-launcher worker-egress-proxy worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
+	docker compose --profile workers stop model-proxy sandbox-launcher worker-egress-proxy planner-em-01 worker-dev-01 worker-dev-02 reviewer-rev-01 reviewer-sec-01 github-sync
 
 # The daily report: plain numbers from the event log, no LLM.
 report:

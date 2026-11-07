@@ -129,6 +129,10 @@ def review_json_schema() -> dict[str, Any]:
     return ReviewContract.model_json_schema()
 
 
+def plan_json_schema() -> dict[str, Any]:
+    return PlanContract.model_json_schema()
+
+
 def parse_plan(data: Any) -> PlanContract:
     try:
         return PlanContract.model_validate(data)

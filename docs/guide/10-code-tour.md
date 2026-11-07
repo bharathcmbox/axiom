@@ -113,6 +113,7 @@ flowchart TB
 | `worker/verify.py` | 150 | The checks before anything is published |
 | `modelproxy/server.py`, `modelproxy/runs.py` | 320 | The only holder of the Anthropic key: run tokens, budgets, metering |
 | `launcher/spec.py`, `runner.py`, `server.py` | 300 | The only holder of the Docker socket: what may be started |
+| `orchestrator/plans.py`, `plan_rules.py`, `worker/plan_harness.py` | 900 | Plans: state, the rules, and the planner worker |
 | `sandbox/runner.py` | 270 | What runs inside the container |
 | `sync/service.py` | 200 | GitHub → task commands |
 

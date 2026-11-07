@@ -44,7 +44,7 @@ docker compose exec api python -m axiom.registry.tokens revoke <id>
 | POST | `/projects/{key}/plans` | Submit a specification for planning (humans only) |
 | GET | `/plans?project=&status=`, `/plans/{id}`, `/plans/{id}/events` | Read plans |
 | POST | `/plans/{id}/approve`, `/reject`, `/cancel` | Decide on a plan (humans only) |
-| POST | `/plans/claim`, `/plans/{id}/heartbeat`, `/submit`, `/fail` | A planner's work (agents with the engineering manager role) |
+| POST | `/plans/claim`, `/plans/{id}/heartbeat`, `/submit`, `/fail`, `/cost` | A planner's work (agents with the engineering manager role) |
 | POST | `/projects/{key}/test-paths` | What QA tasks may touch in this project (humans only) |
 | GET | `/metrics?project=&include_demo=` | Delivery metrics computed from the event log |
 | POST | `/tasks/{key}/tags` | Set tags, e.g. `demo` to leave a task out of metrics (humans only) |

@@ -93,6 +93,7 @@ class PlanAssignmentOut(_Out):
     previous_plan: dict[str, Any] | None
     lease_expires_at: datetime
     run_budget_usd: Decimal
+    run_number: int
 
 
 class PlanSubmitIn(BaseModel):

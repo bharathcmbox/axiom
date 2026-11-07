@@ -37,6 +37,12 @@ from axiom.runtimes.base import (
     read_from_sandbox,
     request_to_dict,
 )
+from axiom.runtimes.plan import (
+    PlanOutcome,
+    PlanRequest,
+    plan_outcome_from_dict,
+    plan_request_to_dict,
+)
 from axiom.runtimes.review import (
     ReviewOutcome,
     ReviewRequest,
@@ -56,7 +62,7 @@ class _ModelRun:
     metered: Metered | None = None
 
 
-def _settle[Reported: (RunOutcome, ReviewOutcome)](
+def _settle[Reported: (RunOutcome, ReviewOutcome, PlanOutcome)](
     outcome: Reported, metered: Metered | None
 ) -> Reported:
     """The proxy's count is the record. Whatever the sandbox wrote about its cost is ignored."""
@@ -86,6 +92,7 @@ class SandboxRuntime:
     cpus: str = "2"
     fake_scenario: str | None = None  # run FakeRuntime inside the container (tests, demos)
     fake_review: str | None = None  # run FakeReviewer inside the container (tests, demos)
+    fake_plan: str | None = None  # run FakePlanner inside the container (tests, demos)
     docker: str = "docker"
     drill_canary: str | None = None  # a fake secret for the injection drill; never a real one
     model_proxy: ModelProxyClient | None = None  # how real runs reach the model
@@ -157,6 +164,26 @@ class SandboxRuntime:
             ReviewOutcome(done.outcome, error=done.error)
             if isinstance(done, RunOutcome)
             else review_outcome_from_dict(done, request.output_dir)
+        )
+        return _settle(outcome, run.metered)
+
+    def run_plan(self, request: PlanRequest, on_event: EventCallback | None = None) -> PlanOutcome:
+        """A read-only planning run."""
+        env = [f"AXIOM_FAKE_PLAN={self.fake_plan}"] if self.fake_plan else []
+        with self._model_run(request.budget_usd, request.model, request.output_dir) as run:
+            done = self._run_container(
+                request_json=plan_request_to_dict(request),
+                workspace=request.workspace,
+                output_dir=request.output_dir,
+                task_key=f"plan-{request.plan_id}",
+                outcome_name="plan_outcome.json",
+                extra_env=env + self._drill_env() + run.env,
+                on_event=on_event,
+            )
+        outcome = (
+            PlanOutcome(done.outcome, error=done.error)
+            if isinstance(done, RunOutcome)
+            else plan_outcome_from_dict(done, request.output_dir)
         )
         return _settle(outcome, run.metered)
 

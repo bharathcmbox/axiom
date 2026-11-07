@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from axiom.runtimes.base import Outcome, RunRequest
+from axiom.runtimes.plan import PlanRequest
 from axiom.runtimes.sandbox import SandboxRuntime
 from axiom.worker.verify import check_changes, commit
 from axiom.workspaces.manager import prepare_workspace
@@ -221,3 +222,19 @@ def test_an_attack_planted_from_the_real_sandbox_does_not_reach_the_harness(
     assert check.ok, check.problems
     commit(ws.repo, "work", "A <a@b>")
     assert not loot.exists()
+
+
+def test_plan_run_in_the_container(request_: RunRequest) -> None:
+    plan = PlanRequest(
+        plan_id=7,
+        project_key="SOC",
+        specification="s",
+        plan_budget_usd=Decimal(5),
+        test_paths=["tests/**"],
+        workspace=request_.workspace,
+        output_dir=request_.output_dir,
+        budget_usd=Decimal(1),
+    )
+    outcome = SandboxRuntime(fake_plan="good").run_plan(plan)
+    assert outcome.outcome == Outcome.COMPLETED and outcome.contract is not None
+    assert outcome.contract["tasks"][0]["ref"] == "impl"

@@ -15,6 +15,7 @@ ALLOWED_ENV = frozenset(
         "UV_PYTHON",
         "AXIOM_FAKE_SCENARIO",
         "AXIOM_FAKE_REVIEW",
+        "AXIOM_FAKE_PLAN",
         "INTERNAL_DEPLOY_TOKEN",  # the injection drill's fake canary
     }
 )

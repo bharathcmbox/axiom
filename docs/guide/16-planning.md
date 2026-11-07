@@ -117,6 +117,48 @@ curl "${H[@]}" localhost:8000/plans/7/cancel -X POST
 A planning run counts against the day's budget, up to $1 per attempt. It isn't charged to the plan's limit,
 which covers the tasks.
 
+## The planner
+
+`EM-01` runs Opus 5.5 in the same kind of sandbox as a reviewer. It can read and search the repository, with
+no shell and no way to edit. It holds no credentials, and reaches the model through the proxy.
+
+```mermaid
+sequenceDiagram
+    participant P as Planner worker
+    participant A as Axiom
+    participant S as Sandbox
+    participant M as Model proxy
+    P->>A: claim: the oldest requested plan
+    A-->>P: the spec, limits, feedback, earlier plan
+    P->>P: clone the default branch, seal its .git
+    P->>S: start, via the launcher
+    S->>M: read, search, think (run token)
+    S-->>P: a proposal, in out/
+    P->>P: did the checkout change? use the proxy's cost
+    P->>A: submit
+    A->>A: the rules decide
+```
+
+The worker doesn't judge a proposal. It passes it on as it came, so a badly shaped plan and a plan that breaks
+a rule get the same treatment: a failed attempt, with the problems in the next prompt. Each run has its own
+workspace, so a killed run's record is still there for a restarted worker to report once
+(`test_a_restarted_planner_costs_the_run_it_lost_once`).
+
+| If the planner... | What happens | Test |
+|---|---|---|
+| edits a file somehow | The run fails: the checkout must be untouched | `test_bad_runs_count_as_failed_attempts` |
+| is given no project repository | Fails before any spending | `test_a_project_without_a_repository_fails_before_spending` |
+| puts a credential in an error | Removed before it's stored | `test_a_credential_in_an_error_is_not_stored` |
+| loses its lease | The run is cancelled, and its cost still recorded | `test_a_lost_lease_cancels_the_run_and_still_reports_its_cost` |
+
+### The first real plan
+
+On Nov 6, for a small spec on `tiny-agenticsoc` (a `socagent queue` command): first attempt, 40 seconds, $0.21. It
+named the real files and line numbers, kept a QA task to one new test file, ordered it after the developer's
+task, and stayed at $3.50 of a $6 limit. Its risks were honest, including that one phrase in the spec could have
+meant two more documents, and which it had chosen. This is one small plan, so it says little about how well the
+planner does on larger or vaguer work.
+
 ## What these rules don't do
 
 They check a plan's shape, not whether it's any good. A plan can pass every rule and still be the wrong

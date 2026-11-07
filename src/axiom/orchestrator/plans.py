@@ -50,6 +50,7 @@ class PlanAssignment:
     previous_plan: dict[str, Any] | None
     lease_expires_at: datetime
     run_budget_usd: Decimal
+    run_number: int  # gives each run its own workspace, so a killed run's is still there
 
 
 def _plan_event(
@@ -276,7 +277,13 @@ def claim_plan(
             "SELECT * FROM projects WHERE id = %s", (plan["project_id"],)
         ).fetchone()
         assert project is not None
+        claims = conn.execute(
+            "SELECT count(*) AS n FROM events WHERE plan_id = %s AND type = 'PLAN_CLAIMED'",
+            (plan["id"],),
+        ).fetchone()
+        assert claims is not None
         return PlanAssignment(
+            run_number=int(claims["n"]),
             plan_id=plan["id"],
             project_key=project["key"],
             repo_url=project["repo_url"],
@@ -434,6 +441,34 @@ def _retry_or_error(
         conn, actor, plan, command, event, target, {"error": error[:500], "attempts": attempts}
     )
     return target
+
+
+def record_plan_cost(conn: Conn, actor: Actor, plan_id: int, payload: dict[str, Any]) -> None:
+    """A planning run that ended without reporting (lease lost, worker killed). The money was spent
+    whatever the plan's state, and a plan has several attempts, so this adds to its cost."""
+    is_planner = (
+        actor.kind == ActorKind.AGENT
+        and get_agent(conn, actor.name).role == Role.ENGINEERING_MANAGER
+    )
+    if not is_planner:
+        raise Forbidden("only planners report planning costs")
+    cost_usd, _, _ = budgets.parse_cost(payload)
+    if cost_usd is None:
+        raise InvalidInput("cost.usd is required")
+    with conn.transaction():
+        plan = _lock(conn, plan_id)
+        conn.execute(
+            f"UPDATE plans SET {_add_cost_sql()} WHERE id = %(id)s",
+            {"cost": cost_usd, "estimated": budgets.is_estimated(payload), "id": plan_id},
+        )
+        append_event(
+            conn,
+            actor=actor,
+            type="PLAN_COST_RECORDED",
+            project_id=plan["project_id"],
+            plan_id=plan_id,
+            payload={"cost_usd": str(cost_usd), "estimated": budgets.is_estimated(payload)},
+        )
 
 
 def expire_plan_leases(conn: Conn) -> list[int]:

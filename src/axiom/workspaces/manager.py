@@ -141,3 +141,38 @@ def prepare_review_workspace(
 
 def remove_review_workspace(workspace: ReviewWorkspace) -> None:
     shutil.rmtree(workspace.root, ignore_errors=True)
+
+
+@dataclass(frozen=True)
+class PlanWorkspace:
+    root: Path
+    repo: Path
+    out: Path
+
+
+def prepare_plan_workspace(
+    workspaces_root: Path,
+    *,
+    plan_id: int,
+    run_number: int,
+    repo_url: str,
+    default_branch: str,
+    token: str | None,
+) -> PlanWorkspace:
+    """A fresh checkout of the default branch for one planning run. Each run gets its own directory,
+    so a killed run's transcript is still there when the next one starts."""
+    root = workspaces_root / f"plan-{plan_id}-a{run_number}"
+    if root.exists():
+        shutil.rmtree(root)
+    repo, out = root / "repo", root / "out"
+    out.mkdir(parents=True)
+    git(
+        ["clone", "--quiet", "--single-branch", "--branch", default_branch, repo_url, str(repo)],
+        token=token,
+    )
+    seal(repo)
+    return PlanWorkspace(root=root, repo=repo, out=out)
+
+
+def remove_plan_workspace(workspace: PlanWorkspace) -> None:
+    shutil.rmtree(workspace.root, ignore_errors=True)

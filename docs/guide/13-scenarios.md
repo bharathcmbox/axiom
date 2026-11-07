@@ -67,6 +67,7 @@ stateDiagram-v2
 | S29 | A compromised worker tries to reach another host | refused by its proxy, no direct route | `make check-boundaries`, in real containers | `test_git_still_gets_the_way_out_through_the_workers_proxy` |
 | S30 | A plan breaks the rules | failed attempt, its problems fed back, you never see it | tested | `test_an_invalid_plan_never_reaches_a_human` |
 | S31 | Approval fails midway | no tasks, plan still PROPOSED | tested | `test_a_failure_midway_through_approval_creates_nothing` |
+| S32 | A real planner turns a spec into a plan | PROPOSED, nothing created | **live** (plan 1, $0.21) | `test_a_good_plan_reaches_a_human_and_creates_nothing` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine

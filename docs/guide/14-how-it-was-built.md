@@ -121,6 +121,7 @@ flowchart LR
 | A sandbox could make the worker copy its own tokens into an error, through a symlink in `out/` | Designing how the launcher would handle logs | Safe reads, logs held by the launcher, errors cleaned (ADR-016) |
 | Workers held the Docker socket | The hardening plan | The launcher, ADR-016 |
 | Adding Python 3.12 and 3.13 to the sandbox image quietly moved `uv` from 3.14 to 3.13 | The T5 drill's patch being rejected for the wrong reason | Each project sets its Python |
+| The planner's rules were written but never given to the model | A test expecting them in the prompt | Passed as the system prompt, with a test |
 | The first report flattered the system: "$0.03 per merged task" came from old demo tasks | Reading its output on real data | Demo tasks tagged, the demo script tags its own |
 
 **Process mistakes** also happened, and are worth knowing:

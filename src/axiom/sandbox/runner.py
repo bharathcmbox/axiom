@@ -132,6 +132,8 @@ def main() -> int:
     data = json.loads((OUTPUT / "request.json").read_text())
     if data.get("mode") == "review":
         return main_review(data)
+    if data.get("mode") == "plan":
+        return main_plan(data)
     request = request_from_dict(data, WORKSPACE, OUTPUT)
     scenario = os.environ.get("AXIOM_FAKE_SCENARIO")
     if scenario:
@@ -263,6 +265,111 @@ def main_review(data: dict[str, Any]) -> int:
     (OUTPUT / "review_outcome.json").write_text(
         json.dumps(review_outcome_to_dict(outcome), indent=2)
     )
+    return 0
+
+
+# ---- plan mode (Phase 4) ---------------------------------------------------------------------
+
+
+def build_plan_options(request: Any) -> Any:
+    from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
+
+    from axiom.contracts import plan_json_schema
+    from axiom.sandbox.hooks import EDIT_TOOLS, make_review_guard
+    from axiom.sandbox.plan_prompt import PLAN_RULES
+
+    guard = make_review_guard(request.workspace)
+    matcher = HookMatcher(
+        matcher="|".join(EDIT_TOOLS + tuple(REVIEW_TOOLS)),
+        hooks=[guard],  # type: ignore[list-item]
+    )
+    return ClaudeAgentOptions(
+        model=request.model,
+        effort=request.effort,
+        cwd=str(request.workspace),
+        system_prompt={"type": "preset", "preset": "claude_code", "append": PLAN_RULES},
+        tools=REVIEW_TOOLS,
+        allowed_tools=REVIEW_TOOLS,
+        disallowed_tools=REVIEW_DISALLOWED,
+        permission_mode="dontAsk",
+        setting_sources=[],
+        max_turns=request.max_turns,
+        max_budget_usd=float(request.budget_usd * BUDGET_HEADROOM),
+        output_format={"type": "json_schema", "schema": plan_json_schema()},
+        hooks={"PreToolUse": [matcher]},
+        env={"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_TELEMETRY": "1"},
+    )
+
+
+def to_plan_outcome(result: Any, transcript: Path, raised: str | None) -> Any:
+    """The proposal stays raw: the API alone judges it, and its problems reach the next attempt."""
+    from axiom.runtimes.plan import PlanOutcome
+
+    base = to_outcome(result, transcript, raised) if result is None or result.is_error else None
+    if base is None and result.subtype != "success":
+        base = to_outcome(result, transcript, raised)
+    if base is not None:
+        return PlanOutcome(
+            base.outcome,
+            error=base.error,
+            cost_usd=base.cost_usd,
+            input_tokens=base.input_tokens,
+            output_tokens=base.output_tokens,
+            turns=base.turns,
+            transcript_path=transcript,
+        )
+    usage = result.usage or {}
+    keys = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+    cost = result.total_cost_usd
+    contract = result.structured_output
+    return PlanOutcome(
+        Outcome.COMPLETED if isinstance(contract, dict) else Outcome.FAILED,
+        contract=contract if isinstance(contract, dict) else None,
+        error=None if isinstance(contract, dict) else "the planner returned no structured plan",
+        cost_usd=Decimal(str(cost)) if cost is not None else None,
+        input_tokens=sum(int(usage.get(k) or 0) for k in keys) or None,
+        output_tokens=usage.get("output_tokens"),
+        turns=result.num_turns,
+        transcript_path=transcript,
+    )
+
+
+async def run_plan(request: Any, query_fn: QueryFn | None = None) -> Any:
+    from claude_agent_sdk import ResultError, ResultMessage, query
+
+    from axiom.sandbox.plan_prompt import build_plan_prompt
+
+    run_query = query_fn or query
+    request.output_dir.mkdir(parents=True, exist_ok=True)
+    transcript = request.output_dir / "transcript.jsonl"
+    prompt = build_plan_prompt(request, read_guidance(request.workspace))
+    final, raised = None, None
+    with transcript.open("w") as log:
+        try:
+            async for message in run_query(prompt=prompt, options=build_plan_options(request)):
+                log.write(json.dumps(_jsonable(message), default=str) + "\n")
+                log.flush()
+                if isinstance(message, ResultMessage):
+                    final = message
+        except ResultError as e:
+            raised = f"{e.subtype}: {'; '.join(e.errors or [])}"
+        except Exception as e:
+            raised = f"{type(e).__name__}: {e}"
+    return to_plan_outcome(final, transcript, raised)
+
+
+def main_plan(data: dict[str, Any]) -> int:
+    from axiom.runtimes.plan import plan_outcome_to_dict, plan_request_from_dict
+
+    request = plan_request_from_dict(data, WORKSPACE, OUTPUT)
+    scenario = os.environ.get("AXIOM_FAKE_PLAN")
+    if scenario:
+        from axiom.runtimes.fake_plan import FakePlanner, PlanScenario
+
+        outcome = FakePlanner(scenario=PlanScenario(scenario)).run_plan(request)
+    else:
+        outcome = asyncio.run(run_plan(request))
+    (OUTPUT / "plan_outcome.json").write_text(json.dumps(plan_outcome_to_dict(outcome), indent=2))
     return 0
 
 
