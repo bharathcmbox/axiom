@@ -157,12 +157,12 @@ def test_racing_reviewers_never_reserve_more_than_the_day(
     org: Conn, db_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Reviewers take no developer-cap lock and these hold different tasks, so only the budget
-    lock serializes them. With it removed, this fails: both see $1.50 free and take $1 each."""
+    lock serializes them. With it removed, this fails: both see $1.70 free and take $1 each."""
     settings = get_settings()
     for _ in range(12):
         keys = [_in_review(org), _in_review(org)]
         monkeypatch.setattr(
-            settings, "daily_budget_usd", budgets.daily_spent(org) + Decimal("1.50")
+            settings, "daily_budget_usd", budgets.daily_spent(org) + Decimal("1.70")
         )
         barrier = threading.Barrier(2)
         threads = [
@@ -173,7 +173,9 @@ def test_racing_reviewers_never_reserve_more_than_the_day(
             t.start()
         for t in threads:
             t.join()
-        assert budgets.reserved(org) == Decimal("1.50")  # $1 + the 50c left, never $1 + $1
+        assert budgets.reserved(org) == Decimal(
+            1
+        )  # the second waits: $0.70 is too little, never $1 + $1
         for key in keys:
             do(org, key, C.CANCEL, HUMAN)
 
@@ -189,15 +191,15 @@ def _left(db: Conn, key: str, amount: str) -> None:
 
 def test_a_review_run_is_capped_by_what_the_task_has_left(org: Conn) -> None:
     key = _in_review(org)
-    _left(org, key, "0.60")
+    _left(org, key, "0.90")
     claimed = claim_review(org, REV)
-    assert claimed is not None and claimed.run_budget_usd == Decimal("0.60")
-    assert list_reviews(org, get_task(org, key).id)[0]["run_budget_usd"] == Decimal("0.60")
+    assert claimed is not None and claimed.run_budget_usd == Decimal("0.90")
+    assert list_reviews(org, get_task(org, key).id)[0]["run_budget_usd"] == Decimal("0.90")
 
 
 def test_second_reviewer_waits_when_the_first_reserved_the_rest(org: Conn) -> None:
     key = _in_review(org)
-    _left(org, key, "0.60")
+    _left(org, key, "0.90")
     assert claim_review(org, REV) is not None
     before = _state_of(org, key)
     with pytest.raises(AssignmentRejected, match="reserved by runs in flight"):
@@ -537,7 +539,7 @@ def test_a_budget_too_small_for_a_second_round_goes_to_a_human(org: Conn) -> Non
     for _round in range(2):
         do(org, key, C.ASSIGN)
         do(org, key, C.START, DEV1)
-        payload = {"summary": "work", "commit": "abc", "cost": {"usd": "0.60"}}
+        payload = {"summary": "work", "commit": "abc", "cost": {"usd": "0.40"}}
         do(org, key, C.SUBMIT, DEV1, payload=payload)
         first = claim_review(org, REV)
         assert first is not None
@@ -546,7 +548,7 @@ def test_a_budget_too_small_for_a_second_round_goes_to_a_human(org: Conn) -> Non
             submit_review(org, REV, first.review_id, fail, {"cost": {"usd": "0.25"}})
         else:
             submit_review(org, REV, first.review_id, PASS, {"cost": {"usd": "0.25"}})
-    # $1.70 spent, by two developer runs and two reviews: $0.30 can't pay for the last review.
+    # $1.30 spent, by two developer runs and two reviews: $0.70 can't pay for the last review.
     assert claim_review(org, SEC) is None
     assert get_task(org, key).state == S.WAITING_FOR_HUMAN
 
@@ -568,3 +570,66 @@ def test_the_soc_005_sequence_end_to_end(org: Conn) -> None:
     submit_review(org, REV, second.review_id, PASS, {"cost": {"usd": "0.39"}})
     task = get_task(org, key)
     assert task.state == S.AWAITING_MERGE and task.budget_spent_usd == Decimal("0.97")
+
+
+def _pass(db: Conn, actor: Actor, cost: str = "0.30") -> None:
+    claimed = claim_review(db, actor)
+    assert claimed is not None
+    submit_review(db, actor, claimed.review_id, PASS, {"cost": {"usd": cost}})
+
+
+def test_a_rereview_keeps_a_pass_on_the_same_commit(org: Conn) -> None:
+    """SOC-005: security had passed this commit; only code review needed running again."""
+    key = _in_review(org)
+    _pass(org, SEC)
+    claimed = claim_review(org, REV)
+    assert claimed is not None
+    fail_review_run(org, REV, claimed.review_id, "budget exceeded", final=True)
+    assert get_task(org, key).state == S.WAITING_FOR_HUMAN
+    spent = budgets.task_spent(org, get_task(org, key).id)
+    do(org, key, C.REREVIEW, HUMAN)
+    task = get_task(org, key)
+    current = [r for r in list_reviews(org, task.id) if r["round"] == task.review_rounds + 1]
+    assert {r["role"]: r["status"] for r in current} == {
+        "code_reviewer": "PENDING",
+        "security_reviewer": "PASS",
+    }
+    assert budgets.task_spent(org, task.id) == spent  # the carried verdict cost nothing
+    assert "REVIEW_CARRIED_FORWARD" in [e["type"] for e in events_for(org, key)]
+    assert claim_review(org, SEC) is None  # nothing for security to do
+    _pass(org, REV)
+    assert get_task(org, key).state == S.AWAITING_MERGE
+
+
+def test_a_pass_on_another_commit_isnt_carried(org: Conn) -> None:
+    """New work needs new reviews."""
+    key = _in_review(org, commit="first")
+    _pass(org, SEC)
+    org.execute("UPDATE tasks SET head_sha = 'second' WHERE key = %s", (key,))
+    claimed = claim_review(org, REV)
+    assert claimed is not None
+    fail_review_run(org, REV, claimed.review_id, "budget exceeded", final=True)
+    do(org, key, C.REREVIEW, HUMAN)
+    task = get_task(org, key)
+    current = {r["role"]: r["status"] for r in list_reviews(org, task.id) if r["round"] == 2}
+    assert current == {"code_reviewer": "PENDING", "security_reviewer": "PENDING"}
+
+
+def test_a_fail_is_never_carried_forward(org: Conn, monkeypatch: pytest.MonkeyPatch) -> None:
+    """At the round cap a FAIL escalates instead of sending work back. A rereview of that same
+    commit must run the failing role again, never copy its verdict as a pass."""
+    monkeypatch.setattr(get_settings(), "max_review_rounds", 1)
+    key = _in_review(org)
+    _pass(org, SEC)
+    claimed = claim_review(org, REV)
+    assert claimed is not None
+    submit_review(org, REV, claimed.review_id, {"verdict": "FAIL", "summary": "no", "findings": []})
+    assert get_task(org, key).state == S.WAITING_FOR_HUMAN
+    do(org, key, C.REREVIEW, HUMAN)
+    task = get_task(org, key)
+    current = {
+        r["role"]: r["status"]
+        for r in list_reviews(org, task.id)
+        if r["round"] == task.review_rounds + 1
+    }
+    assert current == {"code_reviewer": "PENDING", "security_reviewer": "PASS"}

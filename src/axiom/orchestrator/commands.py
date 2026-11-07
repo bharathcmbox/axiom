@@ -190,7 +190,11 @@ def apply_locked(
     if command == TaskCommand.SUBMIT:
         review_store.request_reviews(conn, row, payload.get("commit"))
     elif command == TaskCommand.REREVIEW:
-        review_store.request_reviews(conn, row | {"review_rounds": review_rounds}, row["head_sha"])
+        # A task is only escalated from review when some role hasn't passed, so at least one
+        # review here is PENDING and the gate decides when it's done.
+        review_store.request_reviews(
+            conn, row | {"review_rounds": review_rounds}, row["head_sha"], carry_passes=True
+        )
     elif state == TaskState.IN_REVIEW:  # approve / request_changes / escalate / cancel
         review_store.supersede_open_reviews(conn, task_id, reason=str(command))
     if command == TaskCommand.MERGE:

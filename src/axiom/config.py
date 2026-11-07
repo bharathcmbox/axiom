@@ -27,8 +27,9 @@ class Settings(BaseSettings):
     # Reviews (ADR-009): roles required for every round, per-review cost cap, round cap.
     required_review_roles: tuple[str, ...] = ("code_reviewer", "security_reviewer")
     review_budget_usd: Decimal = Decimal("1.00")
-    # Below this a review can't finish: a Fable review costs about $0.25 to $0.45.
-    review_min_run_usd: Decimal = Decimal("0.50")
+    # Below this a review may not finish. Fable reviews have cost up to $0.64 so far, and the SDK
+    # stops at 80% of a run's budget: 80% of $0.85 is $0.68.
+    review_min_run_usd: Decimal = Decimal("0.85")
     max_review_rounds: int = 3
     review_lease_seconds: int = 300
     # Plans (ADR-011): the most one planning attempt may spend, and its lease.

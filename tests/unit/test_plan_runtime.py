@@ -156,4 +156,4 @@ def test_a_damaged_outcome_is_a_failed_run_not_a_crash(tmp_path: Path, data: Any
 def test_the_planner_is_told_what_a_task_really_costs() -> None:
     """It gave a QA task $1.50, which one review round could have used up."""
     rules = " ".join(PLAN_RULES.split())
-    assert "at least $1.50" in rules and "$0.70" in rules
+    assert "at least $2" in rules and "$1.00 for its two reviews" in rules

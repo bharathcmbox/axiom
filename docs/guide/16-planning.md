@@ -231,7 +231,7 @@ very little overshoots it by a large share.
 
 ```mermaid
 flowchart TB
-    c["Reviewer claims"] --> f{"At least $0.50 free?"}
+    c["Reviewer claims"] --> f{"At least $0.85 free?"}
     f -->|yes| r["Runs with up to $1"]
     f -->|no| w{"Is the task itself short of it?"}
     w -->|"no: others hold reservations, or the day is short"| wait["Waits. Nothing spent"]
@@ -241,7 +241,7 @@ flowchart TB
     o -->|no| done["Verdict"]
     e --> y{"You decide"}
     e2 --> y
-    y -->|"raise the budget, rereview"| again["Fresh reviews,<br/>same commit, no new work"]
+    y -->|"raise the budget, rereview"| again["Reviews the same commit again,<br/>keeping roles that passed it"]
     y -->|"merge or close the PR"| sync["Sync records it,<br/>merge flagged as before the gate"]
 ```
 
@@ -253,6 +253,12 @@ flowchart TB
 | `rereview` reviews the same commit again | `test_rereview_gets_fresh_reviews_on_the_same_commit_without_new_work` |
 | Sync sees a merge or close while a task is with you | `test_merging_an_escalated_task_is_recorded_and_flagged` |
 | The real sequence, replayed: now $0.97 and approved | `test_the_soc_005_sequence_end_to_end` |
+
+The rereview of SOC-005 then showed two numbers were too low. Its code review passed for $0.64, leaving $0.47 of the
+raised budget, and the task stopped before spending more, as designed. But the SDK stops a run at 80% of its budget,
+so a $0.50 minimum meant a $0.40 stop, below that review's cost. The minimum is now $0.85, so 80% of it is $0.68. And
+a rereview now keeps a role's PASS on the same commit (`test_a_rereview_keeps_a_pass_on_the_same_commit`), instead of
+paying to repeat it. Fourteen reviews are a small sample: these numbers should be checked again after more runs.
 
 A `rereview` counts as a round, so such a task won't count as first-pass in the metrics, though the agent's work may
 have been fine. While one task's review waits, reviewers holding the next review in the queue wait too: small

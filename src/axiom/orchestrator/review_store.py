@@ -6,6 +6,8 @@ can create and supersede reviews without an import cycle.
 
 from typing import Any
 
+from psycopg.types.json import Jsonb
+
 from axiom.config import get_settings
 from axiom.domain.review_machine import OPEN, ReviewCommand, ReviewState, next_review_state
 from axiom.domain.roles import Actor, ActorKind
@@ -47,11 +49,27 @@ def review_event(
     )
 
 
-def request_reviews(conn: Conn, task_row: dict[str, Any], head_sha: str | None) -> list[int]:
-    """Create one PENDING review per required role for the task's next round."""
+def request_reviews(
+    conn: Conn, task_row: dict[str, Any], head_sha: str | None, *, carry_passes: bool = False
+) -> list[int]:
+    """Create one PENDING review per required role for the task's next round. With `carry_passes`
+    (a rereview of the same commit), a role that already passed this exact commit keeps that
+    verdict: running it again would cost money to learn nothing new."""
     round_ = task_row["review_rounds"] + 1
     ids = []
     for role in get_settings().required_review_roles:
+        earlier = (
+            conn.execute(
+                """SELECT * FROM reviews WHERE task_id = %s AND role = %s AND status = 'PASS'
+                     AND head_sha IS NOT NULL AND head_sha = %s ORDER BY id DESC LIMIT 1""",
+                (task_row["id"], role, head_sha),
+            ).fetchone()
+            if carry_passes
+            else None
+        )
+        if earlier is not None:
+            ids.append(_carry_forward(conn, task_row, earlier, round_))
+            continue
         review = conn.execute(
             """INSERT INTO reviews (task_id, round, role, status, head_sha)
                VALUES (%s, %s, %s, 'PENDING', %s) RETURNING *""",
@@ -68,6 +86,35 @@ def request_reviews(conn: Conn, task_row: dict[str, Any], head_sha: str | None) 
         )
         ids.append(review["id"])
     return ids
+
+
+def _carry_forward(
+    conn: Conn, task_row: dict[str, Any], earlier: dict[str, Any], round_: int
+) -> int:
+    """A copy of an earlier PASS on the same commit, in the new round. It cost nothing this time."""
+    review = conn.execute(
+        """INSERT INTO reviews (task_id, round, role, status, head_sha, reviewer_agent_id,
+                                verdict, contract, completed_at)
+           VALUES (%s, %s, %s, 'PASS', %s, %s, 'PASS', %s, now()) RETURNING *""",
+        (
+            task_row["id"],
+            round_,
+            earlier["role"],
+            earlier["head_sha"],
+            earlier["reviewer_agent_id"],
+            Jsonb(earlier["contract"]),
+        ),
+    ).fetchone()
+    assert review is not None
+    review_event(
+        conn,
+        SYSTEM_REVIEWS,
+        review | {"status": None},
+        "REVIEW_CARRIED_FORWARD",
+        to_state=ReviewState.PASS,
+        payload={"from_review": earlier["id"], "head_sha": earlier["head_sha"]},
+    )
+    return int(review["id"])
 
 
 def supersede_open_reviews(conn: Conn, task_id: int, reason: str) -> int:

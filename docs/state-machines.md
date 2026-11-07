@@ -123,6 +123,7 @@ claim tasks.
 stateDiagram-v2
     direction LR
     [*] --> PENDING: task submitted
+    [*] --> PASS: carried forward<br/>(rereview, same commit)
     PENDING --> CLAIMED: claim (reviewer agent, lease)
     CLAIMED --> PASS: submit (verdict PASS)
     CLAIMED --> FAIL: submit (verdict FAIL)
