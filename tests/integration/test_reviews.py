@@ -79,7 +79,8 @@ def test_reviewers_claim_only_their_role_and_get_the_task(org: Conn) -> None:
     assert code is not None and code.role == "code_reviewer"
     assert code.task["key"] == key and code.developer_result is not None
     assert code.developer_result["summary"] == "done"
-    assert code.run_budget_usd == Decimal("1.00")
+    # Half of the default $3 task budget: two reviews of this round are waiting to start.
+    assert code.run_budget_usd == Decimal("1.50")
     assert claim_review(org, REV) is None  # the only code review is taken
     sec = claim_review(org, SEC)
     assert sec is not None and sec.role == "security_reviewer"

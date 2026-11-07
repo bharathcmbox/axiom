@@ -54,7 +54,8 @@ designed "wait, spend nothing" path.
 
 - **The review run cap is fixed at $1.00** (`review_budget_usd`), whatever the task has left. Raising the
   task budget let the rereview start but did not give it more room. It fitted this time ($0.72); a larger
-  PR could fail twice. Open item: size a review's run budget from what the task has left, up to a limit.
+  PR could fail twice. Fixed after the run: a review now gets its share of what the task has left, from $1 up
+  to $2.50 (ADR-013, revision 2).
 - **Reviews are 74% of the plan's task cost** ($5.78 of $7.84), as in every earlier run. Two reviewers on
   every PR, including docs-only and tests-only ones, is the main cost.
 - **The human is the bottleneck by about tenfold:** about 3 minutes of agent time per task against 13 to 27

@@ -128,7 +128,10 @@ def claim_review(
         settings = get_settings()
         try:
             run_budget = budgets.reserve(
-                conn, task, settings.review_budget_usd, minimum=settings.review_min_run_usd
+                conn,
+                task,
+                budgets.review_run_cap(conn, task, review),
+                minimum=settings.review_min_run_usd,
             )
         except TooLittleBudget as e:
             apply_locked(conn, task, TaskCommand.ESCALATE, AGGREGATOR, payload={"reason": str(e)})

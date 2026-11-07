@@ -232,7 +232,7 @@ very little overshoots it by a large share.
 ```mermaid
 flowchart TB
     c["Reviewer claims"] --> f{"At least $0.85 free?"}
-    f -->|yes| r["Runs with up to $1"]
+    f -->|yes| r["Runs with its share of what is left:<br/>at least $1, at most $2.50"]
     f -->|no| w{"Is the task itself short of it?"}
     w -->|"no: others hold reservations, or the day is short"| wait["Waits. Nothing spent"]
     w -->|"yes, with nothing reserved"| e["To you, before spending"]
@@ -304,8 +304,10 @@ gantt
 Two developers started a second apart, and the second wave started as soon as you merged the first. No rework, no
 conflict, every review a PASS. One task came to you: SOC-009's code review ran out of its fixed $1.00 run cap on
 537 lines of tests. You raised the budget and issued `rereview`; the security PASS carried over and only the code
-review ran again. That showed one gap: raising the task's budget doesn't raise a review run's cap. It's an open
-item.
+review ran again. That showed one gap: raising the task's budget didn't raise a review run's cap, which was fixed at
+$1. Now a review gets its share of what the task has left, split with the other reviews still waiting, from $1 up to
+$2.50 (ADR-013; `test_a_rereview_gets_what_the_raised_budget_left_not_a_fixed_dollar`,
+`test_two_waiting_reviews_split_what_is_left`).
 
 ## What these rules don't do
 

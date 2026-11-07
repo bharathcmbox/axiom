@@ -34,3 +34,12 @@ $1.28, the second was given $0.28 for work costing about $0.40, and it was retri
 planning runs now have a minimum. Below it a claim waits if money may come back, and a task that can't pay goes to a
 human before spending. A run that runs out of budget isn't retried. Developer runs have no minimum yet.
 
+## Revision 2 (2026-11-07, after the exit run)
+A review run's cap was fixed at $1, so raising a task's budget let a rereview start but gave it no more room: the
+exit run's SOC-009 code review ran out at $0.83 on 537 lines of tests. A review now asks for a fair share of what the
+task has left, split between the reviews of its round still waiting to start, at least `review_budget_usd` ($1) and
+at most `review_max_run_usd` ($2.50). `reserve` still clamps it to what the task and the day have free, so the share
+only decides how the money is split, never how much exists. Reviews use only what they need, so a larger cap costs
+nothing unless a review needs it. Splitting by the reviews still waiting keeps the first from taking the second's
+money, the SOC-005 failure.
+

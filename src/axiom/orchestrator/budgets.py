@@ -117,6 +117,28 @@ def reserve(
     return run
 
 
+def review_run_cap(conn: Conn, row: dict[str, Any], review: dict[str, Any]) -> Decimal:
+    """The most a review run may ask for: a fair share of what the task has left, split between
+    the reviews of this round still waiting to start, but never below the usual review budget nor
+    above the review limit. `reserve` then clamps it to what is really free.
+
+    A fixed $1 meant raising a task's budget let a rereview start but gave it no more room (the
+    exit run's SOC-009). The share keeps the first reviewer from taking what the second needs."""
+    s = get_settings()
+    budget: Decimal | None = row["budget_usd"]
+    if budget is None:
+        return s.review_budget_usd
+    waiting = conn.execute(
+        """SELECT count(*) AS n FROM reviews
+           WHERE task_id = %s AND round = %s AND status = 'PENDING'""",
+        (row["id"], review["round"]),
+    ).fetchone()
+    assert waiting is not None
+    left = budget - task_spent(conn, row["id"]) - reserved(conn, row["id"])
+    share = (left / max(int(waiting["n"]), 1)).quantize(CENT, rounding=ROUND_DOWN)
+    return min(s.review_max_run_usd, max(s.review_budget_usd, share))
+
+
 def reserve_from_the_day(conn: Conn, run_cap: Decimal, *, minimum: Decimal = ZERO) -> Decimal:
     """Like `reserve`, for work that belongs to no task: a planning run."""
     conn.execute("SELECT pg_advisory_xact_lock(%s)", (BUDGET_LOCK_ID,))

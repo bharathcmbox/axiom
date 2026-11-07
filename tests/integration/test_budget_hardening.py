@@ -161,6 +161,8 @@ def test_racing_reviewers_never_reserve_more_than_the_day(
     settings = get_settings()
     for _ in range(12):
         keys = [_in_review(org), _in_review(org)]
+        for key in keys:
+            _left(org, key, "2.00")  # two reviews waiting on each: a $1 share apiece
         monkeypatch.setattr(
             settings, "daily_budget_usd", budgets.daily_spent(org) + Decimal("1.70")
         )
@@ -195,6 +197,57 @@ def test_a_review_run_is_capped_by_what_the_task_has_left(org: Conn) -> None:
     claimed = claim_review(org, REV)
     assert claimed is not None and claimed.run_budget_usd == Decimal("0.90")
     assert list_reviews(org, get_task(org, key).id)[0]["run_budget_usd"] == Decimal("0.90")
+
+
+def test_a_rereview_gets_what_the_raised_budget_left_not_a_fixed_dollar(org: Conn) -> None:
+    """The exit run's SOC-009: the task was raised to leave $1.72, security's PASS carried over,
+    and the one code review still waiting was capped at $1.00 anyway."""
+    key = _in_review(org)
+    _pass(org, SEC)
+    claimed = claim_review(org, REV)
+    assert claimed is not None
+    fail_review_run(org, REV, claimed.review_id, "budget exceeded", final=True)
+    _left(org, key, "1.72")
+    do(org, key, C.REREVIEW, HUMAN)
+    again = claim_review(org, REV)
+    assert again is not None and again.run_budget_usd == Decimal("1.72")
+
+
+def test_two_waiting_reviews_split_what_is_left(org: Conn) -> None:
+    """The share keeps the first reviewer from taking what the second needs (SOC-005)."""
+    key = _in_review(org)
+    _left(org, key, "3.00")
+    first, second = claim_review(org, SEC), claim_review(org, REV)
+    assert first is not None and first.run_budget_usd == Decimal("1.50")
+    assert second is not None and second.run_budget_usd == Decimal("1.50")
+
+
+def test_a_review_run_never_gets_more_than_the_review_limit(org: Conn) -> None:
+    key = _in_review(org)
+    _left(org, key, "20.00")
+    claimed = claim_review(org, REV)
+    assert claimed is not None
+    assert claimed.run_budget_usd == get_settings().review_max_run_usd == Decimal("2.50")
+
+
+def test_a_small_share_still_gets_the_usual_review_budget(org: Conn) -> None:
+    """Below $1 a share would starve both; the usual $1 goes first, the second waits for change."""
+    key = _in_review(org)
+    _left(org, key, "1.60")
+    first = claim_review(org, SEC)
+    assert first is not None and first.run_budget_usd == Decimal(1)
+
+
+def test_a_large_share_is_still_clamped_to_what_the_day_has_free(
+    org: Conn, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = _in_review(org)
+    _left(org, key, "5.00")
+    monkeypatch.setattr(
+        get_settings(), "daily_budget_usd", budgets.daily_spent(org) + Decimal("1.10")
+    )
+    claimed = claim_review(org, REV)
+    assert claimed is not None and claimed.run_budget_usd == Decimal("1.10")
 
 
 def test_second_reviewer_waits_when_the_first_reserved_the_rest(org: Conn) -> None:

@@ -227,8 +227,10 @@ Reviewers use the same patterns as developers in Phase 1:
 | Who may | developers only (role = task's role) | reviewers only (role = review's role) |
 
 A developer token gets 403 on `/reviews/claim`; reviewer agents can't be assigned developer
-tasks (their role doesn't match). Cost: each review gets a run budget (`review_budget_usd`,
-default $1, capped by the daily budget). Its cost is counted in the task's spend.
+tasks (their role doesn't match). Cost: each review gets a run budget: its share of what the task has
+left, split between the reviews of the round still waiting, at least `review_budget_usd` ($1) and at most
+`review_max_run_usd` ($2.50), never more than the task and the day have free (ADR-013). Its cost is counted in the
+task's spend.
 
 ## What the event log looks like for a reviewed task
 

@@ -74,6 +74,7 @@ stateDiagram-v2
 | S36 | A reviewer would be given too little | waits, or goes to you before spending | tested; found **live** (SOC-005) | `test_the_soc_005_sequence_end_to_end` |
 | S37 | A review failed, not the work | you rereview the same commit, no developer run | tested | `test_rereview_gets_fresh_reviews_on_the_same_commit_without_new_work` |
 | S38 | You merge or close while a task is with you | recorded; a merge is flagged | tested | `test_merging_an_escalated_task_is_recorded_and_flagged` |
+| S39 | A review needs more than $1, and you raised the budget | the rereview gets what's left, up to $2.50 | tested; found **live** (exit run, SOC-009) | `test_a_rereview_gets_what_the_raised_budget_left_not_a_fixed_dollar` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
