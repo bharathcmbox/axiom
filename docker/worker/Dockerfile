@@ -1,10 +1,9 @@
-# Worker harness (ADR-008): deterministic code + git + Docker CLI (starts sandbox containers).
+# Worker harness (ADR-008): deterministic code + git. No Docker CLI: it asks the launcher (ADR-016).
 FROM python:3.14-slim
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=docker:28-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app

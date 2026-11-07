@@ -274,6 +274,7 @@ def test_killed_worker_process_is_recovered_by_another_worker(
     _project(api_tokens, remote)
     key = _task(api_tokens)
     env = {
+        "AXIOM_LAUNCHER_TOKEN": "unused-in-this-test",
         **os.environ,
         "AXIOM_API_URL": api_url, "AXIOM_AGENT_KEY": "DEV-01",
         "AXIOM_AGENT_TOKEN": TEST_TOKENS["agent:DEV-01"],

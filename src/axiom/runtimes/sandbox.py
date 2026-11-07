@@ -15,7 +15,6 @@ import dataclasses
 import json
 import logging
 import secrets
-import subprocess
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -24,6 +23,9 @@ from pathlib import Path
 from threading import Event, Lock, Thread
 from typing import Any
 
+from axiom.launcher.client import LauncherError
+from axiom.launcher.runner import Launcher, LocalLauncher
+from axiom.launcher.spec import ContainerSpec, InvalidSpec, Policy, docker_args
 from axiom.modelproxy.client import Metered, ModelProxyClient, ModelProxyError
 from axiom.runtimes.base import (
     CommandResult,
@@ -32,6 +34,7 @@ from axiom.runtimes.base import (
     RunOutcome,
     RunRequest,
     outcome_from_dict,
+    read_from_sandbox,
     request_to_dict,
 )
 from axiom.runtimes.review import (
@@ -43,6 +46,7 @@ from axiom.runtimes.review import (
 
 log = logging.getLogger("axiom.sandbox")
 MODEL_RUN_FILE = "model-run.json"
+OUTCOME_LIMIT = 16 * 1024 * 1024
 CANARY_ENV = "INTERNAL_DEPLOY_TOKEN"  # see axiom.drills.injection
 
 
@@ -86,10 +90,20 @@ class SandboxRuntime:
     drill_canary: str | None = None  # a fake secret for the injection drill; never a real one
     model_proxy: ModelProxyClient | None = None  # how real runs reach the model
     model_ttl_seconds: float = 120
+    launcher: Launcher | None = None
     name: str = "sandbox"
     _container: str | None = None
     _lock: Lock = field(default_factory=Lock)
     _cancelled: bool = False
+
+    def _policy(self) -> Policy:
+        return Policy(self.image, self.network, self.proxy_url, self.memory, self.cpus, self.docker)
+
+    def _launcher(self) -> Launcher:
+        with self._lock:
+            if self.launcher is None:  # tests and local use; a worker has no Docker socket
+                self.launcher = LocalLauncher(self._policy())
+            return self.launcher
 
     def docker_args(
         self,
@@ -97,45 +111,11 @@ class SandboxRuntime:
         container: str,
         entrypoint: list[str] | None = None,
     ) -> list[str]:
-        return self._args(request.workspace, request.output_dir, container, entrypoint)
-
-    def _args(
-        self,
-        workspace: Path,
-        output_dir: Path,
-        container: str,
-        entrypoint: list[str] | None,
-        env: list[str] | None = None,
-    ) -> list[str]:
-        st = workspace.stat()
-        args = [
-            self.docker, "run", "--rm", "--name", container,
-            "--network", self.network,
-            "--user", f"{st.st_uid}:{st.st_gid}",
-            "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges",
-            "--pids-limit", "512",
-            "--memory", self.memory,
-            "--cpus", self.cpus,
-            "--read-only",
-            "--tmpfs", "/tmp:rw,size=1g,mode=1777",
-            # exec: uv installs tools under the cache here (`uv run --with`), and Docker's tmpfs
-            # default is noexec. No loss: the workspace mount is executable anyway.
-            "--tmpfs", "/home/agent:rw,exec,size=2g,mode=1777",
-            "-e", "HOME=/home/agent",
-            "-e", f"HTTPS_PROXY={self.proxy_url}",
-            "-e", f"HTTP_PROXY={self.proxy_url}",
-            "-e", "NO_PROXY=",
-            "-v", f"{workspace}:/workspace/repo:rw",
-            "-v", f"{output_dir}:/workspace/out:rw",
-        ]  # fmt: skip
-        for item in env or []:
-            args += ["-e", item]
-        if entrypoint:
-            args += ["--entrypoint", entrypoint[0], self.image, *entrypoint[1:]]
-        else:
-            args.append(self.image)
-        return args
+        """The `docker run` for this request. Local tests start one with their own command."""
+        spec = ContainerSpec(
+            container, str(request.workspace), str(request.output_dir), (), tuple(entrypoint or ())
+        )
+        return docker_args(spec, self._policy(), any_entrypoint=True)
 
     def run(self, request: RunRequest, on_event: EventCallback | None = None) -> RunOutcome:
         """A developer run."""
@@ -245,39 +225,47 @@ class SandboxRuntime:
                 return RunOutcome(Outcome.CANCELLED, error="cancelled before start")
             self._container = container
         emit({"type": "sandbox_started", "container": container})
-        args = self._args(workspace, output_dir, container, None, env=extra_env)
-        log_path = output_dir / "sandbox.log"
-        with log_path.open("w") as log:
-            proc = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
-            try:
-                code = proc.wait(timeout=self.timeout_seconds)
-            except subprocess.TimeoutExpired:
-                self._kill(container)
-                proc.wait(timeout=60)
-                return RunOutcome(Outcome.FAILED, error=f"timed out after {self.timeout_seconds}s")
-        emit({"type": "sandbox_exited", "container": container, "code": code})
+        spec = ContainerSpec(container, str(workspace), str(output_dir), tuple(extra_env))
+        try:
+            result = self._launcher().run(spec, self.timeout_seconds)
+        except (InvalidSpec, LauncherError) as e:
+            return RunOutcome(Outcome.FAILED, error=f"sandbox could not start: {e}")
+        # Kept beside out/, where the sandbox can't touch it.
+        (output_dir.parent / "sandbox.log").write_text(result.output)
+        if result.timed_out:
+            return RunOutcome(Outcome.FAILED, error=f"timed out after {self.timeout_seconds}s")
+        emit({"type": "sandbox_exited", "container": container, "code": result.exit_code})
         if self._cancelled:
             return RunOutcome(Outcome.CANCELLED, error="cancelled")
-        outcome_file = output_dir / outcome_name
-        if not outcome_file.exists():
-            tail = log_path.read_text(errors="replace")[-2000:]
+        try:
+            raw = read_from_sandbox(output_dir / outcome_name, OUTCOME_LIMIT)
+        except FileNotFoundError:
             return RunOutcome(
-                Outcome.FAILED, error=f"sandbox exited {code} without outcome: {tail}"
+                Outcome.FAILED,
+                error=f"sandbox exited {result.exit_code} without outcome: {result.output[-2000:]}",
             )
-        data: dict[str, Any] = json.loads(outcome_file.read_text())
+        except OSError:  # a symlink or a FIFO, and only a sandbox could have put it there
+            return RunOutcome(
+                Outcome.FAILED, error="the sandbox's outcome file was not a plain file"
+            )
+        try:
+            data: dict[str, Any] = json.loads(raw)
+        except ValueError:
+            return RunOutcome(Outcome.FAILED, error="the sandbox's outcome file was not valid JSON")
         return data
 
     def exec(self, workdir: Path, outdir: Path, command: str, timeout: int) -> CommandResult:
         """Run a shell command (e.g. the project's tests) in a fresh sandbox, without any
-        credentials at all: verification needs no API key."""
+        credentials at all, not even a run token: verification calls no model."""
         container = f"axiom-verify-{secrets.token_hex(4)}"
-        args = self._args(workdir, outdir, container, ["sh", "-c", command])
+        spec = ContainerSpec(container, str(workdir), str(outdir), (), ("sh", "-c", command))
         try:
-            proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            self._kill(container)
+            result = self._launcher().run(spec, timeout)
+        except (InvalidSpec, LauncherError) as e:
+            return CommandResult(exit_code=1, output=f"sandbox could not start: {e}")
+        if result.timed_out:
             return CommandResult(exit_code=124, output=f"timed out after {timeout}s")
-        return CommandResult(exit_code=proc.returncode, output=proc.stdout + proc.stderr)
+        return CommandResult(exit_code=result.exit_code, output=result.output)
 
     def cancel(self) -> None:
         with self._lock:
@@ -287,6 +275,7 @@ class SandboxRuntime:
             self._kill(container)
 
     def _kill(self, container: str) -> None:
-        subprocess.run(
-            [self.docker, "kill", container], capture_output=True, timeout=60, check=False
-        )
+        try:
+            self._launcher().kill(container)
+        except LauncherError as e:
+            log.warning("could not kill %s: %s", container, e)

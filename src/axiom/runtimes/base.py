@@ -4,6 +4,8 @@ A runtime gets a prepared workspace and a task, runs an agent in it, and reports
 It never touches the Axiom API or GitHub; the worker harness does that (ADR-008).
 """
 
+import os
+import stat
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -31,6 +33,17 @@ class RunRequest:
     previous_feedback: list[str] = field(default_factory=list)  # review findings, answers
     round: int = 1  # review round this work is for (> 1 means rework on an existing branch)
     python_version: str | None = None  # for uv; set by the harness, not sent to the sandbox
+
+
+def read_from_sandbox(path: Path, limit: int) -> bytes:
+    """The only way to read a file a sandbox could have written. A symlink there could point at
+    this process's own environment (/proc/self/environ), so it's refused, as is anything that
+    isn't a plain file (a FIFO would hang us). Raises OSError."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as f:
+        if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+            raise OSError(f"{path.name} is not a regular file")
+        return f.read(limit)
 
 
 class Outcome(StrEnum):

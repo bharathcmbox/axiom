@@ -112,6 +112,7 @@ flowchart TB
 | `worker/review_harness.py` | 180 | One review run, end to end |
 | `worker/verify.py` | 150 | The checks before anything is published |
 | `modelproxy/server.py`, `modelproxy/runs.py` | 320 | The only holder of the Anthropic key: run tokens, budgets, metering |
+| `launcher/spec.py`, `runner.py`, `server.py` | 300 | The only holder of the Docker socket: what may be started |
 | `sandbox/runner.py` | 270 | What runs inside the container |
 | `sync/service.py` | 200 | GitHub → task commands |
 

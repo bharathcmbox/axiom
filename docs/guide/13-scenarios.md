@@ -61,6 +61,9 @@ stateDiagram-v2
 | S23 | An agent looks for the Anthropic key | finds only a run token | tested, from the real sandbox | `test_sandbox_receives_no_credentials_at_all` |
 | S24 | A sandbox forges its cost | ignored, the proxy's count is the record | tested | `test_a_forged_cost_is_ignored` |
 | S25 | A worker dies and its sandbox keeps going | loses the model within 2 minutes | tested | `test_a_token_stops_working_when_it_expires` |
+| S26 | A sandbox plants a link to the worker's environment | refused, nothing read | tested | `test_a_symlink_to_the_environment_reveals_nothing` |
+| S27 | A compromised worker asks for a host mount | refused, no container | tested + `make check-boundaries` | `test_a_host_mount_cannot_be_requested_over_http` |
+| S28 | A worker is killed mid-run | its sandbox is killed too | tested | `test_a_killed_worker_leaves_no_sandbox_behind` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
@@ -299,15 +302,17 @@ refused and retried, and the task doesn't move.
 
 Knowing the edges is part of understanding the system:
 
-- **A sandbox orphaned by a killed worker keeps running,** without the model after 2 minutes. Until
-  then it can spend under its run's budget, and that money is no longer reserved.
+- **If the launcher itself restarts,** its running sandboxes aren't killed. They lose the model within
+  2 minutes, and stay until they exit.
 - **An injected agent can still use its own run,** up to its budget. No key is exposed.
 - **PyPI is reachable from the sandbox,** so a malicious package could run there. Reads could carry a
   little data out, and `upload.pypi.org` isn't allowlisted. There's nothing to steal in the sandbox.
 - **The model proxy is a valuable target.** It's small and accepts one kind of request (ADR-015).
 - **A transcript estimate can be forged,** if the proxy's record is gone too. It's marked as an estimate.
-- **The worker is high value:** it holds the tokens and the Docker socket (in effect root on this
-  machine), and isn't behind the egress proxy. ADR-014 closes the known way in, not the risk.
+- **The worker is still valuable:** it holds its GitHub and agent tokens, and can start sandboxes and
+  open budgeted runs. It no longer has the Docker socket (ADR-016).
+- **The launcher holds the Docker socket,** in effect root on this machine. It runs no LLM or
+  repository code and can't be reached from a sandbox.
 - **Prompt-injection resistance is one small run,** with a crude payload (see the drill).
 - **A dependency that gets cancelled** leaves its dependents PENDING until you cancel them.
 - **A pull request that conflicts after another merges** isn't detected yet (Phase 4 T9).

@@ -18,7 +18,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from axiom.runtimes.base import RunOutcome
+from axiom.runtimes.base import RunOutcome, read_from_sandbox
 from axiom.runtimes.review import ReviewOutcome
 
 # $ per million tokens: input, output, cache read. Cache writes: input x 1.25 (5m), x 2 (1h).
@@ -33,6 +33,7 @@ OUTPUT_SCALE = Decimal("2.5")
 CHARS_PER_TOKEN = 4
 MAX_ESTIMATE = Decimal(1000)  # a corrupt transcript must not overflow the column
 MILLION = Decimal(1_000_000)
+TRANSCRIPT_LIMIT = 256 * 1024 * 1024
 TOKEN_FIELDS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
 
 
@@ -88,7 +89,7 @@ def estimate_from_transcript(path: Path) -> CostEstimate | None:
     """None if the file is missing or shows no spending. Damaged lines are skipped: a killed
     process can leave half a line."""
     try:
-        lines = path.read_text(errors="replace").splitlines()
+        lines = read_from_sandbox(path, TRANSCRIPT_LIMIT).decode(errors="replace").splitlines()
     except OSError:
         return None
     messages: dict[str, dict[str, Any]] = {}

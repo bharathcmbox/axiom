@@ -118,6 +118,8 @@ flowchart LR
 | Demo runs left real, active tokens behind | Listing tokens during rotation | The demo revokes its own |
 | The agent's key sat in the sandbox, its cost report was its own, and an orphaned sandbox kept spending | The T4 drill's follow-up | The model proxy, ADR-015 |
 | A secret scan only printed a count, and the commit went ahead on a match (a dummy value, this time) | Reading the output afterwards | A check against the real values that stops the commit |
+| A sandbox could make the worker copy its own tokens into an error, through a symlink in `out/` | Designing how the launcher would handle logs | Safe reads, logs held by the launcher, errors cleaned (ADR-016) |
+| Workers held the Docker socket | The hardening plan | The launcher, ADR-016 |
 | The first report flattered the system: "$0.03 per merged task" came from old demo tasks | Reading its output on real data | Demo tasks tagged, the demo script tags its own |
 
 **Process mistakes** also happened, and are worth knowing:

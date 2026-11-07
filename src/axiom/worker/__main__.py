@@ -8,6 +8,8 @@ Environment:
   AXIOM_WORKSPACES_DIR     absolute path, identical on the host and in this container
   AXIOM_MODEL_PROXY_URL    how this worker and its sandboxes reach the model proxy
   AXIOM_MODEL_PROXY_ADMIN_TOKEN   opens runs on the proxy. The Anthropic key isn't here (ADR-015)
+  AXIOM_LAUNCHER_URL       how this worker asks for sandboxes. It has no Docker socket (ADR-016)
+  AXIOM_LAUNCHER_TOKEN     proves it may
   AXIOM_RUNTIME            sandbox (default) | fake
   AXIOM_FAKE_SCENARIO      with AXIOM_RUNTIME=fake or for sandbox plumbing tests
   AXIOM_PROJECT_KEY        optional: only claim tasks of this project
@@ -22,6 +24,7 @@ import signal
 import sys
 from pathlib import Path
 
+from axiom.launcher.client import HttpLauncher
 from axiom.modelproxy.client import ModelProxyClient
 from axiom.runtimes.base import Runtime
 from axiom.runtimes.fake import FakeRuntime, Scenario, load_scripted_developer
@@ -50,7 +53,18 @@ def model_proxy() -> ModelProxyClient | None:
     return ModelProxyClient(url, token)
 
 
-REQUIRED = ("AXIOM_API_URL", "AXIOM_AGENT_KEY", "AXIOM_AGENT_TOKEN", "AXIOM_WORKSPACES_DIR")
+def launcher() -> HttpLauncher:
+    url = os.environ.get("AXIOM_LAUNCHER_URL") or "http://sandbox-launcher:8090"
+    return HttpLauncher(url, os.environ["AXIOM_LAUNCHER_TOKEN"])
+
+
+REQUIRED = (
+    "AXIOM_API_URL",
+    "AXIOM_AGENT_KEY",
+    "AXIOM_AGENT_TOKEN",
+    "AXIOM_WORKSPACES_DIR",
+    "AXIOM_LAUNCHER_TOKEN",
+)
 
 
 def build_worker() -> Worker:
@@ -78,6 +92,7 @@ def build_worker() -> Worker:
         network=env.get("AXIOM_SANDBOX_NETWORK", "axiom_sandbox"),
         image=env.get("AXIOM_SANDBOX_IMAGE", "axiom-sandbox:latest"),
         fake_scenario=scenario if env.get("AXIOM_RUNTIME", "sandbox") == "sandbox" else None,
+        launcher=launcher(),
     )
 
     def runtime_factory() -> Runtime:
@@ -91,6 +106,7 @@ def build_worker() -> Worker:
             fake_scenario=sandbox.fake_scenario,
             drill_canary=env.get("AXIOM_DRILL_CANARY") or None,
             model_proxy=model_proxy(),
+            launcher=launcher(),
         )
 
     def open_pr(repo_url: str, branch: str, base: str, title: str, body: str) -> PullRequest:
@@ -144,6 +160,7 @@ def build_review_worker() -> ReviewWorker:
             fake_review=fake or None,
             drill_canary=env.get("AXIOM_DRILL_CANARY") or None,
             model_proxy=model_proxy(),
+            launcher=launcher(),
         )
 
     return ReviewWorker(

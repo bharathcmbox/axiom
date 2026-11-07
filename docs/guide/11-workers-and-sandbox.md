@@ -32,6 +32,7 @@ flowchart TB
             w2["worker-dev-02<br/>(harness, DEV-02 token)"]
             proxy["egress-proxy<br/>allowlist: PyPI"]
             mp["model-proxy<br/>holds the Anthropic key"]
+            la["sandbox-launcher<br/>holds the Docker socket"]
         end
         sbx["sandbox container<br/>one per execution<br/>Claude Agent SDK"]
         ws[("~/.axiom/work/<br/>SOC-001-e1/{repo,out}")]
@@ -42,7 +43,8 @@ flowchart TB
     w2 -->|"HTTP + bearer token"| api
     api --- db
     w1 -->|"clone / push axiom/*,<br/>open PR"| gh
-    w1 -->|"docker run"| sbx
+    w1 -->|"start this workspace"| la
+    la -->|"docker run"| sbx
     sbx --- ws
     w1 --- ws
     sbx -->|"run token only"| mp -->|"real key"| anth
@@ -195,6 +197,42 @@ Tests: `test_the_real_key_is_swapped_in_and_the_run_token_stays_behind`,
 `test_a_forged_cost_is_ignored`, `test_a_token_stops_working_when_it_expires`,
 `test_only_the_messages_endpoints_are_forwarded`, `test_a_stream_is_not_buffered`,
 `test_sandbox_receives_no_credentials_at_all`.
+
+## Who can start a container
+
+Only the launcher has the Docker socket (ADR-016). A worker can ask for a sandbox on a workspace, and
+that's all a request can express.
+
+```mermaid
+flowchart LR
+    w["Worker<br/>no socket, no Docker program"] -->|"name, repo, out,<br/>a few settings, a command"| v{"Launcher checks"}
+    v -->|"unknown field, other path,<br/>other name, credential"| r["Refused (422)"]
+    v -->|ok| d["docker run<br/>always the same restrictions"]
+    d --> s["Sandbox"]
+    w -.->|"connection drops"| k["Launcher kills the container"]
+    k --> s
+```
+
+`make check-boundaries` runs from inside a real worker container and tries these for real.
+
+## Reading what a sandbox wrote
+
+`out/` is writable by the sandbox, so anything there could be a trap. `sandbox.log` could be a link to
+`/proc/self/environ`, the reader's own environment, and copying its tail into an error would store the
+worker's tokens. This was real, and confirmed with fake values.
+
+```mermaid
+flowchart LR
+    f["A file in out/"] --> r{"read_from_sandbox"}
+    r -->|"symlink, FIFO, device"| x["Refused"]
+    r -->|"plain file"| l["Read, up to a limit"]
+    log["Container output"] --> la["Launcher holds it"] --> w["Returned in the result,<br/>never read from out/"]
+    e["Any error text"] --> c["Credentials removed"] --> db[("Stored")]
+```
+
+Tests: `test_a_symlink_to_the_environment_reveals_nothing`, `test_reading_refuses_a_fifo_without_hanging`,
+`test_credentials_are_removed_from_errors`, `test_unknown_fields_are_refused_not_ignored`,
+`test_a_killed_worker_leaves_no_sandbox_behind`.
 
 ## The harness doesn't trust what the sandbox leaves behind
 

@@ -19,6 +19,7 @@ from axiom.runtimes.estimate import with_estimate
 from axiom.runtimes.review import ReviewOutcome, ReviewRequest, ReviewRuntime
 from axiom.worker.api_client import ApiError, AxiomClient
 from axiom.worker.recover_costs import recover_costs, recovered_cost
+from axiom.worker.verify import redact
 from axiom.workspaces.git import git
 from axiom.workspaces.manager import (
     ReviewWorkspace,
@@ -202,6 +203,6 @@ class ReviewWorker:
 
     def _try_fail(self, review_id: int, error: str, cost: dict[str, Any]) -> None:
         try:
-            self.api.fail_review(review_id, error[:2000], cost)
+            self.api.fail_review(review_id, redact(error)[:2000], cost)
         except ApiError as e:
             log.warning("review %s: could not report failure (%s)", review_id, e)

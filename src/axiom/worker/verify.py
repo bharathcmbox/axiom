@@ -98,6 +98,17 @@ def credentials_in(text: str) -> list[str]:
     return [name for name, regex in SECRET_RES.items() if regex.search(text)]
 
 
+def redact(text: str) -> str:
+    """Before an error is stored: it may hold text a sandbox chose. Removes anything shaped like a
+    credential, and the exact values of the credentials this process holds."""
+    for name, regex in SECRET_RES.items():
+        text = regex.sub(f"[REDACTED {name}]", text)
+    for name, value in os.environ.items():
+        if name.endswith(("_TOKEN", "_KEY")) and len(value) >= 12:
+            text = text.replace(value, f"[REDACTED {name}]")
+    return text
+
+
 def nested_git(repo: Path) -> list[str]:
     """Any `.git` below the top of the checkout. `git status` runs a nested repository's own
     config, so these are refused before the harness's git looks at the tree."""

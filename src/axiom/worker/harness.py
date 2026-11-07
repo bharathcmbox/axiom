@@ -23,7 +23,7 @@ from axiom.worker.api_client import ApiError, AxiomClient
 from axiom.worker.feedback import feedback_from_events
 from axiom.worker.publish import PullRequest, pr_body, push_branch
 from axiom.worker.recover_costs import recover_costs
-from axiom.worker.verify import check_changes, commit, credentials_in, run_tests
+from axiom.worker.verify import check_changes, commit, credentials_in, redact, run_tests
 from axiom.workspaces.manager import Workspace, prepare_workspace, remove_workspace
 
 log = logging.getLogger("axiom.worker")
@@ -279,7 +279,7 @@ class Worker:
 
     def _try_fail(self, key: str, error: str, extra: dict[str, Any]) -> None:
         try:
-            self.api.command(key, "fail", {"error": error[:2000]} | extra)
+            self.api.command(key, "fail", {"error": redact(error)[:2000]} | extra)
         except ApiError as e:
             log.warning("%s: could not report failure (%s)", key, e)
 
