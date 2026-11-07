@@ -122,6 +122,19 @@ the *organization* around them.
 The point isn't that coding agents lack these things. Many teams build them around agents in their own
 way. The point was to build them myself, see which ones mattered, and measure them.
 
+### What about Claude Managed Agents?
+
+A fair question, since Anthropic now offers hosted agents. Conceptually, Axiom sits one layer above them.
+Managed Agents runs an agent *session* for you: a hosted sandbox, credentials kept out of it and added on the
+way out, spending caps, and a grader that checks the work against a rubric. Several of those are the same ideas I
+built by hand in Axiom, which was reassuring to find.
+
+Axiom is about the *organization* around many sessions: a backlog of tasks with dependencies, plans only a human
+can approve, independent reviewers on a different model, plain code deciding what happens next, a human who
+merges, and an event log across all of it. In Axiom's terms, Managed Agents is closest to the runtime layer, the
+part that runs one agent safely, not to the control plane. (Managed Agents is still evolving, so I'm comparing
+ideas here, not feature lists.)
+
 ## How the sandbox never sees a credential
 
 This part taught me the most. To explain it, I need to introduce the pieces first.
@@ -284,6 +297,9 @@ This is where the "learning project" label earns its place:
 The next phase is about scale and honesty:
 
 - **A second runtime (Codex)**, so code written by one vendor's model is reviewed by another's.
+- **A Managed Agents runtime**: keep Axiom's control plane, but replace my hand-built sandbox, credential
+  proxy and budgets with Managed Agents sessions, stored credentials and session budgets. It's a good way to
+  learn which parts are worth building yourself and which are better bought.
 - **More developers in parallel**, and delivering the test repository's whole roadmap end to end.
 - **Continuous operation**: running unattended on real work for weeks, not demos.
 - **Baselines**: recording how long comparable tasks take by hand, so the metrics can finally answer
