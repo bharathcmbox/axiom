@@ -29,7 +29,9 @@ Things change when you want several agents to work on a real codebase without yo
 - **Did it actually help?** Without measurements, "the agents did it" is an anecdote, not a result.
 
 Axiom is my attempt to answer those questions in code: a control plane that runs a small team of
-coding agents on a real repository, with me as the CTO.
+coding agents on a real repository, with me as the CTO. I started with code because it can be checked:
+tests pass or fail, and a reviewer can point at a line. But the questions aren't specific to code, and my
+longer-term goal is an architecture that can take on non-coding work too.
 
 ## What Axiom does
 
@@ -72,16 +74,17 @@ A few rules shaped everything:
 
 ## How it differs from Claude Code and Codex
 
-First, the difference from how many developers use AI today: chatting with an assistant such as ChatGPT
-and carrying its answers into their code.
+Claude Code and Codex are coding agents: you give one a task, and it edits files, runs commands and tests
+itself, while you watch and steer. Axiom puts the same kind of agent inside an organization, and moves you from
+inside the loop to its gates:
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "13px"}}}%%
 flowchart TB
-    subgraph chat["A developer with a chat assistant"]
+    subgraph chat["A developer with a coding agent (Claude Code, Codex)"]
         direction LR
-        c1["You describe<br/>the change"] --> c2["Assistant<br/>suggests code"] --> c3["You paste, fix,<br/>run the tests"] --> c4["You review<br/>your own work"] --> c5["You push<br/>and merge"]
-        c3 -.->|"errors: paste back"| c2
+        c1["You describe<br/>a task"] --> c2["Agent edits files,<br/>runs the tests"] --> c3["You watch, steer,<br/>approve its actions"] --> c4["You review<br/>the result"] --> c5["You<br/>merge"]
+        c3 -.->|"corrections"| c2
     end
     subgraph axiom["Axiom"]
         direction LR
@@ -97,13 +100,10 @@ flowchart TB
     style axiom fill:#ffffff,stroke:#9ca3af
 ```
 
-*Amber: you. Blue: AI.* With a chat assistant, the AI writes and you do everything else: you carry code back and
-forth, run it on your own machine with your own credentials, and review your own work. In Axiom, you appear at
-the gates (the spec, the plan, the merge), and the steps between them are done and checked by agents that hold
-no credentials.
-
-Coding agents such as Claude Code and Codex already close much of that gap: they edit files and run tests
-themselves, in a session you're watching.
+*Amber: you. Blue: AI.* With a coding agent, one agent does the work and you're its supervisor and its
+reviewer, task by task, usually on your own machine with your own access. In Axiom, you appear at the gates
+(the spec, the plan, the merge). Between them, work is split, done in parallel, and checked by other agents and
+by plain code, in sandboxes that hold no credentials.
 
 Axiom doesn't compete with coding agents; it uses one. Claude Code (through the Claude Agent SDK) does the
 actual work inside Axiom's sandboxes. Claude Code and Codex are the *workers*. Axiom is an experiment in
@@ -290,6 +290,11 @@ The next phase is about scale and honesty:
   whether this is worth it.
 - **Cheaper reviews where they're good enough**: for example, a cheaper model for security review and the
   stronger one for code review, measured rather than assumed.
+- **Beyond code.** Most of the architecture isn't about code: a plan you approve, work in sandboxes with no
+  credentials, independent review, plain code deciding, budgets, a human at the gates, and an event log. Work
+  such as research, analysis or documentation could go through the same loop. What doesn't carry over is the
+  checking: today "done" means tests pass, CI is green and reviewers read a diff. Other kinds of work need
+  their own ways to check a result, and finding those is the hard part.
 
 ## Closing
 
