@@ -40,22 +40,21 @@ different model, judge each change alongside your CI. Findings go back to the de
 pull request. When everything passes, **you merge on GitHub. Axiom never merges.**
 
 ```mermaid
-flowchart TB
-    spec(["You: a specification and a budget"]) --> plan["Planner agent proposes tasks"]
-    plan --> rules{"Plan rules<br/>(plain code)"}
+%%{init: {"themeVariables": {"fontSize": "13px"}}}%%
+flowchart LR
+    spec(["Spec +<br/>budget"]) --> plan["Planner<br/>proposes tasks"]
+    plan --> rules{"Plan<br/>rules"}
     rules -->|broken| plan
-    rules -->|ok| approve(["You approve the plan"])
-    approve --> dev["Developer and QA agents<br/>in sandboxes, in parallel"]
-    dev --> check{"Axiom checks:<br/>allowed files? no secrets?<br/>tests pass on a clean copy?"}
+    rules -->|ok| approve(["You<br/>approve"])
+    approve --> dev["Developers + QA<br/>in sandboxes"]
+    dev --> check{"Files, secrets,<br/>tests OK?"}
     check -->|no| dev
-    check -->|yes| pr["Pull request"]
-    pr --> rev["Two reviewers, another model"]
-    pr --> ci["CI"]
-    rev --> agg{"Aggregator<br/>(plain code)"}
-    ci --> agg
+    check -->|yes| pr["Pull<br/>request"]
+    pr --> rev["Reviewers<br/>+ CI"]
+    rev --> agg{"Aggregator"}
     agg -->|findings| dev
-    agg -->|stuck| you2(["You decide"])
-    agg -->|all pass| merge(["You merge"])
+    agg -->|stuck| you2(["You<br/>decide"])
+    agg -->|pass| merge(["You<br/>merge"])
 ```
 
 A few rules shaped everything:
@@ -72,6 +71,39 @@ A few rules shaped everything:
    append-only log in the same transaction. Killing the process loses nothing.
 
 ## How it differs from Claude Code and Codex
+
+First, the difference from how many developers use AI today: chatting with an assistant such as ChatGPT
+and carrying its answers into their code.
+
+```mermaid
+%%{init: {"themeVariables": {"fontSize": "13px"}}}%%
+flowchart TB
+    subgraph chat["A developer with a chat assistant"]
+        direction LR
+        c1["You describe<br/>the change"] --> c2["Assistant<br/>suggests code"] --> c3["You paste, fix,<br/>run the tests"] --> c4["You review<br/>your own work"] --> c5["You push<br/>and merge"]
+        c3 -.->|"errors: paste back"| c2
+    end
+    subgraph axiom["Axiom"]
+        direction LR
+        a1["You write<br/>a spec"] --> a2["Planner<br/>proposes tasks"] --> a3["You approve<br/>the plan"] --> a4["Agents build<br/>in sandboxes"] --> a5["Reviewers<br/>and CI check"] --> a6["You<br/>merge"]
+        a5 -.->|"findings"| a4
+    end
+    chat ~~~ axiom
+    classDef human fill:#fef3c7,stroke:#b45309,color:#111827
+    classDef machine fill:#dbeafe,stroke:#1d4ed8,color:#111827
+    class c1,c3,c4,c5,a1,a3,a6 human
+    class c2,a2,a4,a5 machine
+    style chat fill:#ffffff,stroke:#9ca3af
+    style axiom fill:#ffffff,stroke:#9ca3af
+```
+
+*Amber: you. Blue: AI.* With a chat assistant, the AI writes and you do everything else: you carry code back and
+forth, run it on your own machine with your own credentials, and review your own work. In Axiom, you appear at
+the gates (the spec, the plan, the merge), and the steps between them are done and checked by agents that hold
+no credentials.
+
+Coding agents such as Claude Code and Codex already close much of that gap: they edit files and run tests
+themselves, in a session you're watching.
 
 Axiom doesn't compete with coding agents; it uses one. Claude Code (through the Claude Agent SDK) does the
 actual work inside Axiom's sandboxes. Claude Code and Codex are the *workers*. Axiom is an experiment in
