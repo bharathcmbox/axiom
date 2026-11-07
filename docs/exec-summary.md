@@ -73,7 +73,9 @@ sequenceDiagram
 
 A stolen run token is worth one model and one budget for a few minutes, and works only from inside Axiom's internal
 networks: the proxy isn't reachable from outside.
-The sandbox has no route to GitHub at all: only the worker pushes, after checking the work. A prompt-injection drill was refused at every step. Preparing for it found a real sandbox escape (through
+The sandbox has no route to GitHub at all: only the worker pushes, after checking the work.
+
+A prompt-injection drill was refused at every step. Preparing for it found a real sandbox escape (through
 git), which was fixed before it could be used. A live check (`make check-boundaries`) proves 33 limits from
 inside real containers. The largest remaining exposure is GitHub itself: a compromised agent could push harmful
 code to its branch. Reviews, CI and a human merge stand between that branch and `main`.
