@@ -82,3 +82,22 @@ def review_rows() -> list[tuple[str, frozenset[str], tuple[str, ...], str, str]]
             targets = tuple(t.strip() for t in dst.split("/"))
             rows.append((cmd.strip("`"), sources, targets, actor, event))
     return rows
+
+
+def plan_rows() -> list[tuple[str, frozenset[str], tuple[str, ...], str, str]]:
+    """(command, sources, targets, actor, event) from the plan table."""
+    rows, in_table = [], False
+    for line in DOC.read_text().splitlines():
+        if line.startswith("| Plan command"):
+            in_table = True
+            continue
+        if in_table:
+            if not line.startswith("|"):
+                break
+            if line.startswith("|---"):
+                continue
+            cmd, src, dst, actor, event = _cells(line)
+            sources = frozenset(x.strip() for x in src.split(","))
+            targets = tuple(t.strip() for t in dst.split("/"))
+            rows.append((cmd.strip("`"), sources, targets, actor, event))
+    return rows

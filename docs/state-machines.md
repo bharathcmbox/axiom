@@ -143,6 +143,41 @@ stateDiagram-v2
 Review events carry `review_id` and keep the task's `from_state`/`to_state` empty: they do not
 move the task. The aggregator moves the task, using rows 10, 11 and 16 above.
 
+## Plan (Phase 4, ADR-011)
+
+A human submits a specification. A planner agent claims it with a lease and proposes tasks. Plain code
+checks the proposal, and only then does a human see it. Only a human's approval creates tasks.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> REQUESTED: you submit a spec
+    REQUESTED --> CLAIMED: claim (planner agent, lease)
+    CLAIMED --> PROPOSED: submit (valid plan)
+    CLAIMED --> REQUESTED: fail_run / time_out<br/>(attempts left)
+    CLAIMED --> ERROR: fail_run / time_out<br/>(3 attempts used)
+    PROPOSED --> REQUESTED: reject, with feedback
+    PROPOSED --> APPROVED: approve (tasks created)
+    REQUESTED --> CANCELLED: cancel
+    PROPOSED --> CANCELLED: cancel
+    APPROVED --> [*]
+    ERROR --> [*]
+    CANCELLED --> [*]
+```
+
+| Plan command | From | To | Actor | Event |
+|---|---|---|---|---|
+| `claim` | REQUESTED | CLAIMED | agent | PLAN_CLAIMED |
+| `submit` | CLAIMED | PROPOSED | agent | PLAN_PROPOSED |
+| `fail_run` | CLAIMED | REQUESTED / ERROR | agent | PLAN_RUN_FAILED |
+| `time_out` | CLAIMED | REQUESTED / ERROR | system | PLAN_TIMED_OUT |
+| `reject` | PROPOSED | REQUESTED | human | PLAN_REJECTED |
+| `approve` | PROPOSED | APPROVED | human | PLAN_APPROVED |
+| `cancel` | REQUESTED, PROPOSED | CANCELLED | human | PLAN_CANCELLED |
+
+A plan that fails validation counts as a `fail_run`. A rejection isn't a failure, so the attempts start
+over. Plan events carry `plan_id`.
+
 ## Invariants
 
 - A task is ASSIGNED or IN_PROGRESS **iff** it has exactly one active execution.

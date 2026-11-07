@@ -92,6 +92,28 @@ class ReviewContract(_Strict):
         return [f for f in self.findings if f.severity in BLOCKING_SEVERITIES]
 
 
+class PlanTask(_Strict):
+    """One task a planner proposes. It grants nothing until a human approves the plan."""
+
+    ref: str = Field(pattern=r"^[a-z][a-z0-9-]{0,30}$")
+    title: str = Field(min_length=1, max_length=120)
+    specification: str = Field(min_length=1, max_length=8000)
+    acceptance_criteria: list[str] = Field(min_length=1, max_length=20)
+    role: Literal["developer", "qa"]
+    allowed_paths: list[str] = Field(default_factory=list, max_length=30)
+    priority: Literal["P0", "P1", "P2", "P3"] = "P2"
+    budget_usd: float = Field(gt=0, le=50)
+    depends_on: list[str] = Field(default_factory=list)
+
+
+class PlanContract(_Strict):
+    """A planner's proposal (ADR-011). Its rules are in orchestrator/plan_rules.py."""
+
+    summary: str = Field(min_length=1, max_length=4000)
+    tasks: list[PlanTask]
+    risks: list[str] = Field(default_factory=list)
+
+
 def parse_review(data: Any) -> ReviewContract:
     try:
         return ReviewContract.model_validate(data)
@@ -105,3 +127,13 @@ def parse_review(data: Any) -> ReviewContract:
 
 def review_json_schema() -> dict[str, Any]:
     return ReviewContract.model_json_schema()
+
+
+def parse_plan(data: Any) -> PlanContract:
+    try:
+        return PlanContract.model_validate(data)
+    except ValidationError as e:
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in e.errors()[:5]
+        )
+        raise InvalidResult(problems) from None
