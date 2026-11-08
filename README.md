@@ -6,7 +6,7 @@ coding agents on real software work, with you as CTO. See [SPEC.md](SPEC.md).
 **[Executive summary](docs/exec-summary.md)** · **[User guide](docs/user-guide.md)** ·
 **[Admin guide](docs/admin-guide.md)** · [The guide](docs/guide/README.md) ·
 [Blog post](https://bharathcmbox.github.io/posts/axiom/) ·
-[LinkedIn post](https://lnkd.in/p/g3ztk7ZB)
+[LinkedIn post](https://www.linkedin.com/posts/bharath-chandrasekhar-6285b4_aiagents-aiengineering-share-7524984326103605248-k899/)
 
 **Status: Phases 1–4 complete.** You give Axiom a specification. A planner agent splits it into tasks;
 you approve the plan. Developer and QA agents implement them in locked-down sandboxes, in parallel where
