@@ -36,7 +36,7 @@ flowchart LR
     p1["<b>Phase 1: control plane</b><br/>rules, state, recovery<br/>no AI at all"] --> p2["<b>Phase 2: first worker</b><br/>one real agent, safely,<br/>up to a PR"]
     p2 --> p3["<b>Phase 3: independent review</b><br/>catch bad work,<br/>send it back, human merges"]
     p3 --> p4["<b>Phase 4: management</b><br/>spec → tasks, QA agent,<br/>dashboard, metrics"]
-    p4 --> p5["<b>Phase 5: scale</b><br/>Codex, real use,<br/>the measured answer"]
+    p4 --> p5["<b>Phase 5: scale</b><br/>always-on, real use,<br/>the measured answer"]
 ```
 
 - **The deterministic part came first, with no AI.** If the state machine, leases and recovery

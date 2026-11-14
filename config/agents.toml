@@ -1,6 +1,6 @@
 # The initial organization: 7 logical agents, 2 developers (SPEC.md section 4).
 # Seed with `make seed`. Developers: Claude Opus 5.5. Reviewers: Claude Fable 5.1, a different
-# model from the developers (ADR-009). Codex as a further reviewer comes later (ADR-003).
+# model from the developers (ADR-009). Phase 5 moves SEC-01 to Fable 5.2 and REV-01 to Sonnet 5.5.
 
 [[agents]]
 key = "EM-01"

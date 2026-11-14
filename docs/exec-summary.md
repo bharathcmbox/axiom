@@ -96,8 +96,10 @@ metered proxy and the event log.
 
 ## Next: Phase 5
 
-A second runtime (Codex) for cross-model review, more developers, delivering `tiny-agenticsoc` end to end,
-continuous operation, and baselines to answer whether this beats doing it yourself.
+Built on Claude and the Anthropic platform only ([plan](plan/phase-5.md)): reviewers on models that differ
+from each other and from developers, continuous operation (schedules, follow-ups, and notifications when you're
+needed), a second runtime (Managed Agents) as an experiment, delivering `tiny-agenticsoc` end to end, and
+baselines to answer whether this beats doing it yourself.
 
 More: [user guide](user-guide.md) · [admin guide](admin-guide.md) · [the guide](guide/README.md) ·
 [exit run](runs/2026-11-07-phase-4-exit-run.md) · [SPEC](../SPEC.md)

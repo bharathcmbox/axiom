@@ -1,9 +1,9 @@
 # Axiom — an AI engineering organization (control plane)
 
-Axiom coordinates coding agents (Claude Code first, Codex later) through a backlog, state machines,
+Axiom coordinates coding agents (Claude Code first; Anthropic-only for now) through a backlog, state machines,
 leases, and an event log. See SPEC.md, docs/plan/, docs/guide/, and docs/user-guide.md and docs/admin-guide.md. Phases 1 (control plane),
 2 (first worker), 3 (independent review, CI gate, GitHub sync) and 4 (planning, QA, parallel work, metrics,
-hardening) are done; next is Phase 5 (scale and diversify). Axiom is product-agnostic: no SOC/security-product concepts in this repo;
+hardening) are done; Phase 5 (scale and diversify, Anthropic-only: docs/plan/phase-5.md) is in progress. Axiom is product-agnostic: no SOC/security-product concepts in this repo;
 customer projects live in their own repos.
 
 ## Commands

@@ -30,3 +30,10 @@ Checking the repositories before making them public found that a "Request change
 anyone, while `/axiom changes` comments were already limited to owners, members and collaborators. On a public
 repository that would let any GitHub user send an agent's PR back with their own text as feedback, which reaches
 the developer agent's prompt. Reviews now pass the same `author_association` check as comments.
+
+## Revision (2026-11-13): the sync may write to one issue
+ADR-019 lets the sync post notifications as comments on a pinned `Axiom inbox` issue in the project repository,
+with text chosen by code only, and needs Issues: write on the sync token for that. It writes nothing else, it
+never reads replies on that issue, and it still has no merge code path. GitHub enforcement (Pro or an App) is
+still deferred: the public tiny-agenticsoc repository has a ruleset requiring a PR and the `tests` check
+(Phase 5 Q9).

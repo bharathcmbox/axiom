@@ -15,3 +15,9 @@ both.
 ## Consequences
 - Orchestration code never imports a runtime SDK directly.
 - Runtime-specific permissions and hooks live in the adapter.
+
+## Revision (2026-11-13): Codex is no longer planned
+Phase 5 was waiting on a Codex runtime for cross-model review, and there are no OpenAI keys. It now goes ahead on
+Claude and the Anthropic platform only: review diversity comes from reviewers on models that differ from each
+other and from developers (ADR-009), and the adapter is tested by a second Anthropic runtime, Managed Agents
+(Phase 5, T6). A Codex runtime remains possible behind the same adapter; nothing depends on it.

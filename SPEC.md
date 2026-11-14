@@ -11,7 +11,7 @@ Axiom is an **AI engineering organization**: a control plane that runs a team of
 on real software work. You act as CTO (direction, specifications, priorities, approvals); Axiom
 breaks work into tasks, assigns agents, tracks progress, gates quality, and reports.
 
-Coding harnesses (Claude Code, Codex) are the **workforce**. Axiom is the **organization** around
+Coding harnesses (Claude Code first) are the **workforce**. Axiom is the **organization** around
 them. It does not reimplement the agent loop.
 
 ```
@@ -19,7 +19,7 @@ You (CTO) ─ direction · specifications · priorities · approvals
    │
 Axiom control plane ─ backlog · task/execution state machines · scheduling · leases
    │                  · agent registry · budgets · event log · reports
-Worker runtimes ─ Claude Code (Claude Agent SDK) first · Codex second (mainly review)
+Worker runtimes ─ Claude Code (Claude Agent SDK) first · Managed Agents (Phase 5 experiment)
    │
 Shared infrastructure ─ GitHub (branches, PRs, Issues mirror) · GitHub Actions · containers/worktrees
 ```
@@ -143,7 +143,7 @@ around $200/month for the prototype.
 
 ## 10. Phases (each ends with a working demo)
 
-Status: Phases 1–4 are complete; see [docs/plan/](docs/plan/) and the [executive summary](docs/exec-summary.md).
+Status: Phases 1–4 are complete and Phase 5 is under way; see [docs/plan/](docs/plan/) and the [executive summary](docs/exec-summary.md).
 
 1. **Control plane skeleton.** Schema, agent registry, task + execution state machines, leases,
    event log, REST API, Docker Compose, tests. *Exit:* drive tasks through every state by hand;
@@ -158,8 +158,10 @@ Status: Phases 1–4 are complete; see [docs/plan/](docs/plan/) and the [executi
 4. **Engineering management.** Spec decomposition with human approval, QA agent, Issues mirror,
    cost accounting and metrics, dashboard (Streamlit) and daily report. *Exit:* a multi-task spec
    delivered end to end.
-5. **Scale and diversify.** Codex runtime (cross-model review), more developers, Agentic SOC
-   delivered end to end, continuous operation.
+5. **Scale and diversify** (on Claude and the Anthropic platform; [plan](docs/plan/phase-5.md)). Reviewers
+   on models that differ from each other and from developers, continuous operation (schedules, follow-ups,
+   notifications), a second runtime (Managed Agents) as an experiment, hand-driven baselines, Agentic SOC
+   delivered end to end. A Codex runtime is possible later, not planned.
 
 ## 11. Out of scope for now
 
