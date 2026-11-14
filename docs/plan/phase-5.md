@@ -321,7 +321,7 @@ Every task: lint, the full suite, one commit, its guide section and diagrams in 
 | T5 Notifications | Migration, outbox, dashboard inbox, GitHub inbox-issue delivery by the sync | Deduplicated; credential exposure always pushed | dedup, delivery retry, sync tests with a fake GitHub. Done; the sync got its own token, and a possible credential exposure now stops work (FAILED) |
 | T5b Unattended drill **LIVE** | A weekly schedule on tiny-agenticsoc, the API restarted mid-week | Fires on time, once; you are notified at each step | the live run |
 | **Part C** | | | |
-| T6 Managed Agents spike **LIVE** | Adapter for reviewers; go or no-go ADR-020 | Rules in 4.4 kept, or the gap recorded | adapter contract tests with a fake; the live comparison |
+| T6 Managed Agents spike **LIVE** | Adapter for reviewers; go or no-go ADR-020 | Rules in 4.4 kept, or the gap recorded | adapter contract tests with a fake; the live comparison. Done: [record](../runs/2026-11-14-phase-5-managed-agents.md) ($0.76) |
 | **Part D** | | | |
 | T7 Baselines | Your 3 hand-driven tasks recorded; comparison in the report | Comparison shown, stated as a small sample | metrics tests for the comparison |
 | T8 Exit **LIVE** | A real multi-task spec on tiny-agenticsoc with schedules and notifications on | Delivered, measured, notified | recorded run, with the report |
@@ -334,7 +334,7 @@ Every task: lint, the full suite, one commit, its guide section and diagrams in 
 - [x] Reviewers on two different models from each other and from developers, with the planted bug still caught (T1–T3): [record](../runs/2026-11-14-phase-5-review-check.md), `test_the_two_reviewers_default_to_different_models`.
 - [ ] Schedules and follow-ups fire once, on time, through `apply_command`, including after a restart (T4, T5b).
 - [ ] You are told when something needs you, without opening the dashboard; credential exposure always first (T5, T5b).
-- [ ] A second runtime has been tried for real, and the result is written down whatever it is (T6).
+- [x] A second runtime has been tried for real, and the result is written down whatever it is (T6): [record](../runs/2026-11-14-phase-5-managed-agents.md), ADR-020, `test_a_whole_review_through_the_adapter`.
 - [ ] The main question has a measured answer from baselines, stated as a small sample (T7, T8).
 - [ ] A real spec is delivered with Axiom running unattended between your approvals and merges (T8).
 

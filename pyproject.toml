@@ -16,6 +16,10 @@ dependencies = [
 sandbox = [
     "claude-agent-sdk>=0.2.177",
 ]
+# Phase 5 T6: the Managed Agents runtime spike (drills only; not in any image).
+managed = [
+    "anthropic>=1.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]

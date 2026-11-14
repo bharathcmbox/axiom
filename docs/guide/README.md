@@ -28,6 +28,7 @@ Doing them is the fastest way to make the ideas stick.
 | 15 | [Metrics](15-metrics.md) | Phase 4: what is measured, from where, and how far to trust it |
 | 16 | [Planning](16-planning.md) | Phase 4: how a specification becomes tasks, and why only you can make that happen |
 | 17 | [Continuous operation](17-continuous-operation.md) | Phase 5: schedules, follow-ups, and **end-to-end diagrams of where you come in** |
+| 18 | [Runtimes](18-runtimes.md) | Phase 5: the same review on Axiom's sandbox or on Managed Agents, and what each keeps |
 
 **Short on time?** Read 1, then 13, then 14. Come back to the others when you want to know how a
 piece works.

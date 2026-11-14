@@ -87,6 +87,7 @@ stateDiagram-v2
 | S49 | A run leaves something that looks like a credential | FAILED, no automatic retry; you're notified first | tested | `test_a_leaked_credential_goes_to_a_human_first`, `test_a_credential_exposure_is_delivered_first` |
 | S50 | GitHub refuses a notification | recorded, retried next pass | tested | `test_a_failed_delivery_is_recorded_and_retried` |
 | S51 | A stranger replies on the inbox issue | nothing: Axiom never reads it | tested (structurally) | `test_the_writer_cannot_read_replies` |
+| S52 | A Managed Agents reviewer submits a malformed review | sent back with its problems; fails after 3 tries | tested; seen **live** once (T6) | `test_an_invalid_submission_goes_back_with_its_problems_then_a_valid_one_counts`, `test_three_invalid_submissions_fail_the_run` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
