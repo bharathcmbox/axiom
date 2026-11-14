@@ -315,7 +315,7 @@ Every task: lint, the full suite, one commit, its guide section and diagrams in 
 | **Part A** | | | |
 | T1 Models | Fable 5.2 pricing and estimate; reviewer models per Q2 | ADR-009 rule still enforced | price-table and estimate tests; model-guard legal and illegal paths |
 | T2 Review checklists | Per-role checklist in review contracts; aggregator rejects an empty review | An "approve" that examined nothing is invalid | contract tests, pass and fail |
-| T3 Review check **LIVE** | The new reviewers on the SOC-002 planted bug and two recent PRs | Bug caught; cost recorded | the live run, written up |
+| T3 Review check **LIVE** | The new reviewers on the SOC-002 planted bug and two recent PRs | Bug caught; cost recorded | the live run, written up: [record](../runs/2026-11-14-phase-5-review-check.md) ($1.81) |
 | **Part B** | | | |
 | T4 Timers | Migration, `timer_machine.py`, scheduler in the API process, follow-ups for idle PRs and waiting questions | Fires once under concurrency and after downtime | generated pairs; two schedulers racing; restart after a missed interval; budget refusal |
 | T5 Notifications | Migration, outbox, dashboard inbox, GitHub inbox-issue delivery by the sync | Deduplicated; credential exposure always pushed | dedup, delivery retry, sync tests with a fake GitHub |
@@ -330,8 +330,8 @@ Every task: lint, the full suite, one commit, its guide section and diagrams in 
 
 ## 6. Phase 5 exit criteria
 
-- [ ] Codex is no longer on any critical path; SPEC and ADR-003 say so (T0).
-- [ ] Reviewers on two different models from each other and from developers, with the planted bug still caught (T1–T3).
+- [x] Codex is no longer on any critical path; SPEC and ADR-003 say so (T0).
+- [x] Reviewers on two different models from each other and from developers, with the planted bug still caught (T1–T3): [record](../runs/2026-11-14-phase-5-review-check.md), `test_the_two_reviewers_default_to_different_models`.
 - [ ] Schedules and follow-ups fire once, on time, through `apply_command`, including after a restart (T4, T5b).
 - [ ] You are told when something needs you, without opening the dashboard; credential exposure always first (T5, T5b).
 - [ ] A second runtime has been tried for real, and the result is written down whatever it is (T6).

@@ -664,7 +664,8 @@ Sonnet caught the bug that mattered and agreed on every verdict, for about a sev
 half of Fable's smaller findings, mostly about whether tests really test. Fable found mostly the same things twice,
 but once chose FAIL for an issue it had rated `low` the first time. Eight PRs are a small sample. Phase 5 took the
 [comparison](../runs/2026-11-07-reviewer-comparison.md)'s suggested split: code review on Fable (now 5.2) and
-security review on Sonnet 5.5, so the two reviewers also differ from each other.
+security review on Sonnet 5.5, so the two reviewers also differ from each other. On the planted bug and two later PRs, both new reviewers
+caught the bug, for $1.81 in all ([record](../runs/2026-11-14-phase-5-review-check.md)).
 
 Each reviewer's model is a setting on its agent, picked up at its next review without a restart:
 
