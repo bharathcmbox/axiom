@@ -350,7 +350,8 @@ def test_agents_without_a_model_use_the_default(
 
 
 def _fail_review(db: Conn, key: str) -> None:
-    from axiom.orchestrator.reviews import claim_review, submit_review
+    from axiom.orchestrator.reviews import claim_review
+    from tests.integration.review_helpers import submit_review
 
     finding = {"severity": "high", "file": "CLAUDE.md", "line": 1,
                "issue": "says v2, spec wants v3", "required_change": "write v3"}  # fmt: skip

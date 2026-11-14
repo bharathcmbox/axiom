@@ -74,6 +74,7 @@ def test_a_failing_reviewer_sends_work_back(api_tokens: Conn, api_url: str, remo
         (ReviewScenario.TRY_TO_EDIT, "reviewer modified the workspace"),
         (ReviewScenario.CRASH, "reviewer crashed"),
         (ReviewScenario.MALFORMED, "invalid review contract"),
+        (ReviewScenario.EXAMINED_NOTHING, "a PASS that examined nothing"),
     ],
 )
 def test_bad_review_runs_are_retried(api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path,

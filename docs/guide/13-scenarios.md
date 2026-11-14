@@ -77,6 +77,8 @@ stateDiagram-v2
 | S39 | A review needs more than $1, and you raised the budget | the rereview gets what's left, up to $2.50 | tested; found **live** (exit run, SOC-009) | `test_a_rereview_gets_what_the_raised_budget_left_not_a_fixed_dollar` |
 | S40 | You put a reviewer on the developers' model | refused, nothing changed | tested | `test_a_reviewer_cant_run_on_the_model_that_writes_the_code` |
 | S41 | A stranger asks for changes on a public repository's PR | ignored, nothing changed | tested | `test_a_strangers_request_changes_review_is_ignored` |
+| S42 | A reviewer approves without examining anything | invalid review, run again; the task doesn't move | tested | `test_a_review_must_cover_its_roles_checklist`, `test_bad_review_runs_are_retried` |
+| S43 | A reviewer with no model of its own | runs on its role's default, which differs from the other reviewer's | tested | `test_a_reviewer_with_no_model_runs_on_its_roles_default_unless_overridden` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
@@ -310,6 +312,19 @@ flowchart LR
 
 Not the same as S9. Reserved money may come back when a run finishes under budget, so the claim is
 refused and retried, and the task doesn't move.
+
+## S42. A reviewer approves without examining anything
+
+```mermaid
+flowchart LR
+    r["review contract:<br/>PASS, every checklist item<br/>not_applicable, or one missing"] --> v{"parse_review(contract, role)"}
+    v -->|invalid| p["review back to PENDING<br/>(attempt 1, 2; ERROR after 3)"]
+    v -->|"every item covered"| a["aggregator decides"]
+```
+
+Each role has a fixed checklist (`REVIEW_CHECKLISTS` in `contracts.py`). The model's output schema requires every
+item, and Axiom checks again when the review is submitted, because the sandbox is untrusted. A FAIL may mark every
+item `not_applicable`; only an approval needs something examined.
 
 ## Not handled yet
 

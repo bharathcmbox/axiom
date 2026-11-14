@@ -209,14 +209,14 @@ def submit_review(
     payload: dict[str, Any] | None = None,
 ) -> str:
     """Record a verdict. Returns the aggregator's decision for the task."""
-    try:
-        parsed = parse_review(contract)
-    except InvalidResult as e:
-        raise InvalidInput(f"invalid review contract: {e}") from None
     cost_usd, tokens_in, tokens_out = budgets.parse_cost(payload or {})
     with conn.transaction():
         task, review = _review_for_update(conn, review_id)
         _require_owner(actor, review)
+        try:
+            parsed = parse_review(contract, review["role"])
+        except InvalidResult as e:
+            raise InvalidInput(f"invalid review contract: {e}") from None
         if review["status"] == ReviewState.SUPERSEDED:
             return _record_late_cost(conn, actor, review, cost_usd, tokens_in, tokens_out,
                                      late_verdict=parsed.verdict)  # fmt: skip

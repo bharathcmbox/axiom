@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any
 
-from axiom.contracts import InvalidResult, parse_review
+from axiom.contracts import REVIEW_CHECKLISTS, InvalidResult, parse_review
 from axiom.runtimes.base import EventCallback, Outcome
 from axiom.runtimes.review import ReviewOutcome, ReviewRequest
 
@@ -17,6 +17,7 @@ class ReviewScenario(StrEnum):
     FAIL = "fail"  # one high finding
     PASS_WITH_HIGH = "pass_with_high"  # inconsistent: Axiom turns it into FAIL
     MALFORMED = "malformed"
+    EXAMINED_NOTHING = "examined_nothing"  # a PASS with every checklist item not_applicable
     CRASH = "crash"
     BUDGET_EXCEEDED = "budget_exceeded"
     TRY_TO_EDIT = "try_to_edit"  # writes a file, as if the read-only hook had failed
@@ -67,19 +68,31 @@ class FakeReviewer:
             "issue": f"{request.role}: planted defect",
             "required_change": "fix it",
         }
+        items = list(REVIEW_CHECKLISTS[request.role])
+
+        def checklist(finding_on: str | None = None, result: str = "ok") -> dict[str, Any]:
+            return {
+                i: {"result": "finding" if i == finding_on else result, "note": f"looked at {i}"}
+                for i in items
+            }
+
         raw: object = {
-            ReviewScenario.PASS: {"verdict": "PASS", "summary": "looks right", "findings": []},
-            ReviewScenario.TRY_TO_EDIT: {"verdict": "PASS", "summary": "edited", "findings": []},
-            ReviewScenario.FAIL: {"verdict": "FAIL", "summary": "defect", "findings": [finding]},
-            ReviewScenario.PASS_WITH_HIGH: {
-                "verdict": "PASS",
-                "summary": "ok?",
-                "findings": [finding],
-            },
+            ReviewScenario.PASS: {"verdict": "PASS", "summary": "looks right",
+                                  "checklist": checklist(), "findings": []},
+            ReviewScenario.TRY_TO_EDIT: {"verdict": "PASS", "summary": "edited",
+                                         "checklist": checklist(), "findings": []},
+            ReviewScenario.FAIL: {"verdict": "FAIL", "summary": "defect",
+                                  "checklist": checklist(items[0]), "findings": [finding]},
+            ReviewScenario.PASS_WITH_HIGH: {"verdict": "PASS", "summary": "ok?",
+                                            "checklist": checklist(items[0]),
+                                            "findings": [finding]},
             ReviewScenario.MALFORMED: {"verdict": "LGTM"},
-        }[self.scenario]
+            ReviewScenario.EXAMINED_NOTHING: {"verdict": "PASS", "summary": "fine",
+                                              "checklist": checklist(result="not_applicable"),
+                                              "findings": []},
+        }[self.scenario]  # fmt: skip
         try:
-            contract = parse_review(raw)
+            contract = parse_review(raw, request.role)
         except InvalidResult as e:
             return self._costed(Outcome.FAILED, transcript, error=f"invalid review contract: {e}")
         return self._costed(Outcome.COMPLETED, transcript, contract=contract)

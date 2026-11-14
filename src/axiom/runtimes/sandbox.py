@@ -163,7 +163,7 @@ class SandboxRuntime:
         outcome = (
             ReviewOutcome(done.outcome, error=done.error)
             if isinstance(done, RunOutcome)
-            else review_outcome_from_dict(done, request.output_dir)
+            else review_outcome_from_dict(done, request.output_dir, request.role)
         )
         return _settle(outcome, run.metered)
 

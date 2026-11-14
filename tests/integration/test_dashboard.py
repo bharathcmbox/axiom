@@ -11,11 +11,12 @@ from axiom.api.app import create_app
 from axiom.api.ui import ui_router
 from axiom.config import Settings
 from axiom.domain.task_machine import TaskCommand, TaskState
-from axiom.orchestrator.reviews import claim_review, submit_review
+from axiom.orchestrator.reviews import claim_review
 from axiom.report import build_report, fmt_duration
 from axiom.state.db import Conn
 from tests.conftest import TEST_TOKENS
 from tests.integration.helpers import do, drive_to, new_task
+from tests.integration.review_helpers import submit_review
 from tests.integration.test_reviews import BUG, FAIL, REV, _in_review
 
 C = TaskCommand

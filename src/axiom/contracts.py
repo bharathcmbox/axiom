@@ -80,11 +80,40 @@ class Finding(_Strict):
     required_change: str = Field(min_length=1)
 
 
+# What each reviewer role must look at (Phase 5 T2). The prompt is built from this, the model's
+# output schema requires every item, and a review that skips one, or approves having examined
+# nothing, is invalid: it's retried like any other bad contract.
+REVIEW_CHECKLISTS: dict[str, dict[str, str]] = {
+    "code_reviewer": {
+        "correctness": "does the code do what the specification says, including edge cases (empty "
+        "input, boundaries, off-by-one, ordering, time zones, None)?",
+        "acceptance_criteria": "is each acceptance criterion actually met by the change?",
+        "tests": "do the tests exercise the new behaviour, and would they catch the obvious bug?",
+        "scope": "only the allowed paths changed; no unrelated changes; no dead code.",
+        "maintainability": "clear names, no needless complexity.",
+    },
+    "security_reviewer": {
+        "injection": "shell, SQL, path traversal, template, prompt injection into LLM calls.",
+        "secrets": "credentials or tokens in code, config or logs; secrets in error messages.",
+        "authorization": "untrusted input reaching privileged actions; missing checks.",
+        "unsafe_execution": "eval/exec, subprocess with shell=True, deserializing untrusted data.",
+        "dependencies": "new packages, unpinned or suspicious; supply-chain risk.",
+        "data_exposure": "sensitive data logged, returned or sent to external services.",
+    },
+}
+
+
+class ChecklistEntry(_Strict):
+    result: Literal["ok", "finding", "not_applicable"]
+    note: str = Field(min_length=1, max_length=500, description="What was looked at, briefly.")
+
+
 class ReviewContract(_Strict):
     """A reviewer's verdict on one round of work."""
 
     verdict: Literal["PASS", "FAIL"]
     summary: str = Field(min_length=1, max_length=4000)
+    checklist: dict[str, ChecklistEntry]
     findings: list[Finding] = Field(default_factory=list)
 
     @property
@@ -114,19 +143,53 @@ class PlanContract(_Strict):
     risks: list[str] = Field(default_factory=list)
 
 
-def parse_review(data: Any) -> ReviewContract:
+def parse_review(data: Any, role: str) -> ReviewContract:
+    """Validate a review against the contract and the checklist for `role`."""
     try:
-        return ReviewContract.model_validate(data)
+        contract = ReviewContract.model_validate(data)
     except ValidationError as e:
         problems = "; ".join(
             f"{'.'.join(str(p) for p in err['loc']) or '<root>'}: {err['msg']}"
             for err in e.errors()
         )
         raise InvalidResult(problems) from None
+    gaps = checklist_problems(contract, role)
+    if gaps:
+        raise InvalidResult("; ".join(gaps))
+    return contract
 
 
-def review_json_schema() -> dict[str, Any]:
-    return ReviewContract.model_json_schema()
+def checklist_problems(contract: ReviewContract, role: str) -> list[str]:
+    items = REVIEW_CHECKLISTS.get(role)
+    if items is None:
+        return [f"no checklist for role {role!r}"]
+    problems = []
+    missing = [i for i in items if i not in contract.checklist]
+    unknown = sorted(set(contract.checklist) - set(items))
+    if missing:
+        problems.append(f"checklist: not examined: {', '.join(missing)}")
+    if unknown:
+        problems.append(f"checklist: not items for {role}: {', '.join(unknown)}")
+    results = [e.result for e in contract.checklist.values()]
+    if contract.verdict == "PASS" and results and all(r == "not_applicable" for r in results):
+        problems.append("checklist: a PASS that examined nothing (every item not_applicable)")
+    if "finding" in results and not contract.findings:
+        problems.append("checklist: an item has a finding, but findings is empty")
+    return problems
+
+
+def review_json_schema(role: str) -> dict[str, Any]:
+    """The contract's schema, with the checklist narrowed to `role`'s items, all required."""
+    schema = ReviewContract.model_json_schema()
+    items = REVIEW_CHECKLISTS[role]
+    entry = schema["properties"]["checklist"]["additionalProperties"]
+    schema["properties"]["checklist"] = {
+        "type": "object",
+        "properties": {i: entry for i in items},
+        "required": list(items),
+        "additionalProperties": False,
+    }
+    return schema
 
 
 def plan_json_schema() -> dict[str, Any]:

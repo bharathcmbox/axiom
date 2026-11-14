@@ -10,6 +10,7 @@ from axiom.api.app import create_app
 from axiom.config import Settings
 from axiom.state.db import Conn
 from tests.conftest import bearer
+from tests.integration.review_helpers import with_checklist
 
 H = bearer("human:bharath")
 DEV1 = bearer("agent:DEV-01")
@@ -295,10 +296,11 @@ def test_review_flow_over_http(client: TestClient) -> None:
                       json={"contract": {"verdict": "OK"}})  # fmt: skip
     assert bad.status_code == 422
     r = client.post(f"/reviews/{code['review_id']}/submit", headers=rev,
-                    json={"contract": passed, "cost": {"usd": "0.30"}})  # fmt: skip
+                    json={"contract": with_checklist(passed, "code_reviewer"),
+                          "cost": {"usd": "0.30"}})  # fmt: skip
     assert r.json() == {"review_id": code["review_id"], "decision": "wait"}
     r = client.post(f"/reviews/{security['review_id']}/submit", headers=sec,
-                    json={"contract": passed})  # fmt: skip
+                    json={"contract": with_checklist(passed, "security_reviewer")})  # fmt: skip
     assert r.json()["decision"] == "approve"
     assert client.get(f"/tasks/{key}").json()["state"] == "AWAITING_MERGE"
     reviews = client.get(f"/tasks/{key}/reviews").json()

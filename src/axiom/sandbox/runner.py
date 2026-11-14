@@ -188,13 +188,13 @@ def build_review_options(request: Any) -> Any:
         setting_sources=[],
         max_turns=request.max_turns,
         max_budget_usd=float(request.budget_usd * BUDGET_HEADROOM),
-        output_format={"type": "json_schema", "schema": review_json_schema()},
+        output_format={"type": "json_schema", "schema": review_json_schema(request.role)},
         hooks={"PreToolUse": [matcher]},
         env={"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_TELEMETRY": "1"},
     )
 
 
-def to_review_outcome(result: Any, transcript: Path, raised: str | None) -> Any:
+def to_review_outcome(result: Any, transcript: Path, raised: str | None, role: str) -> Any:
     """Like to_outcome, but the success path parses a ReviewContract."""
     from axiom.contracts import parse_review
     from axiom.runtimes.review import ReviewOutcome
@@ -221,7 +221,7 @@ def to_review_outcome(result: Any, transcript: Path, raised: str | None) -> Any:
         "transcript_path": transcript,
     }
     try:
-        contract = parse_review(result.structured_output)
+        contract = parse_review(result.structured_output, role)
     except InvalidResult as e:
         return ReviewOutcome(Outcome.FAILED, error=f"invalid review contract: {e}", **common)
     return ReviewOutcome(Outcome.COMPLETED, contract=contract, **common)
@@ -248,7 +248,7 @@ async def run_review(request: Any, query_fn: QueryFn | None = None) -> Any:
             raised = f"{e.subtype}: {'; '.join(e.errors or [])}"
         except Exception as e:
             raised = f"{type(e).__name__}: {e}"
-    return to_review_outcome(final, transcript, raised)
+    return to_review_outcome(final, transcript, raised, request.role)
 
 
 def main_review(data: dict[str, Any]) -> int:

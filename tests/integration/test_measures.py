@@ -7,9 +7,10 @@ import pytest
 from axiom.domain.task_machine import TaskCommand, TaskState
 from axiom.errors import Forbidden, InvalidInput, NotFound
 from axiom.orchestrator.measures import collect, record_baseline, record_defect, set_tags
-from axiom.orchestrator.reviews import claim_review, submit_review
+from axiom.orchestrator.reviews import claim_review
 from axiom.state.db import Conn
 from tests.integration.helpers import DEV1, DEV2, HUMAN, do, new_task
+from tests.integration.review_helpers import submit_review
 from tests.integration.test_reviews import FAIL, PASS, REV, SEC
 
 C, S = TaskCommand, TaskState

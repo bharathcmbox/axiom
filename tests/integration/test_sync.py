@@ -13,12 +13,13 @@ import pytest
 
 from axiom.domain.roles import Actor, ActorKind
 from axiom.domain.task_machine import TaskCommand, TaskState
-from axiom.orchestrator.reviews import claim_review, submit_review
+from axiom.orchestrator.reviews import claim_review
 from axiom.orchestrator.tasks import get_task
 from axiom.state.db import Conn
 from axiom.sync.github import GitHubReader, GitHubReadError, parse_pr_url
 from axiom.sync.service import ci_status, sync_once
 from tests.integration.helpers import do, drive_to, events_for
+from tests.integration.review_helpers import submit_review
 
 C, S = TaskCommand, TaskState
 HEAD = "a" * 40

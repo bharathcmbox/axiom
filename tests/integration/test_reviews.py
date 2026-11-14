@@ -6,9 +6,11 @@ from typing import Any
 
 import pytest
 
+from axiom.contracts import REVIEW_CHECKLISTS
 from axiom.domain.roles import Actor, ActorKind
 from axiom.domain.task_machine import TaskCommand, TaskState
 from axiom.errors import Forbidden, InvalidInput, LeaseExpired, NotExecutionOwner
+from axiom.orchestrator import reviews
 from axiom.orchestrator.aggregator import record_ci
 from axiom.orchestrator.reviews import (
     claim_review,
@@ -16,12 +18,12 @@ from axiom.orchestrator.reviews import (
     fail_review_run,
     list_reviews,
     review_heartbeat,
-    submit_review,
 )
 from axiom.orchestrator.tasks import get_task
 from axiom.registry.agents import register_agent
 from axiom.state.db import Conn, connect
 from tests.integration.helpers import DEV1, HUMAN, do, drive_to, events_for
+from tests.integration.review_helpers import submit_review
 
 C, S = TaskCommand, TaskState
 REV = Actor(ActorKind.AGENT, "REV-01")
@@ -212,6 +214,42 @@ def test_invalid_contracts_are_rejected_without_changes(org: Conn) -> None:
         with pytest.raises(InvalidInput):
             submit_review(org, REV, code, bad)
     assert _types(org, key) == before
+
+
+def _checklist(role: str, result: str = "ok") -> dict[str, Any]:
+    return {i: {"result": result, "note": "read it"} for i in REVIEW_CHECKLISTS[role]}
+
+
+def test_a_review_must_cover_its_roles_checklist(org: Conn) -> None:
+    """Phase 5 T2: each way to skip the checklist is rejected, the review stays CLAIMED, and no
+    event is written. Then a complete one is accepted."""
+    key = _in_review(org)
+    code, _ = _claim_both(org)
+    before = _types(org, key)
+    full = _checklist("code_reviewer")
+    missing = {k: v for k, v in full.items() if k != "tests"}
+    for bad in (
+        PASS,  # no checklist at all
+        PASS | {"checklist": missing},
+        PASS | {"checklist": full | {"secrets": {"result": "ok", "note": "x"}}},  # another role's
+        PASS | {"checklist": _checklist("code_reviewer", "not_applicable")},  # examined nothing
+        PASS | {"checklist": full | {"tests": {"result": "finding", "note": "x"}}},  # no finding
+        PASS | {"checklist": full | {"tests": {"result": "ok", "note": ""}}},  # empty note
+    ):
+        with pytest.raises(InvalidInput, match="invalid review contract"):
+            reviews.submit_review(org, REV, code, bad)
+    assert _types(org, key) == before
+    status = org.execute("SELECT status FROM reviews WHERE id = %s", (code,)).fetchone()
+    assert status is not None and status["status"] == "CLAIMED"
+    assert reviews.submit_review(org, REV, code, PASS | {"checklist": full}) == "wait"
+
+
+def test_a_fail_may_mark_every_item_not_applicable(org: Conn) -> None:
+    """Only an approval needs something examined: a FAIL with findings is still a FAIL."""
+    _in_review(org)
+    code, _ = _claim_both(org)
+    contract = FAIL | {"checklist": _checklist("code_reviewer", "not_applicable")}
+    assert reviews.submit_review(org, REV, code, contract) == "request_changes"
 
 
 def test_expired_review_lease_returns_to_pending_then_errors_and_escalates(org: Conn) -> None:

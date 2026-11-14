@@ -25,7 +25,6 @@ from axiom.orchestrator.reviews import (
     fail_review_run,
     list_reviews,
     record_review_cost,
-    submit_review,
 )
 from axiom.orchestrator.tasks import get_task, set_task_budget
 from axiom.registry.projects import get_project, set_python_version
@@ -44,6 +43,7 @@ from tests.integration.helpers import (
     events_for,
     new_task,
 )
+from tests.integration.review_helpers import submit_review
 from tests.integration.test_reviews import PASS, REV, SEC, _in_review
 
 C, S = TaskCommand, TaskState

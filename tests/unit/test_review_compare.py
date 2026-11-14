@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from axiom.contracts import Finding, ReviewContract
+from axiom.contracts import REVIEW_CHECKLISTS, ChecklistEntry, Finding, ReviewContract
 from axiom.drills.review_compare import (
     Case,
     Spend,
@@ -127,6 +127,10 @@ class FakeReviewer:
         contract = ReviewContract(
             verdict="PASS",
             summary=self.summary,
+            checklist={
+                i: ChecklistEntry(result="ok", note="read it")
+                for i in REVIEW_CHECKLISTS[request.role]
+            },
             findings=[Finding(severity="low", issue="nit", required_change="tidy")],
         )
         return ReviewOutcome(Outcome.COMPLETED, contract=contract, cost_usd=Decimal(self.cost))

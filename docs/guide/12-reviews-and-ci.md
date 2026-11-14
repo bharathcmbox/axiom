@@ -284,7 +284,8 @@ against the merge-base with `main`, so the reviewer sees exactly what would be m
 
 ### Two role checklists
 
-The prompt gives each reviewer a different focus (`sandbox/review_prompt.py`):
+Each reviewer has a different focus. The items are defined once, in `REVIEW_CHECKLISTS` (`contracts.py`): the
+prompt is built from them (`sandbox/review_prompt.py`), and the review contract must report on every one:
 
 ```mermaid
 flowchart TB
@@ -300,6 +301,20 @@ flowchart TB
         s3["untrusted input → privileged action"]
         s4["unsafe exec, deserialization,<br/>new or suspicious dependencies"]
     end
+```
+
+A review returns a `checklist` with one entry per item: `ok`, `finding` (with the finding listed in `findings`),
+or `not_applicable`, each with a short note on what was looked at. The model's output schema for each role requires
+exactly that role's items, and Axiom checks again when the review is submitted. A review that skips an item, names
+another role's item, or approves with every item `not_applicable` is invalid and run again, like any other bad
+contract (`test_a_review_must_cover_its_roles_checklist`). A FAIL may mark every item `not_applicable`: only an
+approval needs something examined.
+
+```json
+{"verdict": "PASS", "summary": "…",
+ "checklist": {"correctness": {"result": "ok", "note": "read the boundary in incidents.py:157"},
+               "tests": {"result": "ok", "note": "test_boundary covers limit == used"}, "…": "…"},
+ "findings": []}
 ```
 
 Both share the same rules: report concrete findings with severity, file, line and the required

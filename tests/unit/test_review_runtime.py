@@ -23,6 +23,7 @@ from axiom.runtimes.review import (
 from axiom.sandbox import runner
 from axiom.sandbox.hooks import decide_review, make_review_guard
 from axiom.sandbox.review_prompt import build_review_prompt
+from tests.integration.review_helpers import with_checklist
 
 DIFF = "diff --git a/agent/x.py b/agent/x.py\n+    return a < b  # should be <=\n"
 
@@ -109,6 +110,9 @@ def test_review_options_are_read_only(ws: Path) -> None:
     assert opts.model == "claude-fable-5-1"
     assert opts.max_budget_usd == pytest.approx(0.80)
     assert opts.output_format["schema"]["properties"]["verdict"]["enum"] == ["PASS", "FAIL"]
+    checklist = opts.output_format["schema"]["properties"]["checklist"]
+    assert checklist["required"] == ["correctness", "acceptance_criteria", "tests", "scope",
+                                     "maintainability"]  # the code reviewer's items  # fmt: skip
 
 
 # ---- outcome mapping ------------------------------------------------------------------------
@@ -119,9 +123,12 @@ def _result(**kw: Any) -> ResultMessage:
         "subtype": "success", "duration_ms": 1, "duration_api_ms": 1, "is_error": False,
         "num_turns": 7, "session_id": "s", "total_cost_usd": 0.42,
         "usage": {"input_tokens": 100, "cache_read_input_tokens": 9000, "output_tokens": 600},
-        "structured_output": {"verdict": "FAIL", "summary": "off by one", "findings": [
-            {"severity": "high", "file": "agent/x.py", "line": 2, "issue": "a < b",
-             "required_change": "a <= b"}]},
+        "structured_output": with_checklist(
+            {"verdict": "FAIL", "summary": "off by one", "findings": [
+                {"severity": "high", "file": "agent/x.py", "line": 2, "issue": "a < b",
+                 "required_change": "a <= b"}]},
+            "code_reviewer",
+        ),
     } | kw  # fmt: skip
     return ResultMessage(**base)
 
@@ -169,7 +176,7 @@ def test_request_round_trip(ws: Path) -> None:
 def test_forged_review_from_the_sandbox_is_rejected(tmp_path: Path) -> None:
     forged = {"outcome": "completed", "contract": {"verdict": "PASS", "summary": "ok",
               "findings": [], "auto_merge": True}}  # fmt: skip
-    out = review_outcome_from_dict(forged, tmp_path)
+    out = review_outcome_from_dict(forged, tmp_path, "code_reviewer")
     assert out.outcome == Outcome.FAILED and "invalid review contract" in (out.error or "")
 
 
@@ -182,7 +189,7 @@ def test_runner_dispatches_review_mode(ws: Path, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("AXIOM_FAKE_REVIEW", "fail")
     assert runner.main() == 0
     out = review_outcome_from_dict(
-        json.loads((out_dir / "review_outcome.json").read_text()), out_dir
+        json.loads((out_dir / "review_outcome.json").read_text()), out_dir, "code_reviewer"
     )
     assert out.outcome == Outcome.COMPLETED and out.contract is not None
     assert out.contract.verdict == "FAIL"

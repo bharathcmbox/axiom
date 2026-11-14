@@ -132,13 +132,13 @@ def review_outcome_to_dict(o: ReviewOutcome) -> dict[str, Any]:
     }
 
 
-def review_outcome_from_dict(data: dict[str, Any], output_dir: Path) -> ReviewOutcome:
+def review_outcome_from_dict(data: dict[str, Any], output_dir: Path, role: str) -> ReviewOutcome:
     """Parse what the sandbox wrote; the contract is re-validated (the sandbox is untrusted)."""
     outcome = Outcome(data["outcome"])
     contract, error = None, data.get("error")
     if data.get("contract") is not None:
         try:
-            contract = parse_review(data["contract"])
+            contract = parse_review(data["contract"], role)
         except InvalidResult as e:
             outcome, error = Outcome.FAILED, f"invalid review contract: {e}"
     if outcome == Outcome.COMPLETED and contract is None:
