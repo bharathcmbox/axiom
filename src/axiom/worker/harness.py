@@ -234,15 +234,17 @@ class Worker:
             may_be_empty=ws.merged_default,  # updating the branch can be all the work there was
         )
         if not check.ok:
+            exposure = {"credential_exposure": True} if check.credential else {}
             self._try_fail(key, "verification failed: " + "; ".join(check.problems),
-                           cost | {"problems": check.problems})  # fmt: skip
+                           cost | {"problems": check.problems} | exposure)  # fmt: skip
             return
         # The agent's own words become the commit message and PR body. The diff check doesn't see
         # them, and an agent tricked into printing its environment would publish its API key.
         leaked = credentials_in(json.dumps(result))
         if leaked:
             kinds = ", ".join(leaked)
-            self._try_fail(key, f"verification failed: result text looks like a {kinds}", cost)
+            self._try_fail(key, f"verification failed: result text looks like a {kinds}",
+                           cost | {"credential_exposure": True})  # fmt: skip
             return
         if check.changes:
             sha = commit(

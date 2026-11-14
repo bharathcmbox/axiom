@@ -20,8 +20,8 @@ from axiom.state.invariants import check_invariants
 from axiom.state.migrate import migrate
 
 APP_TABLES = (
-    "events", "timers", "api_tokens", "executions", "task_dependencies", "tasks", "agents",
-    "projects",
+    "events", "notifications", "timers", "api_tokens", "executions", "task_dependencies",
+    "tasks", "agents", "projects",
 )  # fmt: skip
 
 

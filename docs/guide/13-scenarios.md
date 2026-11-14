@@ -84,6 +84,9 @@ stateDiagram-v2
 | S46 | Something has waited for you too long | one reminder; acting first clears it | tested | `test_a_follow_up_fires_once_if_you_havent_acted`, `test_a_question_gets_one_reminder_and_the_answer_clears_it` |
 | S47 | A schedule comes due when the day's budget is nearly spent | nothing requested; the refusal is recorded | tested | `test_a_schedule_the_day_cant_pay_for_is_refused_and_recorded` |
 | S48 | An agent tries to set up or cancel a timer | refused; nothing changes | tested | `test_only_a_human_sets_up_a_schedule`, `test_schedules_over_http` |
+| S49 | A run leaves something that looks like a credential | FAILED, no automatic retry; you're notified first | tested | `test_a_leaked_credential_goes_to_a_human_first`, `test_a_credential_exposure_is_delivered_first` |
+| S50 | GitHub refuses a notification | recorded, retried next pass | tested | `test_a_failed_delivery_is_recorded_and_retried` |
+| S51 | A stranger replies on the inbox issue | nothing: Axiom never reads it | tested (structurally) | `test_the_writer_cannot_read_replies` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine

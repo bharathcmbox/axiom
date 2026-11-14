@@ -31,7 +31,7 @@ from axiom.errors import (
     NotFound,
 )
 from axiom.events.log import append_event
-from axiom.orchestrator import budgets, review_store, timers
+from axiom.orchestrator import budgets, notifications, review_store, timers
 from axiom.orchestrator.dependencies import dependencies_satisfied, pending_dependents
 from axiom.orchestrator.tasks import Task, get_task
 from axiom.registry.agents import Agent, get_agent
@@ -165,6 +165,7 @@ def apply_locked(
         attempts_after=attempt_count,
         max_retries=row["max_retries"],
         budget_exhausted=budget_exhausted,
+        credential_exposure=_credential_exposure(command, payload),
     )
     if budget_exhausted:
         event_payload["budget_exhausted"] = True
@@ -173,7 +174,7 @@ def apply_locked(
            WHERE id = %s""",
         (target, attempt_count, review_rounds, task_id),
     )
-    append_event(
+    event_id = append_event(
         conn,
         actor=actor,
         type=rule.event,
@@ -188,6 +189,10 @@ def apply_locked(
 
     # Consequences, logged after the transition that caused them.
     timers.on_task_transition(conn, row, state, target)
+    reason = _notification_reason(command, target, payload)
+    if reason:
+        notifications.notify(conn, reason, project_id=row["project_id"], task_id=task_id,
+                             dedup_key=f"{reason}:event:{event_id}")  # fmt: skip
     if command == TaskCommand.SUBMIT:
         review_store.request_reviews(conn, row, payload.get("commit"))
     elif command == TaskCommand.REREVIEW:
@@ -201,6 +206,24 @@ def apply_locked(
     if command == TaskCommand.MERGE:
         for dependent_id in pending_dependents(conn, task_id):
             promote_if_ready(conn, dependent_id)
+
+
+def _credential_exposure(command: TaskCommand, payload: dict[str, Any]) -> bool:
+    """A worker's harness found something that looks like a credential: stop, tell a human."""
+    return command == TaskCommand.FAIL and payload.get("credential_exposure") is True
+
+
+def _notification_reason(
+    command: TaskCommand, target: TaskState, payload: dict[str, Any]
+) -> str | None:
+    """What a human should hear about this transition (ADR-019), if anything."""
+    if _credential_exposure(command, payload):
+        return "credential_exposure"
+    if target == TaskState.WAITING_FOR_HUMAN:
+        return "question" if command == TaskCommand.ASK_HUMAN else "escalated"
+    if target == TaskState.AWAITING_MERGE:
+        return "pr_ready"
+    return None
 
 
 def _check_can_rereview(conn: Conn, row: dict[str, Any]) -> None:

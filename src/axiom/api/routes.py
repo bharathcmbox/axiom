@@ -23,6 +23,7 @@ from axiom.api.schemas import (
     HeartbeatOut,
     LateCostIn,
     LateCostOut,
+    NotificationOut,
     PlanAssignmentOut,
     PlanCancelIn,
     PlanClaimIn,
@@ -51,7 +52,7 @@ from axiom.domain.roles import Actor, ActorKind
 from axiom.domain.task_machine import TaskCommand, TaskState
 from axiom.errors import Forbidden
 from axiom.events.log import list_events
-from axiom.orchestrator import measures, plans, reviews, timers
+from axiom.orchestrator import measures, notifications, plans, reviews, timers
 from axiom.orchestrator.assignment import claim_next
 from axiom.orchestrator.commands import apply_command, record_execution_cost
 from axiom.orchestrator.leases import heartbeat
@@ -199,6 +200,17 @@ def cancel_timer_route(timer_id: int, conn: ConnDep, actor: ActorDep) -> TimerOu
 
 def _timer(conn: Conn, timer_id: int) -> TimerOut:
     return TimerOut.model_validate(next(t for t in timers.list_timers(conn) if t["id"] == timer_id))
+
+
+@router.get("/notifications", tags=["timers"])
+def list_notifications_route(
+    conn: ConnDep, undelivered: Annotated[bool, Query()] = False
+) -> list[NotificationOut]:
+    """What Axiom has told you, or will (ADR-019), newest first, with the fixed text it posts."""
+    return [
+        NotificationOut.model_validate(n | {"text": notifications.comment_text(n)})
+        for n in notifications.list_notifications(conn, undelivered=undelivered)
+    ]
 
 
 @router.get("/plans", tags=["plans"])

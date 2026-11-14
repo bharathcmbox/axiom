@@ -22,6 +22,7 @@ from axiom.domain.timer_machine import TimerCommand, TimerState, check_timer, ne
 from axiom.errors import Forbidden, InvalidInput, NotFound
 from axiom.events.log import append_event
 from axiom.orchestrator import budgets
+from axiom.orchestrator.notifications import notify
 from axiom.state.db import Conn
 
 SCHEDULER = Actor(ActorKind.SYSTEM, "scheduler")
@@ -230,10 +231,17 @@ def _fire(conn: Conn, timer: dict[str, Any]) -> None:
     target = next_timer_state(TimerCommand.FIRE, TimerState.PENDING, ActorKind.SYSTEM,
                               recurring=recurring)  # fmt: skip
     payload: dict[str, Any] = {}
+    occurrence = timer["fired_count"] + 1
     if timer["kind"] == "schedule":
         payload = _request_plan(conn, timer)
+        if "refused" in payload:
+            notify(conn, "schedule_refused", project_id=timer["project_id"], timer_id=timer["id"],
+                   dedup_key=f"schedule_refused:timer:{timer['id']}:{occurrence}")  # fmt: skip
     else:
         payload = {"reason": timer["reason"], "waiting_in": timer["subject_state"]}
+        notify(conn, "reminder", project_id=timer["project_id"], task_id=timer["task_id"],
+               plan_id=timer["plan_id"], timer_id=timer["id"],
+               dedup_key=f"reminder:timer:{timer['id']}")  # fmt: skip
     row = conn.execute(
         """UPDATE timers SET
              status = %(target)s,

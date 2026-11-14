@@ -62,7 +62,7 @@ def _plan_event(
     target: PlanState,
     payload: dict[str, Any] | None = None,
 ) -> None:
-    append_event(
+    event_id = append_event(
         conn,
         actor=actor,
         type=event,
@@ -71,9 +71,13 @@ def _plan_event(
         agent_id=plan["planner_agent_id"],
         payload={"from": plan["status"], "to": target, "command": command} | (payload or {}),
     )
+    from axiom.orchestrator.notifications import notify
     from axiom.orchestrator.timers import on_plan_transition
 
     on_plan_transition(conn, plan, PlanState(plan["status"]), target)
+    if target == PlanState.PROPOSED:
+        notify(conn, "plan_ready", project_id=plan["project_id"], plan_id=plan["id"],
+               dedup_key=f"plan_ready:event:{event_id}")  # fmt: skip
 
 
 def _lock(conn: Conn, plan_id: int) -> dict[str, Any]:

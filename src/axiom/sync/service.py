@@ -34,6 +34,7 @@ from axiom.orchestrator.aggregator import record_ci
 from axiom.orchestrator.commands import apply_locked, lock_task
 from axiom.state.db import Conn, connect
 from axiom.sync.github import GitHubReader, GitHubReadError, parse_pr_url
+from axiom.sync.inbox import GitHubInboxWriter, deliver
 
 log = logging.getLogger("axiom.sync")
 SYNC = Actor(ActorKind.SYSTEM, "github-sync")
@@ -212,11 +213,17 @@ def sync_once(conn: Conn, reader: GitHubReader) -> dict[str, str]:
 
 def main() -> int:  # `python -m axiom.sync.service`
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    token = os.environ.get("AXIOM_GITHUB_TOKEN")
+    # ADR-019: the sync has its own token (PRs and Actions read, Issues write). Without it, it reads
+    # with the workers' token and delivers nothing: notifications stay on the dashboard.
+    sync_token = os.environ.get("AXIOM_SYNC_GITHUB_TOKEN")
+    token = sync_token or os.environ.get("AXIOM_GITHUB_TOKEN")
     if not token:
-        raise SystemExit("AXIOM_GITHUB_TOKEN is required")
+        raise SystemExit("AXIOM_SYNC_GITHUB_TOKEN (or AXIOM_GITHUB_TOKEN) is required")
     interval = float(os.environ.get("AXIOM_SYNC_INTERVAL_SECONDS", "30"))
     reader = GitHubReader(token=token)
+    writer = GitHubInboxWriter(token=sync_token) if sync_token else None
+    if writer is None:
+        log.warning("no AXIOM_SYNC_GITHUB_TOKEN: notifications are shown on the dashboard only")
     log.info("github sync started (every %.0fs)", interval)
     while True:
         try:
@@ -224,6 +231,9 @@ def main() -> int:  # `python -m axiom.sync.service`
                 for key, result in sync_once(conn, reader).items():
                     if result != "nothing to do":
                         log.info("%s: %s", key, result)
+                if writer is not None:
+                    for nid, result in deliver(conn, writer).items():
+                        log.info("notification %s: %s", nid, result)
         except Exception:
             log.exception("sync pass failed")
         time.sleep(interval)

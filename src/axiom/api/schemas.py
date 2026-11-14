@@ -82,6 +82,21 @@ class TimerOut(_Out):
     ended_at: datetime | None
 
 
+class NotificationOut(_Out):
+    id: int
+    project_key: str
+    reason: str
+    task_key: str | None = None
+    plan_id: int | None
+    timer_id: int | None
+    push: bool
+    text: str
+    created_at: datetime
+    delivered_at: datetime | None
+    attempts: int
+    delivery_error: str | None
+
+
 class PlanIn(BaseModel):
     specification: str = Field(min_length=1, max_length=20000)
     budget_usd: Decimal = Field(gt=0, description="The most the plan's tasks may total")

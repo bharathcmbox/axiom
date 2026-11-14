@@ -27,7 +27,7 @@ sleeps again. Axiom already had most of it:
 | Memory that outlives a run | The event log: each run reads its history (`feedback_from_events`) |
 | Credentials added by a proxy, never in the agent | ADR-008, ADR-015, ADR-017 |
 | A "deferred tool call": stop, ask the user, resume on the answer | `ask_human` → WAITING_FOR_HUMAN → `answer` → a fresh run |
-| An outbox: send, stay quiet, or ask | PRs and the dashboard; notifications are Phase 5 T5 (ADR-019) |
+| An outbox: send, stay quiet, or ask | **New:** the `notifications` table, delivered to an inbox issue (ADR-019) |
 
 ## Timers
 
@@ -47,7 +47,7 @@ stateDiagram-v2
 |---|---|---|
 | Created by | you, `POST /projects/{key}/schedules` | Axiom, in the transition that starts a wait |
 | When it fires | every N hours (1 hour to 90 days) | once, after a day (two for a PR awaiting merge) |
-| What firing does | requests a plan, as `system:scheduler` | records a reminder (delivered by T5's notifications) |
+| What firing does | requests a plan, as `system:scheduler` | sends one reminder |
 | Ends | when you cancel it | when the wait ends (cancelled in the same transaction), or after firing |
 
 **Agents can't create, change or cancel timers.** The timer machine has no agent actor, the API refuses one,
@@ -118,8 +118,8 @@ There are three places where you come in (HITL), and Axiom stops at each one unt
 | HITL 2 | An agent needs an answer, or Axiom escalates (reviewers disagree, budget spent, a potential credential exposure) | answer, rereview, retry or cancel | the task waits; a reminder after a day |
 | HITL 3 | A PR has passed review and CI | merge it on GitHub, or close it | the PR waits; a reminder after two days |
 
-The diagrams show notifications as they'll work after T5 (ADR-019): a comment with fixed text on an inbox issue
-in the project repository, which GitHub emails you. Until then the reminder is an event on the dashboard.
+Notifications ([below](#notifications-an-outbox-and-an-inbox-issue)) are comments with fixed text on an inbox
+issue in the project's repository, which GitHub emails you, and a list on the dashboard.
 
 **The whole journey.** A request comes from you or from a schedule you set up, and ends with you merging.
 
@@ -146,7 +146,7 @@ sequenceDiagram
     PL->>AX: submit PlanContract
     AX->>AX: plain-code checks (no cycles, safe paths, budget)
     AX->>AX: PROPOSED + follow-up "plan_proposed" (same transaction)
-    SY->>GH: inbox comment, fixed text (T5)
+    SY->>GH: inbox comment, fixed text
     GH-->>You: email
     rect rgb(255, 236, 200)
         Note over You,AX: HITL 1: you read the plan on the dashboard
@@ -162,7 +162,7 @@ sequenceDiagram
     GH-->>SY: CI result
     SY->>AX: CI recorded
     AX->>AX: aggregator: approve, AWAITING_MERGE + follow-up "awaiting_merge"
-    SY->>GH: inbox comment (T5)
+    SY->>GH: inbox comment
     GH-->>You: email
     rect rgb(255, 236, 200)
         Note over You,GH: HITL 3: you read the PR on GitHub
@@ -191,7 +191,7 @@ sequenceDiagram
     W->>AX: ask_human (question, cost)
     AX->>AX: WAITING_FOR_HUMAN + follow-up, 1 day (same transaction)
     Note over W,SB: the run is over: sandbox removed, lease released, worker free
-    SY->>GH: inbox comment "SOC-012 has a question", never the question (T5)
+    SY->>GH: inbox comment "SOC-012 has a question", never the question
     GH-->>You: email
     rect rgb(255, 236, 200)
         Note over You,AX: HITL 2: you read the question on the dashboard
@@ -220,13 +220,13 @@ sequenceDiagram
 
     alt the harness finds a credential in the result or diff
         W->>AX: fail (the kind of credential, never the value)
-        AX->>AX: work stops, goes to you first (T5: always pushed)
+        AX->>AX: FAILED, no automatic retry + notification, delivered first
     else reviewers disagree, or the task's budget is spent
         AX->>AX: aggregator: escalate, WAITING_FOR_HUMAN + follow-up
     else a schedule the day can't pay for
         Sch->>AX: nothing requested, refusal recorded (never a silent skip)
     end
-    SY->>GH: inbox comment, reason and key only (T5)
+    SY->>GH: inbox comment, reason and key only
     GH-->>You: email
     Note over Sch,AX: a day later, if nothing changed
     Sch->>AX: follow-up due: one reminder, then FIRED
@@ -254,6 +254,63 @@ sequenceDiagram
     R->>DB: startup sweep: the Monday schedule fires once (row lock + state check)
     R->>DB: next due is next Monday, missed ones aren't replayed
 ```
+
+## Notifications: an outbox and an inbox issue
+
+A notification is a row in `notifications`, written **in the same transaction as its cause** (ADR-019), so
+none is lost and none exists without its event. The sync service, which already polls GitHub, delivers them.
+
+| Cause | Reason | Proof |
+|---|---|---|
+| An agent asks a question | `question` | `test_a_question_notifies_you_once` |
+| Axiom escalates a task to you | `escalated` | `test_an_escalation_notifies_you` |
+| A PR passes review and CI | `pr_ready` | `test_a_pr_ready_to_merge_notifies_you` |
+| A plan is proposed | `plan_ready` | `test_a_proposed_plan_notifies_you` |
+| A follow-up fires | `reminder` | `test_a_reminder_is_sent_once` |
+| A schedule the day can't pay for | `schedule_refused` | `test_a_refused_schedule_notifies_you` |
+| The harness finds something that looks like a credential | `credential_exposure` | `test_a_leaked_credential_goes_to_a_human_first` |
+
+A refused command notifies nobody (`test_a_refused_command_notifies_nobody`), and the same cause can't notify
+twice: each row has a unique key built from its event or timer.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant AX as apply_command (one transaction)
+    participant DB as Postgres
+    participant SY as Sync (every 30s)
+    participant GH as GitHub
+    actor You
+    AX->>DB: task UPDATE + event + notification row
+    SY->>DB: undelivered, a credential exposure first, then oldest
+    SY->>GH: first time: open the "Axiom inbox" issue, remember its number
+    SY->>GH: comment: fixed sentence + task key + time
+    GH-->>You: email (watching the repo)
+    SY->>DB: delivered (or the error, retried next pass)
+```
+
+**What a comment may say.** The repository may be public, so a comment is built only from a fixed sentence per
+reason, a task key that must match `^[A-Z][A-Z0-9]*-[0-9]+$` (or "plan N", "schedule N"), and the time. Never the
+agent's question, a plan, an error or anything else a model wrote: that could carry injected text or a leaked
+value (`test_nothing_a_model_wrote_reaches_a_comment`, `test_a_subject_that_isnt_a_task_key_is_refused`). The
+details are on the dashboard, behind your login.
+
+**Replies are never commands.** Anyone can comment on a public issue, so the writer has no way to read anything
+(`test_the_writer_cannot_read_replies`). You answer and approve through the API, and merge on GitHub, as before.
+
+**Its own token.** The sync uses `AXIOM_SYNC_GITHUB_TOKEN`: pull requests and Actions read, Issues read and
+write, on the project's repository only. The workers' token doesn't change, so a compromised worker still
+can't write issues. Without the sync token, notifications stay on the dashboard.
+
+**A possible credential exposure stops work.** The harness marks the failure (`credential_exposure`), and the
+task goes to FAILED, not back to READY, whatever retries are left: only you can retry it
+(`test_a_possible_credential_exposure_is_never_retried_automatically`). Its notification is delivered before
+anything else (`test_a_credential_exposure_is_delivered_first`). A failed delivery is recorded and retried
+(`test_a_failed_delivery_is_recorded_and_retried`).
+
+**Getting the email.** GitHub doesn't email you about your own activity by default. If the sync token is your
+own, turn on *Settings → Notifications → Email notification preferences → Include your own updates*, and keep
+watching the repository. A token from a separate machine account avoids this.
 
 ## Setting up a schedule
 

@@ -127,7 +127,11 @@ def _retry_counters(conn: Conn) -> list[str]:
     out = []
     rows = conn.execute(
         """SELECT t.key, t.state, t.attempt_count, t.max_retries, t.budget_usd,
-                  coalesce(sum(e.cost_usd), 0) AS spent
+                  coalesce(sum(e.cost_usd), 0) AS spent,
+                  -- the failure that stopped it: a possible credential exposure isn't retried
+                  coalesce((SELECT (ev.payload->>'credential_exposure')::boolean FROM events ev
+                            WHERE ev.task_id = t.id AND ev.to_state = 'FAILED'
+                            ORDER BY ev.id DESC LIMIT 1), false) AS exposure
            FROM tasks t LEFT JOIN executions e ON e.task_id = t.id
            GROUP BY t.id"""
     )
@@ -136,7 +140,8 @@ def _retry_counters(conn: Conn) -> list[str]:
             out.append(f"{r['key']}: attempt_count {r['attempt_count']} > max_retries + 1")
         retries_left = r["attempt_count"] <= r["max_retries"]
         budget_left = r["budget_usd"] is None or r["spent"] < r["budget_usd"]
-        if r["state"] == TaskState.FAILED and retries_left and budget_left:
+        stopped = r["exposure"]
+        if r["state"] == TaskState.FAILED and retries_left and budget_left and not stopped:
             out.append(f"{r['key']}: FAILED with retries and budget left")
     return out
 

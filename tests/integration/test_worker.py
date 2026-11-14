@@ -103,7 +103,9 @@ def test_bad_runs_fail_without_publishing(
     opener = FakePrOpener()
     _worker(api_url, tmp_path, FakeRuntime(scenario=scenario, edits=GOOD_EDIT), opener).run_once()
     task = get_task(api_tokens, key)
-    assert (task.state, task.attempt_count) == (TaskState.READY, 1)
+    stops = scenario == Scenario.LEAK_SECRET  # a possible exposure isn't retried automatically
+    assert (task.state, task.attempt_count) == (
+        TaskState.FAILED if stops else TaskState.READY, 1)  # fmt: skip
     assert error_fragment in events_for(api_tokens, key)[-1]["payload"]["error"]
     assert _remote_branches(remote) == ["main"] and opener.calls == []
 
@@ -212,7 +214,7 @@ def test_a_credential_in_the_agents_summary_is_never_published(
     opener = FakePrOpener()
     worker = _worker(api_url, tmp_path, TrickedAgent(edits=GOOD_EDIT), opener)
     assert worker.run_once()
-    assert get_task(api_tokens, key).state == TaskState.READY
+    assert get_task(api_tokens, key).state == TaskState.FAILED  # a possible exposure stops work
     assert _remote_branches(remote) == ["main"] and opener.calls == []
     error = api_tokens.execute("SELECT error FROM executions ORDER BY id DESC LIMIT 1").fetchone()
     assert error is not None and "looks like a Anthropic API key" in error["error"]
@@ -421,3 +423,22 @@ def test_rework_starts_fresh_if_the_branch_was_deleted(
     _worker(api_url, tmp_path, FakeRuntime(edits=GOOD_EDIT), opener, agent="DEV-02").run_once()
     task = get_task(api_tokens, key)
     assert task.state == TaskState.IN_REVIEW and task.branch == "axiom/SOC-001-e2"  # new branch
+
+
+@pytest.mark.parametrize("leak", ["diff", "summary"])
+def test_a_leaked_credential_goes_to_a_human_first(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path, leak: str
+) -> None:
+    """Phase 5 T5: the harness flags a possible exposure, and the failure notifies you, never with
+    the value."""
+    _project(api_tokens, remote)
+    key = _task(api_tokens)
+    runtime = (FakeRuntime(scenario=Scenario.LEAK_SECRET, edits=GOOD_EDIT) if leak == "diff"
+               else TrickedAgent(edits=GOOD_EDIT))  # fmt: skip
+    _worker(api_url, tmp_path, runtime, FakePrOpener()).run_once()
+    rows = api_tokens.execute("SELECT reason, task_id FROM notifications").fetchall()
+    assert [r["reason"] for r in rows] == ["credential_exposure"]
+    assert "sk-ant" not in json.dumps(
+        api_tokens.execute("SELECT * FROM notifications").fetchall(), default=str
+    )
+    assert get_task(api_tokens, key).state == TaskState.FAILED  # stopped: only you can retry

@@ -132,6 +132,7 @@ it `chmod 600`, and never paste its values into a chat, a task or an issue.
 | Secret | Where from | Scope |
 |---|---|---|
 | `AXIOM_GITHUB_TOKEN` | GitHub, fine-grained token | One repository per token if you can: Contents and Pull requests read/write, Actions read. Nothing else |
+| `AXIOM_SYNC_GITHUB_TOKEN` | GitHub, fine-grained token | The project's repository only: Pull requests read, Actions read, Issues read and write. Only `github-sync` sees it; it posts notifications to the inbox issue |
 | `ANTHROPIC_API_KEY` | Anthropic Console | A dedicated key with a spend limit. Only `model-proxy` sees it |
 | `AXIOM_MODEL_PROXY_ADMIN_TOKEN`, `AXIOM_LAUNCHER_TOKEN` | `make worker-tokens` | Let workers open model runs and ask for sandboxes |
 | `AXIOM_DEV01_TOKEN` … `AXIOM_QA01_TOKEN` | `make worker-tokens` | Each agent's API identity |
@@ -287,6 +288,7 @@ doesn't see them. They have their own caps, and are announced before they run.
 
 | Check | When |
 |---|---|
+| Probe the sync token | After creating or editing it: an empty `POST` to the repository's issues must return 422 (allowed), and to its contents, pulls, or another repository's issues 403 |
 | `make check-boundaries` | After changing compose, networks or images: runs inside real worker and sync containers and checks what a compromised worker could reach |
 | `make test-docker` | After changing the sandbox: isolation tests against real containers |
 | `scripts/check_secrets.py` | Before every commit (`make hooks` installs it) |
@@ -321,6 +323,8 @@ human merge stand between a branch and `main`.
 | Sandboxes fail on paths "outside the workspaces root" | The launcher started without `AXIOM_WORKSPACES_DIR`; start services through `make`, which exports it |
 | The API port doesn't answer after a restart | `docker compose up -d --force-recreate --no-deps api` |
 | Tests fail to connect | `make db` first: tests use a real Postgres database, `axiom_test` |
+| No email for notifications | GitHub skips your own activity: if the sync token is yours, turn on *Include your own updates* in your GitHub notification settings; check you watch the repository. Undelivered ones show on the dashboard with their error |
+| Sandboxes fail with "permission denied" on the Docker socket | The launcher started without the socket's group: start it with `make workers`, which sets `DOCKER_GID` |
 
 ## 11. Upgrading and backups
 

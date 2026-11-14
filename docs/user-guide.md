@@ -135,6 +135,10 @@ Axiom notices within 30 seconds. It never merges, and no agent can approve.
 
 ## When something comes to you
 
+Axiom tells you when it needs you: a comment on the **Axiom inbox** issue in the project's repository (GitHub
+emails you about it), and a list under *Notifications* on the dashboard. A comment says only what happened and to
+which task; read the details on the dashboard. Replies on the issue are ignored: act through the API or on the PR.
+
 A task that can't go on by itself stops in WAITING_FOR_HUMAN or FAILED. Its timeline says why. Most cases are one
 command:
 
@@ -145,6 +149,7 @@ command:
 | Reviewers still fail it after 3 rounds | Read their findings. Merge it yourself if you disagree, rereview if a review looks wrong, or cancel and write a clearer task |
 | The task's budget is spent | Raise it, then `rereview` if it stopped in review, or `retry` if it FAILED; or cancel |
 | FAILED: its attempts ran out (a crash, a refused change) | Read the errors; fix the cause or the task; `retry` |
+| FAILED: a possible credential exposure | Don't retry yet. Your administrator checks what was exposed and rotates it ([admin guide](admin-guide.md#9-security-operations)); then `retry` or cancel |
 | The PR conflicts with `main` | Nothing: Axiom sends it back and the agent resolves the conflict on the same PR |
 
 ```bash

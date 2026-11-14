@@ -318,7 +318,7 @@ Every task: lint, the full suite, one commit, its guide section and diagrams in 
 | T3 Review check **LIVE** | The new reviewers on the SOC-002 planted bug and two recent PRs | Bug caught; cost recorded | the live run, written up: [record](../runs/2026-11-14-phase-5-review-check.md) ($1.81) |
 | **Part B** | | | |
 | T4 Timers | Migration, `timer_machine.py`, scheduler in the API process, follow-ups for idle PRs and waiting questions | Fires once under concurrency and after downtime | generated pairs; two schedulers racing; restart after a missed interval; budget refusal. Done: [chapter 17](../guide/17-continuous-operation.md) |
-| T5 Notifications | Migration, outbox, dashboard inbox, GitHub inbox-issue delivery by the sync | Deduplicated; credential exposure always pushed | dedup, delivery retry, sync tests with a fake GitHub |
+| T5 Notifications | Migration, outbox, dashboard inbox, GitHub inbox-issue delivery by the sync | Deduplicated; credential exposure always pushed | dedup, delivery retry, sync tests with a fake GitHub. Done; the sync got its own token, and a possible credential exposure now stops work (FAILED) |
 | T5b Unattended drill **LIVE** | A weekly schedule on tiny-agenticsoc, the API restarted mid-week | Fires on time, once; you are notified at each step | the live run |
 | **Part C** | | | |
 | T6 Managed Agents spike **LIVE** | Adapter for reviewers; go or no-go ADR-020 | Rules in 4.4 kept, or the gap recorded | adapter contract tests with a fake; the live comparison |

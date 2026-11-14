@@ -1,4 +1,6 @@
-"""Read-only GitHub access for the sync service. It can look; it cannot change anything."""
+"""Read-only GitHub access for the sync service. It can look; it cannot change anything.
+
+The sync's one write, comments on the inbox issue, is `sync/inbox.py` (ADR-019)."""
 
 import json
 import re

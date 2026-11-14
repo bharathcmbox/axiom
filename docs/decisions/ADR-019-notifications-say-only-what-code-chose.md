@@ -21,12 +21,18 @@ there can be read by anyone, and anyone can reply.
   instructions or a leaked value, and the repository is public.
 - **Replies are never commands.** Axiom never reads comments on the inbox issue. Humans answer, approve, retry
   and cancel through the API with their own token, and merge on GitHub, as before.
-- **Token.** The sync token gets Issues: write, on the project repository only. The worker token doesn't change.
+- **Token.** The sync gets its own token, `AXIOM_SYNC_GITHUB_TOKEN`: pull requests and Actions read, Issues read
+  and write, on the project repository only. The workers' token doesn't change, so workers still can't write
+  issues.
+- **A possible credential exposure stops work.** A failure the harness marks `credential_exposure` sends the task
+  to FAILED whatever retries are left (CLAUDE.md: it goes to the human), and its notification is delivered first.
 
 ## Consequences
 - The human hears about everything that needs them, without a new secret or a new host.
 - ADR-010's "the sync only reads GitHub" becomes "the sync reads GitHub and writes comments on the inbox issue".
   It still has no merge code path, and nothing it writes can change Axiom's state.
 - A stolen sync token could now also write issue comments in that repository: spam, not a way to change state.
+- GitHub doesn't email people about their own activity. With a token from the human's own account, they must turn
+  on "Include your own updates"; a machine account's token avoids that.
 - If a team joins or a repository is private, email or Slack can be added as another delivery, with its own
   ADR for the new egress.

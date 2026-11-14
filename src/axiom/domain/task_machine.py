@@ -209,16 +209,19 @@ def next_state(
     attempts_after: int = 0,
     max_retries: int = 0,
     budget_exhausted: bool = False,
+    credential_exposure: bool = False,
 ) -> TaskState:
     """Target state for a legal command.
 
     For retry-dependent commands (`fail`, `time_out`) pass the attempt count *after* this
     failure; the task goes back to READY while attempts_after <= max_retries and its budget is
-    not exhausted, else FAILED.
+    not exhausted, else FAILED. A possible credential exposure is never retried automatically:
+    work stops, and only a human can retry it.
     """
     rule = check(command, state, actor_kind)
     if rule.retry_dependent:
         retry_target, exhausted_target = rule.targets
         can_retry = attempts_after <= max_retries and not budget_exhausted
+        can_retry = can_retry and not credential_exposure
         return retry_target if can_retry else exhausted_target
     return rule.targets[0]

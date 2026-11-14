@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from axiom.config import get_settings
 from axiom.domain.roles import Actor
 from axiom.events.log import list_events
-from axiom.orchestrator import budgets, measures, plans, reviews
+from axiom.orchestrator import budgets, measures, notifications, plans, reviews
 from axiom.orchestrator.tasks import get_task, list_tasks
 from axiom.registry.tokens import authenticate
 from axiom.report import NEEDS_YOU, PLAN_NEEDS_YOU, fmt_duration, fmt_pct, fmt_usd
@@ -115,6 +115,14 @@ def login(conn: ConnDep, token: Annotated[str, Form()]) -> RedirectResponse | HT
     return redirect
 
 
+def _delivery(n: dict[str, Any]) -> str:
+    if not n["push"]:
+        return "dashboard only"
+    if n["delivered_at"]:
+        return "to the inbox issue"
+    return e(f"not yet ({n['delivery_error']})" if n["delivery_error"] else "waiting")
+
+
 @ui_router.get("")
 def overview(conn: ConnDep, user: UserDep, include_demo: bool = False) -> HTMLResponse:
     per_task, s, baselines = measures.collect(conn, include_demo=include_demo)
@@ -160,9 +168,22 @@ def overview(conn: ConnDep, user: UserDep, include_demo: bool = False) -> HTMLRe
         if include_demo
         else "<a href='/ui?include_demo=true'>Show demo tasks</a>"
     )
+    recent = notifications.list_notifications(conn, limit=10)
+    inbox_rows = "".join(
+        f"<tr><td>{e(n['created_at'].strftime('%Y-%m-%d %H:%M'))}</td>"
+        f"<td>{e(notifications.comment_text(n).split(chr(10))[0])}</td>"
+        f"<td>{_delivery(n)}</td></tr>"
+        for n in recent
+    )
+    inbox_html = (
+        "<h2>Notifications</h2><table><tr><th>When (UTC)</th><th>What</th><th>Sent</th></tr>"
+        f"{inbox_rows}</table>"
+        if recent
+        else ""
+    )
     return page(
         "Axiom",
-        f"{needs_html}<div class='cards'>{cards_html}</div>"
+        f"{needs_html}{inbox_html}<div class='cards'>{cards_html}</div>"
         "<p class='muted'>*Elapsed time: an upper bound on attention, not a measure of it.</p>"
         f"<h2>Tasks</h2><p>{toggle}</p><table><tr><th>Task</th><th>State</th><th>Title</th>"
         f"<th>Cost</th><th>Rework</th><th>PR</th></tr>{rows}</table>"

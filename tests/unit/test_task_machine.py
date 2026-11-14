@@ -193,3 +193,12 @@ def test_exhausted_budget_fails_even_with_retries_left(command: TaskCommand) -> 
         budget_exhausted=True,
     )  # fmt: skip
     assert got == TaskState.FAILED
+
+
+def test_a_possible_credential_exposure_is_never_retried_automatically() -> None:
+    """Phase 5 T5 (CLAUDE.md: any potential credential exposure stops work and goes to the human)."""
+    actor = _permitted_actor(TaskCommand.FAIL)
+    kw = {"attempts_after": 1, "max_retries": 2}
+    assert next_state(TaskCommand.FAIL, TaskState.IN_PROGRESS, actor, **kw) == TaskState.READY
+    got = next_state(TaskCommand.FAIL, TaskState.IN_PROGRESS, actor, credential_exposure=True, **kw)
+    assert got == TaskState.FAILED

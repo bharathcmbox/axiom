@@ -42,6 +42,8 @@ class Change:
 class ChangeCheck:
     changes: list[Change]
     problems: list[str] = field(default_factory=list)
+    # A line that looks like a credential was added: work stops and goes to a human (ADR-019).
+    credential: bool = False
 
     @property
     def ok(self) -> bool:
@@ -171,6 +173,7 @@ def check_changes(
         for name, regex in SECRET_RES.items():
             if regex.search(line):
                 check.problems.append(f"{path}: added line looks like a {name}")
+                check.credential = True
     check.problems = list(dict.fromkeys(check.problems))
     return check
 

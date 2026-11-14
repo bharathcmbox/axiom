@@ -182,8 +182,8 @@ services:
       AXIOM_AGENT_TOKEN: ${AXIOM_EM01_TOKEN:-}
       AXIOM_FAKE_PLAN: ${AXIOM_FAKE_PLAN:-}
 
-  # GitHub sync (ADR-010): reads PR state, human change requests and CI; issues task commands.
-  # Read-only towards GitHub. Control-plane code with its own DB connection (like the reaper).
+  # GitHub sync (ADR-010, ADR-019): reads PR state, human change requests and CI; issues task
+  # commands. Its only write to GitHub: fixed-text comments on the project's inbox issue. Control-plane code with its own DB connection (like the reaper).
   github-sync:
     build: .
     profiles: [workers]
@@ -191,6 +191,7 @@ services:
     environment:
       AXIOM_DATABASE_URL: postgresql://axiom:axiom@db:5432/axiom
       AXIOM_GITHUB_TOKEN: ${AXIOM_GITHUB_TOKEN:-}
+      AXIOM_SYNC_GITHUB_TOKEN: ${AXIOM_SYNC_GITHUB_TOKEN:-}
       HTTPS_PROXY: http://worker-egress-proxy:3128
       NO_PROXY: db,api
       AXIOM_SYNC_INTERVAL_SECONDS: ${AXIOM_SYNC_INTERVAL_SECONDS:-30}

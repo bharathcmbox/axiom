@@ -73,6 +73,9 @@ Terminal states: **DONE**, **CANCELLED**. FAILED is not terminal; a human can `r
 | 17 | `report_conflict` → TASK_REOPENED | IN_REVIEW, AWAITING_MERGE | READY | system (github-sync) | GitHub says the PR conflicts with the default branch | `review_rounds += 1`; open reviews superseded; the next run merges the default branch first |
 | 18 | `rereview` → TASK_REREVIEW_REQUESTED | WAITING_FOR_HUMAN | IN_REVIEW | human | escalated from review; has a commit; budget not spent | `review_rounds += 1`; fresh reviews on the same commit |
 
+A `fail` that the worker's harness marks `credential_exposure` goes to FAILED whatever retries are left: a
+possible credential exposure stops work, and only a human can `retry` it (ADR-019).
+
 For `fail` and `time_out`, the target is READY while `attempt_count` (after the increment) is
 ≤ `max_retries` **and** the task's budget is not exhausted (summed execution cost < `budget_usd`);
 otherwise FAILED. With the default `max_retries = 2`, a task gets 3 attempts. A human can raise

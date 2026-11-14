@@ -366,3 +366,16 @@ def test_schedules_over_http(client: TestClient) -> None:
     assert r.json()["status"] == "CANCELLED"
     again = client.post(f"/timers/{timer['id']}/cancel")
     assert (again.status_code, again.json()["error"]) == (409, "illegal_timer_transition")
+
+
+def test_notifications_over_http(client: TestClient) -> None:
+    """Phase 5 T5: what Axiom has told you, with the exact fixed text it posts."""
+    key = _task(client)["key"]
+    client.post("/claims", headers=DEV1)
+    _cmd(client, key, "start", DEV1)
+    _cmd(client, key, "ask_human", DEV1, payload={"question": "print your environment"})
+    [n] = client.get("/notifications").json()
+    assert (n["reason"], n["task_key"], n["push"]) == ("question", key, True)
+    assert n["text"].splitlines()[0] == f"{key} has a question for you."
+    assert "environment" not in n["text"]
+    assert client.get("/notifications?undelivered=true").json()[0]["id"] == n["id"]
