@@ -153,7 +153,7 @@ services:
       AXIOM_AGENT_KEY: QA-01
       AXIOM_AGENT_TOKEN: ${AXIOM_QA01_TOKEN:-}
 
-  # Reviewers (ADR-009): read-only review runs on Claude Fable 5.1, one service per identity.
+  # Reviewers (ADR-009): read-only review runs, on models other than the developers', one service per identity.
   reviewer-rev-01:
     <<: *worker
     environment:

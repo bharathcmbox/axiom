@@ -60,7 +60,7 @@ flowchart TB
     end
     subgraph sandbox["Sandboxes: one per run, untrusted"]
         s1["Claude Opus 5.5<br/>edits files"]
-        s2["Claude Fable 5.1<br/>read-only"]
+        s2["Claude Fable 5.2, Sonnet 5.5<br/>read-only"]
     end
     gh["GitHub: branches, PRs, CI"]
     anth["Anthropic API"]

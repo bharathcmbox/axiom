@@ -10,8 +10,8 @@ hand. Phase 3 puts an independent quality organization in that gap:
 ```mermaid
 flowchart TB
     dev["developer agent<br/>Claude Opus 5.5<br/>edits files"] -->|submit| IR[IN_REVIEW]
-    IR --> r1["code review<br/>REV-01, Claude Fable 5.1<br/>read-only"]
-    IR --> r2["security review<br/>SEC-01, Claude Fable 5.1<br/>read-only"]
+    IR --> r1["code review<br/>REV-01, Claude Fable 5.2<br/>read-only"]
+    IR --> r2["security review<br/>SEC-01, Claude Sonnet 5.5<br/>read-only"]
     IR --> ci["CI on GitHub Actions<br/>(tests)"]
     r1 --> agg{"aggregator<br/>(plain code)"}
     r2 --> agg
@@ -255,7 +255,7 @@ reads `request.json`, sees `"mode": "review"`, and builds a different agent:
 
 | | Developer run | Review run |
 |---|---|---|
-| Model | Claude Opus 5.5 | **Claude Fable 5.1** (a different model) |
+| Model | Claude Opus 5.5 | **Fable 5.2 (code) or Sonnet 5.5 (security)**: different models |
 | Tools | Read, Glob, Grep, Edit, Write, Bash | **Read, Glob, Grep only** |
 | Hook | edits only inside `allowed_paths` | **every edit denied** |
 | Input | task contract + CLAUDE.md | task contract + **the diff** + **the developer's report** + CLAUDE.md + previous findings |
@@ -268,7 +268,7 @@ flowchart LR
         claim["claim review<br/>(head_sha abc123)"] --> ws["review workspace:<br/>clone task branch,<br/>checkout abc123 (detached),<br/>diff = merge-base(main)..abc123"]
     end
     subgraph sbx["sandbox, review mode"]
-        prompt["prompt:<br/>role checklist<br/>+ spec + criteria<br/>+ &lt;developer_report&gt;<br/>+ &lt;diff&gt; + CLAUDE.md"] --> agent["Fable 5.1<br/>Read · Glob · Grep"]
+        prompt["prompt:<br/>role checklist<br/>+ spec + criteria<br/>+ &lt;developer_report&gt;<br/>+ &lt;diff&gt; + CLAUDE.md"] --> agent["Fable 5.2 or Sonnet 5.5<br/>Read · Glob · Grep"]
         agent --> contract["review contract<br/>verdict + findings"]
     end
     ws --> prompt
@@ -482,8 +482,8 @@ flowchart TB
         db[(postgres)]
         d1["worker-dev-01<br/>developer (Opus 5.5)"]
         d2["worker-dev-02<br/>developer (Opus 5.5)"]
-        r1["reviewer-rev-01<br/>code review (Fable 5.1)"]
-        r2["reviewer-sec-01<br/>security review (Fable 5.1)"]
+        r1["reviewer-rev-01<br/>code review (Fable 5.2)"]
+        r2["reviewer-sec-01<br/>security review (Sonnet 5.5)"]
         sync["github-sync<br/>reads PRs, reviews, comments, CI"]
         proxy["egress-proxy"]
     end
@@ -507,7 +507,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     c["POST /reviews/claim<br/>(lease 300s, heartbeat)"] --> w["review workspace:<br/>task branch at head_sha,<br/>diff vs main"]
-    w --> run["sandbox, review mode<br/>model from registry<br/>(REV-01 / SEC-01: Fable 5.1)"]
+    w --> run["sandbox, review mode<br/>model from registry<br/>(REV-01: Fable 5.2,<br/>SEC-01: Sonnet 5.5)"]
     run --> chk{"workspace still clean?<br/>(git status)"}
     chk -->|no| f1["fail run:<br/>'reviewer modified the workspace'"]
     chk -->|yes| ok{"valid review<br/>contract?"}
@@ -519,8 +519,10 @@ The "workspace still clean" check is the reviewer's version of the developer's d
 the hook should already stop every edit, but if it ever didn't, the review doesn't count.
 
 Agent models can now be changed without re-registering: `POST /agents/{key}/model` (humans
-only, logged as AGENT_MODEL_CHANGED). `config/agents.toml` registers the reviewers on
-`claude-fable-5-1`. The reviewer worker also falls back to Fable 5.1 if an agent has no model.
+only, logged as AGENT_MODEL_CHANGED). `config/agents.toml` registers REV-01 on
+`claude-fable-5-2` and SEC-01 on `claude-sonnet-5-5`. An agent with no model runs on its role's default from
+`domain/roles.py` (`DEFAULT_MODEL`), the same table the registry's ADR-009 check uses
+(`test_a_reviewer_with_no_model_runs_on_its_roles_default_unless_overridden`).
 
 ### The full loop, as one story
 
@@ -582,8 +584,8 @@ it was a test, and the report they got claimed every criterion was met.
 sequenceDiagram
     participant D1 as DEV-01 (scripted)
     participant CI as GitHub Actions
-    participant R as REV-01 (Fable 5.1)
-    participant S as SEC-01 (Fable 5.1)
+    participant R as REV-01 (Fable 5.2)
+    participant S as SEC-01 (Sonnet 5.5)
     participant A as Aggregator
     participant D2 as DEV-02 (Opus 5.5)
     actor Y as You
@@ -622,7 +624,7 @@ The run also found two real bugs in Axiom itself. See [chapter 14](14-how-it-was
 
 ## Which model should review? Sonnet against Fable
 
-Reviewers run on Fable 5.1. In Phase 4, sixteen past reviews (both roles on eight PRs, SOC-002's planted bug among
+In Phase 4 both reviewers ran on Fable 5.1. Sixteen past reviews (both roles on eight PRs, SOC-002's planted bug among
 them) were run again: once on Sonnet 5.5, and once more on Fable, to see how much one model varies from run to run.
 `src/axiom/drills/review_compare.py` rebuilds exactly the commit and diff each reviewer saw, and runs the same
 sandboxed review through the model proxy. It writes to a file and never touches a task or a review
@@ -645,15 +647,16 @@ xychart-beta
 
 Sonnet caught the bug that mattered and agreed on every verdict, for about a seventh of the cost. It missed about
 half of Fable's smaller findings, mostly about whether tests really test. Fable found mostly the same things twice,
-but once chose FAIL for an issue it had rated `low` the first time. Eight PRs are a small sample. The models aren't
-changed; the [comparison](../runs/2026-11-07-reviewer-comparison.md) suggests a split for you to decide on.
+but once chose FAIL for an issue it had rated `low` the first time. Eight PRs are a small sample. Phase 5 took the
+[comparison](../runs/2026-11-07-reviewer-comparison.md)'s suggested split: code review on Fable (now 5.2) and
+security review on Sonnet 5.5, so the two reviewers also differ from each other.
 
 Each reviewer's model is a setting on its agent, picked up at its next review without a restart:
 
 ```bash
 make agents                                            # who runs on what
-make set-model AGENT=SEC-01 MODEL=claude-sonnet-5-5    # security reviews on Sonnet
-make set-model AGENT=SEC-01 MODEL=default              # back to the worker's default (Fable)
+make set-model AGENT=SEC-01 MODEL=claude-fable-5-2     # security reviews on Fable
+make set-model AGENT=SEC-01 MODEL=default              # back to the role's default (Sonnet)
 ```
 
 The registry refuses a reviewer on a model a developer or QA agent uses, and the reverse (ADR-009,

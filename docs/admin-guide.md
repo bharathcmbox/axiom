@@ -220,25 +220,27 @@ EM-01    engineering_manager  (worker-default)  True
 DEV-01   developer            claude-opus-5-5   True
 DEV-02   developer            claude-opus-5-5   True
 QA-01    qa                   (worker-default)  True
-SEC-01   security_reviewer    claude-fable-5-1  True
-REV-01   code_reviewer        claude-fable-5-1  True
+SEC-01   security_reviewer    claude-sonnet-5-5 True
+REV-01   code_reviewer        claude-fable-5-2  True
 ```
 
 Change a model with one command. It takes effect at that agent's next run, without a restart:
 
 ```bash
-make set-model AGENT=SEC-01 MODEL=claude-sonnet-5-5   # security reviews on Sonnet
-make set-model AGENT=SEC-01 MODEL=default             # back to the worker's default
+make set-model AGENT=SEC-01 MODEL=claude-fable-5-2    # security reviews on Fable
+make set-model AGENT=SEC-01 MODEL=default             # back to the role's default
 ```
 
 The registry refuses a reviewer on a model that any developer or QA agent uses, and the reverse: work is always
 reviewed on a different model from the one that wrote it (ADR-009). An agent with no model runs on its worker's
-default: Opus 5.5 for developers, QA and the planner, Fable 5.1 for reviewers.
+default: Opus 5.5 for developers, QA and the planner, Fable 5.2 for code review and Sonnet 5.5 for security review.
+The two reviewers are on different models from each other as well as from the developers, so a blind spot of one
+model is less likely to pass both reviews.
 
-Which model for which role? Sonnet 5.5 reviews cost about a seventh of Fable 5.1's. In a side-by-side test it
-caught the same serious bug and reached the same verdicts, but missed about half of Fable's smaller findings,
-mostly on test quality ([comparison](runs/2026-11-07-reviewer-comparison.md)). A reasonable split is Sonnet for
-security reviews and Fable for code reviews.
+Why this split? Sonnet 5.5 reviews cost about a seventh of Fable's. In a side-by-side test it caught the same
+serious bug and reached the same verdicts, but missed about half of Fable's smaller findings, mostly on test
+quality, which is code review's job ([comparison](runs/2026-11-07-reviewer-comparison.md)). Put Fable on security
+reviews too if your projects handle sensitive data and the cost is worth it.
 
 Disable an agent (it stops claiming work) with `POST /agents/{key}/disable`, and enable it again with `/enable`.
 New agents can be added to `config/agents.toml` and seeded. A new worker also needs a service in

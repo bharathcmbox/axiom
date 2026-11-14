@@ -234,11 +234,11 @@ def test_a_developer_cant_move_onto_a_reviewers_model(db: Conn, human: Actor) ->
 
 def test_a_default_model_counts_too(db: Conn, human: Actor) -> None:
     """QA-01 has no model, so it runs on its worker's default, Opus: a reviewer can't take it,
-    and clearing a reviewer's model puts it back on Fable, which is fine."""
+    and clearing a reviewer's model puts it back on its role's default, Fable 5.2, which is fine."""
     from axiom.registry.agents import set_model
 
     _team(db, human)
-    set_model(db, human, "DEV-01", "claude-sonnet-5-5")  # no maker left on Opus by name
+    set_model(db, human, "DEV-01", "claude-haiku-5-5")  # no maker left on Opus by name
     with pytest.raises(InvalidInput, match="QA-01"):
         set_model(db, human, "REV-01", "claude-opus-5-5")
     assert set_model(db, human, "REV-01", None).model is None

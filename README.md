@@ -30,7 +30,7 @@ flowchart TB
     dev --> chk{"<b>Axiom checks</b><br/>only allowed files? no secrets?<br/>tests pass on a clean copy?"}
     chk -->|no| dev
     chk -->|yes| pr["Pull request opened or updated"]
-    pr --> rev["<b>Code + security reviewers</b> (Claude Fable 5.1, set per role)<br/>read-only, independent"]
+    pr --> rev["<b>Code + security reviewers</b> (Claude Fable 5.2 and Sonnet 5.5, set per role)<br/>read-only, independent"]
     pr --> ci["<b>CI</b> on GitHub Actions"]
     rev --> agg{"<b>Aggregator</b> (plain code)<br/>all pass and CI green?"}
     ci --> agg

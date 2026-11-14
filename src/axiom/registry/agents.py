@@ -9,7 +9,7 @@ from typing import Any
 
 from psycopg import errors
 
-from axiom.domain.roles import Actor, Role, Runtime
+from axiom.domain.roles import DEFAULT_MODEL, Actor, Role, Runtime
 from axiom.errors import AlreadyExists, InvalidInput, NotFound
 from axiom.events.log import append_event
 from axiom.registry.guards import require_not_agent
@@ -22,9 +22,6 @@ AGENT_KEY = re.compile(r"^[A-Z]+-[0-9]{2}$")
 MODEL_LOCK_ID = 727_002
 MAKERS = frozenset({Role.DEVELOPER, Role.QA})
 REVIEWERS = frozenset({Role.CODE_REVIEWER, Role.SECURITY_REVIEWER})
-DEFAULT_MODEL = {Role.DEVELOPER: "claude-opus-5-5", Role.QA: "claude-opus-5-5",
-                 Role.CODE_REVIEWER: "claude-fable-5-1",
-                 Role.SECURITY_REVIEWER: "claude-fable-5-1"}  # fmt: skip
 
 
 def effective_model(role: Role, model: str | None) -> str | None:

@@ -149,7 +149,7 @@ def build_review_worker() -> ReviewWorker:
         lease_seconds=int(env.get("AXIOM_REVIEW_LEASE_SECONDS", "300")),
         heartbeat_seconds=float(env.get("AXIOM_HEARTBEAT_SECONDS", "30")),
         poll_seconds=float(env.get("AXIOM_POLL_SECONDS", "10")),
-        default_model=env.get("AXIOM_REVIEW_MODEL") or "claude-fable-5-1",
+        default_model=env.get("AXIOM_REVIEW_MODEL") or None,
         effort=env.get("AXIOM_EFFORT") or "high",
         keep_workspaces=env.get("AXIOM_KEEP_WORKSPACES") == "1",
     )

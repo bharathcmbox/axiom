@@ -148,11 +148,12 @@ Typical costs for small, well-scoped changes (a few files, a few hundred lines):
 |---|---|---|
 | A plan | $0.20–$0.50 | the plan's own limit covers it |
 | A developer run | $0.30–$0.60 | — |
-| A review, with Fable 5.1 | $0.25–$0.75 | at least $1 per review |
+| A code review, with Fable 5.2 | $0.20–$0.60 | at least $1 per review |
+| A security review, with Sonnet 5.5 | $0.03–$0.10 | at least $1 per review |
 | A whole task, two reviews included | $1.20–$2.50 | $2.50; $3.50 for large test suites |
 
-Reviews are usually about three quarters of a task's cost, so the reviewer model matters most: Sonnet 5.5 costs
-roughly a seventh as much per review. Your administrator can change it
+Reviews are a large share of a task's cost, so the reviewer model matters most: a Sonnet 5.5 review costs
+roughly a seventh as much as a Fable review. Your administrator can change it
 ([admin guide](admin-guide.md#6-agents-and-models)). Larger changes cost more; size the budget to the diff, not
 the title.
 

@@ -13,6 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from axiom.domain.roles import DEFAULT_MODEL, Role
 from axiom.modelproxy.client import ModelProxyClient
 from axiom.runtimes.base import Outcome
 from axiom.runtimes.estimate import with_estimate
@@ -39,7 +40,8 @@ class ReviewWorkerConfig:
     heartbeat_seconds: float = 30.0
     poll_seconds: float = 10.0
     effort: str = "high"
-    default_model: str = "claude-fable-5-1"  # ADR-009: reviewers on a different model
+    # Overrides the role's default (domain.roles.DEFAULT_MODEL), which ADR-009's check counts.
+    default_model: str | None = None
     keep_workspaces: bool = False
 
 
@@ -137,7 +139,7 @@ class ReviewWorker:
             workspace=ws.repo,
             output_dir=ws.out,
             budget_usd=Decimal(str(a["run_budget_usd"])),
-            model=agent.get("model") or self.config.default_model,
+            model=agent.get("model") or self.config.default_model or DEFAULT_MODEL[Role(a["role"])],
             effort=self.config.effort,
             previous_findings=self._previous_findings(task["key"], a["round"]),
         )

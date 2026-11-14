@@ -25,9 +25,10 @@ from axiom.runtimes.review import ReviewOutcome
 # $ per million tokens: input, output, cache read. Cache writes: input x 1.25 (5m), x 2 (1h).
 PRICES: dict[str, tuple[Decimal, Decimal, Decimal]] = {
     "claude-opus-5-5": (Decimal(4), Decimal(20), Decimal("0.20")),
-    "claude-sonnet-5-5": (Decimal(2), Decimal(10), Decimal("0.20")),
+    "claude-sonnet-5-5": (Decimal(2), Decimal(10), Decimal("0.10")),
     "claude-haiku-5-5": (Decimal("0.10"), Decimal("0.50"), Decimal("0.01")),
     "claude-fable-5-1": (Decimal(10), Decimal(50), Decimal("0.25")),
+    "claude-fable-5-2": (Decimal(8), Decimal(40), Decimal("0.20")),
 }
 UNKNOWN_MODEL = PRICES["claude-fable-5-1"]  # the dearest: an estimate shouldn't be flattering
 OUTPUT_SCALE = Decimal("2.5")

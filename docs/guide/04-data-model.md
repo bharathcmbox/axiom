@@ -94,7 +94,7 @@ two tasks created at the same moment can never get the same number.
 ### `agents`: the registry
 The organization chart. `role` decides which tasks an agent may take (it must equal the task's
 `assigned_role`). `max_concurrent` caps how many tasks it may hold at once. `runtime` and
-`model` decide how the worker runs it (developers on Opus 5.5, reviewers on Fable 5.1).
+`model` decide how the worker runs it (developers on Opus 5.5; code review on Fable 5.2, security review on Sonnet 5.5).
 
 ### `tasks`
 The contract from the spec (title, specification, acceptance criteria, role, priority,

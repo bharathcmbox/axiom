@@ -18,6 +18,16 @@ class Runtime(StrEnum):
     CODEX = "codex"
 
 
+# The model an agent with no model of its own runs on (ADR-009: work is reviewed on a model other
+# than the one that wrote it). Workers use these too, so the registry's check counts what runs.
+DEFAULT_MODEL: dict[Role, str] = {
+    Role.DEVELOPER: "claude-opus-5-5",
+    Role.QA: "claude-opus-5-5",
+    Role.CODE_REVIEWER: "claude-fable-5-2",
+    Role.SECURITY_REVIEWER: "claude-sonnet-5-5",
+}
+
+
 class ActorKind(StrEnum):
     HUMAN = "human"
     AGENT = "agent"

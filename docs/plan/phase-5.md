@@ -68,7 +68,7 @@ scheduled plan still waits for your approval unless you chose otherwise for that
 | # | Topic | Options | Recommendation |
 |---|---|---|---|
 | Q1 | **Phase 5 spend cap** | Phase 4 cap was $35 (spent $21.79). Credits expire 2026-11-19 | **$40 hard cap**, with about $15 used before 2026-11-19 (Parts A and B live checks). Per task $3 and per day $15 as now |
-| Q2 | **Reviewer models** | (a) Both on Fable 5.1, as now. (b) SEC-01 on **Fable 5.2**, REV-01 on **Sonnet 5.5** (the T10b comparison: Sonnet agreed on 15 of 15 verdicts and every blocking finding, at $0.06 vs $0.45 a review). (c) Both on Fable 5.2 | **(b)**: security keeps the strongest model, code review gets cheaper, and the two reviewers no longer share a model, which is the closest substitute for Codex we have. Measured again in T3 |
+| Q2 | **Reviewer models** | (a) Both on Fable 5.1, as now. (b) SEC-01 on **Sonnet 5.5**, REV-01 on **Fable 5.2** (the T10b comparison: Sonnet agreed on 15 of 15 verdicts and every blocking finding, at $0.06 vs $0.45 a review, but missed Fable's findings on test quality). (c) Both on Fable 5.2 | **(b)**: code review, where test quality is judged, keeps the strongest model; security gets cheaper; the two reviewers no longer share a model, which is the closest substitute for Codex we have. Measured again in T3. *Corrected in T1: the draft had the roles the other way round, against the comparison's own evidence; you chose to follow the evidence* |
 | Q3 | **What schedules may create** | (a) Plans only: every scheduled run waits for your approval of its plan. (b) Plans by default; a template you mark `standing` creates tasks directly, within its own budget | **(a) to start.** Standing approval is the first thing in Axiom that would run without your yes; add it later, with its own ADR, if (a) proves tedious |
 | Q4 | **Notification channel** | (a) Dashboard inbox only (no new egress). (b) A comment on a GitHub issue in the project repo (already allowed, ADR-017). (c) Email or Slack (new egress from the API, a new secret) | **(a) + (b)**: GitHub already sends you mail for comments, so you get notified with no new secret and no new egress. Revisit (c) if a team joins |
 | Q5 | **Second runtime** | (a) **Claude Managed Agents** (Anthropic-hosted agent loop and sandbox; a self-hosted version is in private beta). (b) The Messages API with our own tool loop. (c) None; keep one runtime | **(a) as a time-boxed spike (T6)**, reviewers first because they are read-only. Go or no-go is written down. It is the test of SPEC principle 2, and a no-go is a valid result |
@@ -81,7 +81,7 @@ scheduled plan still waits for your approval unless you chose otherwise for that
 
 ### 4.1 Review diversity (Part A)
 
-- Reviewer models per Q2, set with `make set-model`; the ADR-009 rule (no reviewer shares a model with a
+- Reviewer models per Q2 (code review on Fable 5.2, security on Sonnet 5.5), set with `make set-model`; the ADR-009 rule (no reviewer shares a model with a
   developer or QA agent) still holds and is checked.
 - **Different lenses, not just models.** The two reviewer prompts already differ by role. T2 adds a review
   checklist per role that the aggregator can check for: a review must say which checklist items it looked at,

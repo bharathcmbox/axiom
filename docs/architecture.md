@@ -114,7 +114,7 @@ merge. Detail: [guide chapter 11](guide/11-workers-and-sandbox.md).
 
 ```
 submit → one review per required role (reviews table: own state machine, leases)
-reviewer worker → workspace at the submitted commit → read-only sandbox (Fable 5.1) → review contract
+reviewer worker → workspace at the submitted commit → read-only sandbox (code: Fable 5.2, security: Sonnet 5.5) → review contract
 github-sync (read-only) → CI result for the head commit, merges, closes, change requests
 aggregator (pure decide()) → approve | request_changes | escalate | wait
 human merges on GitHub → sync → merge → DONE, recorded as human:github-<login>

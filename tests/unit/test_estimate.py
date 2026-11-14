@@ -160,3 +160,25 @@ def test_a_reported_cost_is_never_replaced(tmp_path: Path) -> None:
 def test_without_a_transcript_the_outcome_is_unchanged(tmp_path: Path) -> None:
     outcome = RunOutcome(Outcome.CANCELLED)
     assert with_estimate(outcome, tmp_path) is outcome
+
+
+def test_fable_5_2_and_sonnet_5_5_are_priced_as_published(tmp_path: Path) -> None:
+    """Fable 5.2: $8 / $40, cache reads $0.20. Sonnet 5.5: $2 / $10, cache reads $0.10."""
+    fable = estimate_from_transcript(
+        _write(
+            tmp_path / "f",
+            _assistant(
+                model="claude-fable-5-2", input_tokens=1_000_000, cache_read_input_tokens=1_000_000
+            ),
+        )
+    )
+    sonnet = estimate_from_transcript(
+        _write(
+            tmp_path / "s",
+            _assistant(
+                model="claude-sonnet-5-5", input_tokens=1_000_000, cache_read_input_tokens=1_000_000
+            ),
+        )
+    )
+    assert fable is not None and fable.usd == Decimal("8.20")
+    assert sonnet is not None and sonnet.usd == Decimal("2.10")

@@ -1,6 +1,7 @@
 # The initial organization: 7 logical agents, 2 developers (SPEC.md section 4).
-# Seed with `make seed`. Developers: Claude Opus 5.5. Reviewers: Claude Fable 5.1, a different
-# model from the developers (ADR-009). Phase 5 moves SEC-01 to Fable 5.2 and REV-01 to Sonnet 5.5.
+# Seed with `make seed`. Developers: Claude Opus 5.5. Reviewers on models different from the
+# developers' and from each other (ADR-009): code on Claude Fable 5.2, security on Claude Sonnet 5.5
+# (the Phase 4 reviewer comparison: docs/runs/2026-11-07-reviewer-comparison.md).
 
 [[agents]]
 key = "EM-01"
@@ -36,10 +37,10 @@ model = "claude-opus-5-5"
 key = "SEC-01"
 role = "security_reviewer"
 runtime = "claude_code"
-model = "claude-fable-5-1"
+model = "claude-sonnet-5-5"
 
 [[agents]]
 key = "REV-01"
 role = "code_reviewer"
 runtime = "claude_code"
-model = "claude-fable-5-1"
+model = "claude-fable-5-2"

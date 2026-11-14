@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from axiom.domain.roles import DEFAULT_MODEL, Role
 from axiom.domain.task_machine import TaskState
 from axiom.orchestrator.reviews import expire_review_leases
 from axiom.orchestrator.tasks import get_task
@@ -102,7 +103,7 @@ def test_round_two_reviewers_get_the_previous_findings(
 
     reviewer(api_url, tmp_path, lambda: Recording(scenario=ReviewScenario.PASS)).run_once()
     [request] = seen
-    assert request.model == "claude-fable-5-1"
+    assert request.model == "claude-fable-5-2"  # REV-01's model in config/agents.toml
     assert any("code_reviewer: planted defect" in f for f in request.previous_findings)
     assert "# v3" in request.diff
 
@@ -216,3 +217,25 @@ def test_a_crashed_review_is_retried_by_the_worker(
     runtime = FakeReviewer(scenario=ReviewScenario.CRASH)
     assert reviewer(api_url, tmp_path, lambda: runtime).run_once()
     assert get_task(api_tokens, key).state == TaskState.IN_REVIEW
+
+
+def test_a_reviewer_with_no_model_runs_on_its_roles_default_unless_overridden(
+    api_tokens: Conn, api_url: str, remote: Path, tmp_path: Path
+) -> None:
+    """SEC-01 and REV-01 default to different models (Phase 5 T1); AXIOM_REVIEW_MODEL overrides.
+    An agent's own model still comes first, so both start with none."""
+    _submitted(api_tokens, api_url, remote, tmp_path)
+    api_tokens.execute("UPDATE agents SET model = NULL WHERE key IN ('SEC-01', 'REV-01')")
+    seen: list[Any] = []
+
+    class Recording(FakeReviewer):
+        def run_review(self, request: Any, on_event: Any = None) -> Any:
+            seen.append(request)
+            return super().run_review(request, on_event)
+
+    reviewer(api_url, tmp_path, lambda: Recording(scenario=ReviewScenario.PASS),
+             agent="SEC-01").run_once()  # fmt: skip
+    overridden = reviewer(api_url, tmp_path, lambda: Recording(scenario=ReviewScenario.PASS))
+    overridden.config.default_model = "claude-haiku-5-5"
+    overridden.run_once()
+    assert [r.model for r in seen] == [DEFAULT_MODEL[Role.SECURITY_REVIEWER], "claude-haiku-5-5"]
