@@ -31,7 +31,7 @@ from axiom.errors import (
     NotFound,
 )
 from axiom.events.log import append_event
-from axiom.orchestrator import budgets, review_store
+from axiom.orchestrator import budgets, review_store, timers
 from axiom.orchestrator.dependencies import dependencies_satisfied, pending_dependents
 from axiom.orchestrator.tasks import Task, get_task
 from axiom.registry.agents import Agent, get_agent
@@ -187,6 +187,7 @@ def apply_locked(
     )
 
     # Consequences, logged after the transition that caused them.
+    timers.on_task_transition(conn, row, state, target)
     if command == TaskCommand.SUBMIT:
         review_store.request_reviews(conn, row, payload.get("commit"))
     elif command == TaskCommand.REREVIEW:

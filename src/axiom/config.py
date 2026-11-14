@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     plan_run_budget_usd: Decimal = Decimal("1.00")
     plan_min_run_usd: Decimal = Decimal("0.50")
     plan_lease_seconds: int = 300
+    # Follow-ups (ADR-018): how long something may wait for a human before one reminder.
+    follow_up_waiting_seconds: int = 86_400  # a question or an escalation
+    follow_up_merge_seconds: int = 172_800  # a PR that passed review and CI
+    follow_up_plan_seconds: int = 86_400  # a plan waiting for approval
+    max_timers_per_sweep: int = 50
 
 
 @lru_cache

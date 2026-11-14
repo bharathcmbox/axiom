@@ -61,6 +61,23 @@ tasks: each with a specification, acceptance criteria, the files it may change, 
 only in the project's test paths, tasks that run in parallel never share a file, budgets within your limit, and
 no credentials in the text. A plan that breaks a rule goes back to the planner, never to you.
 
+### Plans on a schedule
+
+For work that recurs (a weekly dependency update, a monthly clean-up), set up a schedule. Each time it comes due,
+Axiom requests a plan from the same specification, and that plan waits for your approval like any other:
+
+```bash
+curl "${H[@]}" $A/projects/APP/schedules -d '{"every_hours": 168, "budget_usd": 6,
+  "first_at": "2026-11-16T09:00:00Z", "specification": "Update the dependencies; tests must pass."}'
+curl "${H[@]}" "$A/timers?status=PENDING"        # your schedules, and reminders Axiom has set
+curl "${H[@]}" -X POST $A/timers/3/cancel         # stop a schedule
+```
+
+If Axiom is down when a schedule comes due, it requests one plan when it starts, not one per missed time. If the
+day's budget can't pay for planning, it requests nothing that time and records why. Axiom also remembers what
+waits for you: a question or escalation not dealt with in a day, a plan not decided in a day, or a PR not merged
+in two days gets one reminder.
+
 ### Reading a plan
 
 Open it at `/ui/plans/<id>`. Read it as you would a colleague's: is this the right work, split sensibly, in a

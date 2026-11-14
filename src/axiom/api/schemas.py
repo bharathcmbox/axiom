@@ -52,6 +52,36 @@ class TestPathsIn(BaseModel):
     test_paths: list[str] = Field(examples=[["agent/tests/**"]])
 
 
+class ScheduleIn(BaseModel):
+    specification: str = Field(min_length=1, max_length=20000)
+    budget_usd: Decimal = Field(gt=0, description="The most each plan's tasks may total")
+    every_hours: int = Field(ge=1, le=24 * 90, description="How often a plan is requested")
+    first_at: datetime | None = Field(
+        default=None, description="When it first fires (default: one interval from now)"
+    )
+
+
+class TimerOut(_Out):
+    id: int
+    kind: str
+    status: str
+    project_key: str
+    due_at: datetime
+    every_seconds: int | None
+    specification: str | None
+    budget_usd: Decimal | None
+    task_key: str | None = None
+    plan_id: int | None
+    reason: str | None
+    subject_state: str | None
+    created_by: str
+    created_at: datetime
+    fired_count: int
+    last_fired_at: datetime | None
+    ended_by: str | None
+    ended_at: datetime | None
+
+
 class PlanIn(BaseModel):
     specification: str = Field(min_length=1, max_length=20000)
     budget_usd: Decimal = Field(gt=0, description="The most the plan's tasks may total")

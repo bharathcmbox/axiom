@@ -261,10 +261,14 @@ Money is checked before it's spent, not reported afterwards ([chapter 15](guide/
 | `AXIOM_PLAN_RUN_BUDGET_USD` / `AXIOM_PLAN_MIN_RUN_USD` | $1 / $0.50 | One planning attempt |
 | `AXIOM_MAX_REVIEW_ROUNDS` | 3 | Rework rounds before a task comes to you |
 | `AXIOM_MAX_CONCURRENT_DEVELOPERS` | 2 | Developer runs at once |
+| `AXIOM_FOLLOW_UP_WAITING_SECONDS` / `_MERGE_SECONDS` / `_PLAN_SECONDS` | 1 day / 2 days / 1 day | How long something waits for a human before one reminder |
 
 Set them in `.env` and recreate the API (`docker compose up -d --force-recreate api`). Every run is metered by
 the model proxy, and that metered cost is what's recorded. Also set a spend limit on the Anthropic key itself:
 it's the last line if everything else fails.
+
+Schedules spend from the same daily budget: a schedule that comes due when the day can't pay for a planning run
+requests nothing that time, and records why. List them with `GET /timers`.
 
 One exception: drills such as the reviewer comparison (`src/axiom/drills/`) aren't tasks, so the daily budget
 doesn't see them. They have their own caps, and are announced before they run.

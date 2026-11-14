@@ -101,3 +101,23 @@ def plan_rows() -> list[tuple[str, frozenset[str], tuple[str, ...], str, str]]:
             targets = tuple(t.strip() for t in dst.split("/"))
             rows.append((cmd.strip("`"), sources, targets, actor, event))
     return rows
+
+
+def timer_rows() -> list[tuple[str, frozenset[str], tuple[str, ...], frozenset[str], str]]:
+    """(command, sources, targets, actors, event) from the timer table."""
+    rows, in_table = [], False
+    for line in DOC.read_text().splitlines():
+        if line.startswith("| Timer command"):
+            in_table = True
+            continue
+        if in_table:
+            if not line.startswith("|"):
+                break
+            if line.startswith("|---"):
+                continue
+            cmd, src, dst, actor, event = _cells(line)
+            sources = frozenset(x.strip() for x in src.split(","))
+            targets = tuple(t.strip() for t in dst.split("/"))
+            actors = frozenset(a.strip() for a in actor.split(","))
+            rows.append((cmd.strip("`"), sources, targets, actors, event))
+    return rows

@@ -20,7 +20,24 @@ def check_invariants(conn: Conn) -> list[str]:
     violations += _agent_assignments(conn)
     violations += _reviews(conn)
     violations += _plans(conn)
+    violations += _follow_ups(conn)
     return violations
+
+
+def _follow_ups(conn: Conn) -> list[str]:
+    """A pending follow-up watches something still waiting in the state it was set for: the
+    transition that moves it on cancels the follow-up in the same transaction (ADR-018)."""
+    rows = conn.execute(
+        """SELECT tm.id, tm.subject_state, coalesce(t.state, p.status) AS now_in
+           FROM timers tm LEFT JOIN tasks t ON t.id = tm.task_id
+                          LEFT JOIN plans p ON p.id = tm.plan_id
+           WHERE tm.kind = 'follow_up' AND tm.status = 'PENDING'"""
+    ).fetchall()
+    return [
+        f"follow-up {r['id']} waits on {r['subject_state']}, but its subject is {r['now_in']}"
+        for r in rows
+        if r["now_in"] != r["subject_state"]
+    ]
 
 
 def _plans(conn: Conn) -> list[str]:

@@ -10,13 +10,13 @@ pattern: timers in a durable store of their own, and a scheduler that polls for 
 events. Axiom already has the rest of that pattern: a durable backlog, claims, leases and a reaper.
 
 ## Decision
-- **A `timers` table** with a pure transition table, `domain/timer_machine.py` (PENDING → FIRED → PENDING again
-  when recurring, or done; PENDING → CANCELLED). docs/state-machines.md matches it, like the other machines.
+- **A `timers` table** with a pure transition table, `domain/timer_machine.py`: `fire` keeps a recurring timer
+  PENDING with its next due time and makes a one-off FIRED; `cancel` makes a pending timer CANCELLED. docs/state-machines.md matches it, like the other machines.
 - **Two kinds.** *Schedules* are recurring and created only by a human, from a plan template the human wrote.
   *Follow-ups* are one-off and created only by deterministic code, in the same transaction as the event that
   needs one (for example `ask_human` sets "remind in a day"), and cancelled when their subject moves on.
   **Agents cannot create, change or cancel timers.**
-- **The scheduler runs in the API process,** beside the reaper, on the DB clock (`now()`). Each due timer is
+- **The scheduler is the reaper's sweep,** in the API process, on the DB clock (`now()`), and once at startup. Each due timer is
   fired in one transaction: lock the timer row, check its state, create the work through the plan service or
   `apply_command`, advance or close the timer, append an event. The lock and the state check together make a
   double firing impossible, even with two API processes.

@@ -183,9 +183,37 @@ stateDiagram-v2
 A plan that fails validation counts as a `fail_run`. A rejection isn't a failure, so the attempts start
 over. Plan events carry `plan_id`.
 
+## Timer (Phase 5, ADR-018)
+
+A timer waits until it's due, then fires once. A **schedule** (set up by a human) requests a plan each time and
+stays PENDING with its next due time. A **follow-up** (set by Axiom when something starts waiting for a human)
+reminds once and is done. Follow-ups are cancelled by the transition that ends the wait. Agents never create,
+change or cancel timers.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PENDING: schedule (human) or follow-up (system)
+    PENDING --> PENDING: fire (schedule: next occurrence)
+    PENDING --> FIRED: fire (follow-up)
+    PENDING --> CANCELLED: cancel (you, or the wait ended)
+    FIRED --> [*]
+    CANCELLED --> [*]
+```
+
+| Timer command | From | To | Actor | Event |
+|---|---|---|---|---|
+| `fire` | PENDING | PENDING / FIRED | system | TIMER_FIRED |
+| `cancel` | PENDING | CANCELLED | human, system | TIMER_CANCELLED |
+
+`fire`'s target depends on the timer: a schedule stays PENDING with its next due time, a follow-up becomes FIRED.
+Timer events carry `timer_id`, and their task or plan only in the payload, so a task's own events stay its
+transitions.
+
 ## Invariants
 
 - A task is ASSIGNED or IN_PROGRESS **iff** it has exactly one active execution.
 - An execution has a lease **iff** it is active (DB CHECK constraint).
 - At most one active execution per task (DB partial unique index).
 - Every state change writes at least one event, in the same transaction.
+- A pending follow-up watches something still in the state it was set for (ADR-018).

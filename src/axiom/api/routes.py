@@ -40,15 +40,18 @@ from axiom.api.schemas import (
     ReviewFailIn,
     ReviewOut,
     ReviewSubmitIn,
+    ScheduleIn,
     TagsIn,
     TaskIn,
     TaskOut,
     TestPathsIn,
+    TimerOut,
 )
-from axiom.domain.roles import Actor
+from axiom.domain.roles import Actor, ActorKind
 from axiom.domain.task_machine import TaskCommand, TaskState
+from axiom.errors import Forbidden
 from axiom.events.log import list_events
-from axiom.orchestrator import measures, plans, reviews
+from axiom.orchestrator import measures, plans, reviews, timers
 from axiom.orchestrator.assignment import claim_next
 from axiom.orchestrator.commands import apply_command, record_execution_cost
 from axiom.orchestrator.leases import heartbeat
@@ -164,6 +167,38 @@ def request_plan_route(key: str, body: PlanIn, conn: ConnDep, actor: ActorDep) -
         conn, actor, project_key=key, specification=body.specification, budget_usd=body.budget_usd
     )
     return PlanOut.model_validate(plans.get_plan(conn, plan["id"]))
+
+
+@router.post("/projects/{key}/schedules", tags=["timers"], status_code=201)
+def create_schedule_route(key: str, body: ScheduleIn, conn: ConnDep, actor: ActorDep) -> TimerOut:
+    """A plan requested every N hours (humans only, ADR-018). Each plan still waits for your
+    approval before anything runs."""
+    timer = timers.create_schedule(
+        conn, actor, project_key=key, specification=body.specification,
+        budget_usd=body.budget_usd, every_hours=body.every_hours, first_at=body.first_at,
+    )  # fmt: skip
+    return _timer(conn, timer["id"])
+
+
+@router.get("/timers", tags=["timers"])
+def list_timers_route(
+    conn: ConnDep, status: Annotated[str | None, Query()] = None
+) -> list[TimerOut]:
+    """Schedules and follow-ups."""
+    return [TimerOut.model_validate(t) for t in timers.list_timers(conn, status)]
+
+
+@router.post("/timers/{timer_id}/cancel", tags=["timers"])
+def cancel_timer_route(timer_id: int, conn: ConnDep, actor: ActorDep) -> TimerOut:
+    """Stop a schedule, or a reminder (humans only)."""
+    if actor.kind != ActorKind.HUMAN:
+        raise Forbidden("only humans cancel timers")
+    timers.cancel_timer(conn, actor, timer_id)
+    return _timer(conn, timer_id)
+
+
+def _timer(conn: Conn, timer_id: int) -> TimerOut:
+    return TimerOut.model_validate(next(t for t in timers.list_timers(conn) if t["id"] == timer_id))
 
 
 @router.get("/plans", tags=["plans"])

@@ -79,6 +79,11 @@ stateDiagram-v2
 | S41 | A stranger asks for changes on a public repository's PR | ignored, nothing changed | tested | `test_a_strangers_request_changes_review_is_ignored` |
 | S42 | A reviewer approves without examining anything | invalid review, run again; the task doesn't move | tested | `test_a_review_must_cover_its_roles_checklist`, `test_bad_review_runs_are_retried` |
 | S43 | A reviewer with no model of its own | runs on its role's default, which differs from the other reviewer's | tested | `test_a_reviewer_with_no_model_runs_on_its_roles_default_unless_overridden` |
+| S44 | A schedule you set up comes due | a plan is requested; it waits for your approval | tested | `test_a_due_schedule_requests_a_plan_that_still_needs_you` |
+| S45 | Axiom was down when a schedule came due | it fires once at startup; missed times aren't replayed | tested | `test_a_schedule_missed_while_axiom_was_down_fires_once`, `test_the_reaper_fires_timers_on_its_sweep` |
+| S46 | Something has waited for you too long | one reminder; acting first clears it | tested | `test_a_follow_up_fires_once_if_you_havent_acted`, `test_a_question_gets_one_reminder_and_the_answer_clears_it` |
+| S47 | A schedule comes due when the day's budget is nearly spent | nothing requested; the refusal is recorded | tested | `test_a_schedule_the_day_cant_pay_for_is_refused_and_recorded` |
+| S48 | An agent tries to set up or cancel a timer | refused; nothing changes | tested | `test_only_a_human_sets_up_a_schedule`, `test_schedules_over_http` |
 | S18 | Everything left is reserved by runs in flight | claim refused for now, nothing changes | tested | `test_a_claim_is_refused_when_the_rest_is_reserved`, `test_second_reviewer_waits_when_the_first_reserved_the_rest` |
 
 ## S1. Everything is fine
@@ -325,6 +330,21 @@ flowchart LR
 Each role has a fixed checklist (`REVIEW_CHECKLISTS` in `contracts.py`). The model's output schema requires every
 item, and Axiom checks again when the review is submitted, because the sandbox is untrusted. A FAIL may mark every
 item `not_applicable`; only an approval needs something examined.
+
+## S44–S48. Schedules and reminders
+
+```mermaid
+flowchart LR
+    t["timer due<br/>(reaper sweep, DB clock)"] --> k{kind}
+    k -->|schedule| b{"day can pay<br/>for planning?"}
+    b -->|yes| p["plan REQUESTED<br/>waits for your approval"]
+    b -->|no| r["refusal recorded,<br/>tries next time"]
+    k -->|follow-up| w{"still waiting<br/>for you?"}
+    w -->|yes| f["one reminder, FIRED"]
+    w -->|"no (you acted)"| c["already cancelled<br/>by your action"]
+```
+
+Detail: [chapter 17](17-continuous-operation.md).
 
 ## Not handled yet
 

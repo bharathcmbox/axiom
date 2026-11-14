@@ -71,6 +71,9 @@ def _plan_event(
         agent_id=plan["planner_agent_id"],
         payload={"from": plan["status"], "to": target, "command": command} | (payload or {}),
     )
+    from axiom.orchestrator.timers import on_plan_transition
+
+    on_plan_transition(conn, plan, PlanState(plan["status"]), target)
 
 
 def _lock(conn: Conn, plan_id: int) -> dict[str, Any]:
@@ -108,21 +111,36 @@ def request_plan(
         project = conn.execute("SELECT id FROM projects WHERE key = %s", (project_key,)).fetchone()
         if project is None:
             raise NotFound(f"project {project_key} not found")
-        plan = conn.execute(
-            """INSERT INTO plans (project_id, specification, budget_usd, status, created_by)
-               VALUES (%s, %s, %s, %s, %s) RETURNING *""",
-            (project["id"], specification, budget_usd, PlanState.REQUESTED, str(actor)),
-        ).fetchone()
-        assert plan is not None
-        append_event(
-            conn,
-            actor=actor,
-            type="PLAN_REQUESTED",
-            project_id=project["id"],
-            plan_id=plan["id"],
-            payload={"budget_usd": str(budget_usd)},
-        )
-        return plan
+        return insert_plan(conn, actor, project["id"], specification, budget_usd)
+
+
+def insert_plan(
+    conn: Conn,
+    actor: Actor,
+    project_id: int,
+    specification: str,
+    budget_usd: Decimal,
+    *,
+    timer_id: int | None = None,
+) -> dict[str, Any]:
+    """A new REQUESTED plan, inside the caller's transaction: a human's request, or a schedule
+    the human set up firing (ADR-018). Either way, only a human can approve what it proposes."""
+    plan = conn.execute(
+        """INSERT INTO plans (project_id, specification, budget_usd, status, created_by, timer_id)
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING *""",
+        (project_id, specification, budget_usd, PlanState.REQUESTED, str(actor), timer_id),
+    ).fetchone()
+    assert plan is not None
+    append_event(
+        conn,
+        actor=actor,
+        type="PLAN_REQUESTED",
+        project_id=project_id,
+        plan_id=plan["id"],
+        timer_id=timer_id,
+        payload={"budget_usd": str(budget_usd)},
+    )
+    return plan
 
 
 def reject_plan(conn: Conn, actor: Actor, plan_id: int, feedback: str) -> dict[str, Any]:

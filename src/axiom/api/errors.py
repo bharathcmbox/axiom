@@ -7,6 +7,7 @@ from axiom import errors as e
 from axiom.domain.plan_machine import IllegalPlanTransition, PlanActorNotPermitted
 from axiom.domain.review_machine import IllegalReviewTransition, ReviewActorNotPermitted
 from axiom.domain.task_machine import ActorNotPermitted, IllegalTransition
+from axiom.domain.timer_machine import IllegalTimerTransition, TimerActorNotPermitted
 
 STATUS: dict[type[Exception], int] = {
     e.NotFound: 404,
@@ -25,6 +26,8 @@ STATUS: dict[type[Exception], int] = {
     ReviewActorNotPermitted: 403,
     IllegalPlanTransition: 409,
     PlanActorNotPermitted: 403,
+    IllegalTimerTransition: 409,
+    TimerActorNotPermitted: 403,
 }
 
 

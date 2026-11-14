@@ -96,10 +96,10 @@ A new `timers` table and a small `timer_machine.py` (pure table, in the style of
 stateDiagram-v2
     direction LR
     [*] --> PENDING: created (a schedule, or a follow-up)
-    PENDING --> FIRED: due, scheduler acts
+    PENDING --> PENDING: fire (recurring: next occurrence)
+    PENDING --> FIRED: fire (one-off)
     PENDING --> CANCELLED: you cancel, or its subject finishes
-    FIRED --> PENDING: recurring, next occurrence
-    FIRED --> [*]: one-off
+    FIRED --> [*]
 ```
 
 - **Two kinds**, as in the post: *schedules* (recurring, from a template you approved, e.g. "every Monday:
@@ -317,7 +317,7 @@ Every task: lint, the full suite, one commit, its guide section and diagrams in 
 | T2 Review checklists | Per-role checklist in review contracts; aggregator rejects an empty review | An "approve" that examined nothing is invalid | contract tests, pass and fail |
 | T3 Review check **LIVE** | The new reviewers on the SOC-002 planted bug and two recent PRs | Bug caught; cost recorded | the live run, written up: [record](../runs/2026-11-14-phase-5-review-check.md) ($1.81) |
 | **Part B** | | | |
-| T4 Timers | Migration, `timer_machine.py`, scheduler in the API process, follow-ups for idle PRs and waiting questions | Fires once under concurrency and after downtime | generated pairs; two schedulers racing; restart after a missed interval; budget refusal |
+| T4 Timers | Migration, `timer_machine.py`, scheduler in the API process, follow-ups for idle PRs and waiting questions | Fires once under concurrency and after downtime | generated pairs; two schedulers racing; restart after a missed interval; budget refusal. Done: [chapter 17](../guide/17-continuous-operation.md) |
 | T5 Notifications | Migration, outbox, dashboard inbox, GitHub inbox-issue delivery by the sync | Deduplicated; credential exposure always pushed | dedup, delivery retry, sync tests with a fake GitHub |
 | T5b Unattended drill **LIVE** | A weekly schedule on tiny-agenticsoc, the API restarted mid-week | Fires on time, once; you are notified at each step | the live run |
 | **Part C** | | | |

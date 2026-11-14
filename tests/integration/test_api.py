@@ -347,3 +347,22 @@ def test_metrics_over_http(client: TestClient) -> None:
     base = {"project_key": "AX", "title": "by hand", "minutes": 30, "cost_usd": "1.20"}
     assert client.post("/baselines", json=base).status_code == 201
     assert client.get("/metrics").json()["baselines"][0]["payload"]["title"] == "by hand"
+
+
+def test_schedules_over_http(client: TestClient) -> None:
+    """Phase 5 T4: a human sets up and cancels a schedule; an agent can do neither."""
+    body = {"specification": "Weekly dependency update", "budget_usd": "5", "every_hours": 168}
+    r = client.post("/projects/AX/schedules", json=body, headers=DEV1)
+    assert r.status_code == 403 and client.get("/timers").json() == []
+    r = client.post("/projects/AX/schedules", json=body)
+    assert r.status_code == 201, r.text
+    timer = r.json()
+    assert (timer["kind"], timer["status"], timer["every_seconds"], timer["created_by"]) == (
+        "schedule", "PENDING", 168 * 3600, "human:bharath")  # fmt: skip
+    assert client.post("/projects/AX/schedules", json=body | {"every_hours": 0}).status_code == 422
+    assert client.post(f"/timers/{timer['id']}/cancel", headers=DEV1).status_code == 403
+    assert client.get("/timers?status=PENDING").json()[0]["id"] == timer["id"]
+    r = client.post(f"/timers/{timer['id']}/cancel")
+    assert r.json()["status"] == "CANCELLED"
+    again = client.post(f"/timers/{timer['id']}/cancel")
+    assert (again.status_code, again.json()["error"]) == (409, "illegal_timer_transition")

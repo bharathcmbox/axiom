@@ -12,6 +12,8 @@ log = logging.getLogger(__name__)
 
 
 class Reaper:
+    """Times out expired leases and fires due timers (ADR-018), on the DB clock."""
+
     def __init__(self, pool: ConnectionPool[Conn], interval_seconds: float) -> None:
         self._pool = pool
         self._interval = interval_seconds
@@ -19,15 +21,22 @@ class Reaper:
         self._thread = threading.Thread(target=self._run, name="axiom-reaper", daemon=True)
 
     def sweep(self) -> list[str]:
-        """Time out expired leases: executions, reviews and plans."""
+        """Time out expired leases (executions, reviews, plans), then fire due timers."""
         from axiom.orchestrator.plans import expire_plan_leases
         from axiom.orchestrator.reviews import expire_review_leases
+        from axiom.orchestrator.timers import fire_due_timers
 
         with self._pool.connection() as conn:
             tasks = expire_leases(conn)
             reviews = expire_review_leases(conn)
             plans = expire_plan_leases(conn)
-        return tasks + [f"review:{r}" for r in reviews] + [f"plan:{p}" for p in plans]
+            fired = fire_due_timers(conn)
+        return (
+            tasks
+            + [f"review:{r}" for r in reviews]
+            + [f"plan:{p}" for p in plans]
+            + [f"timer:{t}" for t in fired]
+        )
 
     def start(self) -> None:
         self._thread.start()

@@ -142,3 +142,9 @@ run (ADR-015), `sandbox-launcher` holds the Docker socket (ADR-016), and the har
 a review gets its share of what the task has left (ADR-013). Reviewer models are set per agent, and the registry
 enforces that they differ from the developers' (ADR-009). Detail: [guide chapter 16](guide/16-planning.md),
 [chapter 15](guide/15-metrics.md), [chapter 11](guide/11-workers-and-sandbox.md).
+
+## Continuous operation (Phase 5, ADR-018)
+
+The reaper's sweep also fires due timers from the `timers` table, on the DB clock: schedules a human set up (each
+requests a plan, which still needs a human's approval) and follow-ups Axiom sets when something starts waiting for
+a human (cleared by the transition that ends the wait). See [chapter 17](guide/17-continuous-operation.md).
