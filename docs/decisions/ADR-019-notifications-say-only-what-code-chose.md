@@ -22,8 +22,8 @@ there can be read by anyone, and anyone can reply.
 - **Replies are never commands.** Axiom never reads comments on the inbox issue. Humans answer, approve, retry
   and cancel through the API with their own token, and merge on GitHub, as before.
 - **Token.** The sync gets its own token, `AXIOM_SYNC_GITHUB_TOKEN`: pull requests and Actions read, Issues read
-  and write, on the project repository only. The workers' token doesn't change, so workers still can't write
-  issues.
+  and write, on the project repository only. The workers' token needs no Issues permission and should have none. (Found
+  live in T5b: the existing workers' token had it; the human removes it.)
 - **A possible credential exposure stops work.** A failure the harness marks `credential_exposure` sends the task
   to FAILED whatever retries are left (CLAUDE.md: it goes to the human), and its notification is delivered first.
 

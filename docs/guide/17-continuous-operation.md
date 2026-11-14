@@ -299,8 +299,9 @@ details are on the dashboard, behind your login.
 (`test_the_writer_cannot_read_replies`). You answer and approve through the API, and merge on GitHub, as before.
 
 **Its own token.** The sync uses `AXIOM_SYNC_GITHUB_TOKEN`: pull requests and Actions read, Issues read and
-write, on the project's repository only. The workers' token doesn't change, so a compromised worker still
-can't write issues. Without the sync token, notifications stay on the dashboard.
+write, on the project's repository only. The workers' token needs no Issues permission (their PR comments work
+with Pull requests write), so give it none: then a compromised worker can't post to the inbox. Without the sync
+token, notifications stay on the dashboard.
 
 **A possible credential exposure stops work.** The harness marks the failure (`credential_exposure`), and the
 task goes to FAILED, not back to READY, whatever retries are left: only you can retry it
