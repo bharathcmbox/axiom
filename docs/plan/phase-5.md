@@ -319,24 +319,24 @@ Every task: lint, the full suite, one commit, its guide section and diagrams in 
 | **Part B** | | | |
 | T4 Timers | Migration, `timer_machine.py`, scheduler in the API process, follow-ups for idle PRs and waiting questions | Fires once under concurrency and after downtime | generated pairs; two schedulers racing; restart after a missed interval; budget refusal. Done: [chapter 17](../guide/17-continuous-operation.md) |
 | T5 Notifications | Migration, outbox, dashboard inbox, GitHub inbox-issue delivery by the sync | Deduplicated; credential exposure always pushed | dedup, delivery retry, sync tests with a fake GitHub. Done; the sync got its own token, and a possible credential exposure now stops work (FAILED) |
-| T5b Unattended drill **LIVE** | A weekly schedule on tiny-agenticsoc, the API restarted mid-week | Fires on time, once; you are notified at each step | the live run |
+| T5b Unattended drill **LIVE** | A weekly schedule on tiny-agenticsoc, the API restarted mid-week | Fires on time, once; you are notified at each step | the live run: [record](../runs/2026-11-14-phase-5-unattended-run.md) ($2.18; restart drill $0) |
 | **Part C** | | | |
 | T6 Managed Agents spike **LIVE** | Adapter for reviewers; go or no-go ADR-020 | Rules in 4.4 kept, or the gap recorded | adapter contract tests with a fake; the live comparison. Done: [record](../runs/2026-11-14-phase-5-managed-agents.md) ($0.76) |
 | **Part D** | | | |
-| T7 Baselines | Your 3 hand-driven tasks recorded; comparison in the report | Comparison shown, stated as a small sample | metrics tests for the comparison |
-| T8 Exit **LIVE** | A real multi-task spec on tiny-agenticsoc with schedules and notifications on | Delivered, measured, notified | recorded run, with the report |
-| T9 Developers | Decide 2 or 3 from T8's numbers (Q6) | Decision recorded | — |
+| T7 Baselines | Your 3 hand-driven tasks recorded; comparison in the report | Comparison shown, stated as a small sample | metrics tests for the comparison. **Deferred** (2026-11-15, the human's choice: no time before the credits expire). The main question stays open |
+| T8 Exit **LIVE** | A real multi-task spec on tiny-agenticsoc with schedules and notifications on | Delivered, measured, notified | recorded run, with the report: [record](../runs/2026-11-15-phase-5-exit-run.md) ($2.42) |
+| T9 Developers | Decide 2 or 3 from T8's numbers (Q6) | Decision recorded | — **Decided: stay at 2.** T8's plan had one developer task and a dependency; across Phase 5's runs no developer task ever waited for a free developer. A one-QA-agent queue did (T5b), so a second QA agent is the better next step if parallel test work matters |
 | T10 | Guide chapters 17 (continuous operation) and 18 (runtimes), chapter 13 scenarios, exec summary, exit check | Every criterion mapped to evidence | — |
 
 ## 6. Phase 5 exit criteria
 
 - [x] Codex is no longer on any critical path; SPEC and ADR-003 say so (T0).
 - [x] Reviewers on two different models from each other and from developers, with the planted bug still caught (T1–T3): [record](../runs/2026-11-14-phase-5-review-check.md), `test_the_two_reviewers_default_to_different_models`.
-- [ ] Schedules and follow-ups fire once, on time, through `apply_command`, including after a restart (T4, T5b).
-- [ ] You are told when something needs you, without opening the dashboard; credential exposure always first (T5, T5b).
+- [x] Schedules and follow-ups fire once, on time, through `apply_command`, including after a restart (T4, T5b): [record](../runs/2026-11-14-phase-5-unattended-run.md), `test_two_schedulers_never_fire_the_same_timer`, `test_a_schedule_missed_while_axiom_was_down_fires_once`.
+- [x] You are told when something needs you, without opening the dashboard; credential exposure always first (T5, T5b): inbox issue #13 on tiny-agenticsoc, `test_a_credential_exposure_is_delivered_first`. Email delivery needs GitHub's "Include your own updates" when the token is the human's own.
 - [x] A second runtime has been tried for real, and the result is written down whatever it is (T6): [record](../runs/2026-11-14-phase-5-managed-agents.md), ADR-020, `test_a_whole_review_through_the_adapter`.
-- [ ] The main question has a measured answer from baselines, stated as a small sample (T7, T8).
-- [ ] A real spec is delivered with Axiom running unattended between your approvals and merges (T8).
+- [ ] The main question has a measured answer from baselines, stated as a small sample (T7, T8). **Not met: T7 deferred.** T8 measured Axiom's side (time, cost, rework); the hand-driven side is still missing.
+- [x] A real spec is delivered with Axiom running unattended between your approvals and merges (T8): [record](../runs/2026-11-15-phase-5-exit-run.md); SOC-014's merge pending.
 
 ## 7. Expected cost, and using the credits before they expire
 
