@@ -8,12 +8,15 @@ coding agents on real software work, with you as CTO. See [SPEC.md](SPEC.md).
 [Blog post](https://bharathcmbox.github.io/posts/axiom/) ·
 [LinkedIn post](https://www.linkedin.com/posts/bharath-chandrasekhar-6285b4_aiagents-aiengineering-share-7524984326103605248-k899/)
 
-**Status: Phases 1–4 complete.** You give Axiom a specification. A planner agent splits it into tasks;
+**Status: Phases 1–5 complete** (hand-driven baselines deferred). Axiom can also run on its own between your
+decisions: schedules request plans, reminders follow up on anything waiting for you, and notifications reach you on
+a GitHub issue ([chapter 17](docs/guide/17-continuous-operation.md)). You give Axiom a specification. A planner agent splits it into tasks;
 you approve the plan. Developer and QA agents implement them in locked-down sandboxes, in parallel where
 the work is independent. Independent reviewers on a different model and your CI judge each change,
 sending it back until it passes. **You merge. Axiom never does.**
 
-Proof: the [Phase 4 exit run](docs/runs/2026-11-07-phase-4-exit-run.md). A five-task spec on
+Proof: the [Phase 5 exit run](docs/runs/2026-11-15-phase-5-exit-run.md) (a feature delivered while Axiom ran
+unattended, $2.42) and the [Phase 4 exit run](docs/runs/2026-11-07-phase-4-exit-run.md). A five-task spec on
 `tiny-agenticsoc` was planned, approved, built by two developers and a QA agent, reviewed and merged in
 65 minutes, for $8.29. Earlier, a planted one-character bug that passed every test and CI was caught by
 a reviewer and fixed on the same PR ([PR #2](https://github.com/bharathcmbox/tiny-agenticsoc/pull/2)).
@@ -156,6 +159,5 @@ credential helper isn't reachable: try `wsl --shutdown` from Windows. Base image
 
 GitHub doesn't enforce the merge gate on a free private repository, so an early merge is possible
 (it's recorded and flagged). Eight merged tasks and one planted bug show the system works, not yet how
-well at scale: whether it beats one person driving one session needs the hand-driven baselines Phase 5
-collects. Full lists: [phase 3](docs/plan/phase-3.md#9-known-limitations) and the
+well at scale: whether it beats one person driving one session needs hand-driven baselines, which are still to do. Full lists: [phase 3](docs/plan/phase-3.md#9-known-limitations) and the
 [exit run](docs/runs/2026-11-07-phase-4-exit-run.md#what-the-run-taught).

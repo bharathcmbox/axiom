@@ -81,7 +81,7 @@ flowchart LR
     p2["<b>Phase 2</b><br/>First worker<br/>Claude Code adapter,<br/>sandbox, PR<br/>✅ done"]
     p3["<b>Phase 3</b><br/>Quality organization<br/>reviewers, CI gate,<br/>changes-requested loop<br/>✅ done"]
     p4["<b>Phase 4</b><br/>Engineering management<br/>planner, QA, parallel work,<br/>metrics, dashboard, report<br/>✅ done"]
-    p5["<b>Phase 5</b><br/>Scale + diversify<br/>reviewer models,<br/>continuous operation,<br/>second runtime"]
+    p5["<b>Phase 5</b><br/>Scale + diversify<br/>reviewer models,<br/>continuous operation,<br/>second runtime<br/>✅ done"]
     p1 --> p2 --> p3 --> p4 --> p5
 ```
 

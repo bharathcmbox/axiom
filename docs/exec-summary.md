@@ -1,6 +1,6 @@
 # Axiom: executive summary
 
-*November 2026, at the end of Phase 4.*
+*November 2026, at the end of Phase 5.*
 
 ## What it is
 
@@ -19,7 +19,7 @@ flowchart LR
 
 ## Where it stands
 
-All four phases planned so far are built and proven on a real repository (`tiny-agenticsoc`):
+All five phases are built and proven on a real repository (`tiny-agenticsoc`), with one Phase 5 item deferred:
 
 | Phase | Proven by |
 |---|---|
@@ -27,6 +27,7 @@ All four phases planned so far are built and proven on a real repository (`tiny-
 | 2. First worker | A real task went from READY to an open PR with no human input |
 | 3. Quality | A planted one-character bug passed every test and CI; a reviewer caught it; an agent fixed it on the same PR |
 | 4. Engineering management | A five-task spec planned, approved, built in parallel, reviewed and merged end to end |
+| 5. Always-on | A weekly schedule requested a plan on its own; a feature was delivered with Axiom waiting quietly between your approvals and merges; notifications reached you on GitHub; a restart didn't make a schedule fire twice; the same reviews ran on a second runtime (Managed Agents). Hand-driven baselines deferred |
 
 ## Results so far
 
@@ -39,6 +40,11 @@ All four phases planned so far are built and proven on a real repository (`tiny-
 | Agent time per task | about 3 minutes |
 | Waiting for the human to merge | 13–27 minutes per PR |
 | Reviews' share of cost | about three quarters |
+
+**Phase 5 added:** a scheduled run (two tasks, $2.18, about eleven minutes of agent work) and a feature with a
+dependency between its tasks ($2.42, about seven minutes of agent work over nineteen hours, the rest waiting for
+you); all eight Phase 5 reviews passed on the first round. Reviewers now run on two different models: code review
+on Claude Fable 5.2, security on Claude Sonnet 5.5, both with checklists a review must cover.
 
 **Two findings stand out.** The human is the bottleneck, by about tenfold. And reviews are most of the cost:
 Claude Sonnet 5.5 as a reviewer cost about a seventh of Claude Fable 5.1 and agreed on every verdict, including
@@ -82,24 +88,26 @@ code to its branch. Reviews, CI and a human merge stand between that branch and 
 
 ## Cost to build
 
-The API cost of building and proving all four phases was about $23: under $2 for Phases 1–3, and $21.79 for
-Phase 4, including drills and the reviewer comparison. That's within a $35 cap. Every figure comes from the
+The API cost of building and proving all five phases was about $30: under $2 for Phases 1–3, $21.79 for Phase 4,
+and about $7.40 for Phase 5 (live review checks, the scheduled run, the feature run and the Managed Agents spike),
+within caps of $35 and $40. Every figure comes from the
 metered proxy and the event log.
 
 ## Limits and risks
 
 - **Small sample.** Eight tasks, one planted bug. The numbers describe the system, not yet its quality at scale.
-- **The main question is open.** Whether agents beat one person with one AI session needs hand-driven baselines,
-  which Phase 5 collects.
+- **The main question is open.** Whether agents beat one person with one AI session needs hand-driven baselines.
+  Phase 5 deferred them.
 - **One machine, one operator.** The API is local, and GitHub's own merge protection isn't enforced yet.
 - **Unverified paths.** The OpenRouter provider change in `tiny-agenticsoc` was tested offline only.
 
-## Next: Phase 5
+## Next
 
-Built on Claude and the Anthropic platform only ([plan](plan/phase-5.md)): reviewers on models that differ
-from each other and from developers, continuous operation (schedules, follow-ups, and notifications when you're
-needed), a second runtime (Managed Agents) as an experiment, delivering `tiny-agenticsoc` end to end, and
-baselines to answer whether this beats doing it yourself.
+- **Baselines** (deferred from Phase 5): a few tasks done by hand in one Claude Code session each, to answer the
+  main question.
+- **A month unattended:** the weekly schedule keeps running; the first reminders firing for real.
+- **Managed Agents for reviews,** once the session driver's Anthropic key fits ADR-015 (ADR-020).
+- **A second QA agent,** since one QA agent made parallel test tasks wait.
 
 More: [user guide](user-guide.md) · [admin guide](admin-guide.md) · [the guide](guide/README.md) ·
-[exit run](runs/2026-11-07-phase-4-exit-run.md) · [SPEC](../SPEC.md)
+[Phase 5 exit run](runs/2026-11-15-phase-5-exit-run.md) · [SPEC](../SPEC.md)

@@ -2,8 +2,9 @@
 
 Axiom coordinates coding agents (Claude Code first; Anthropic-only for now) through a backlog, state machines,
 leases, and an event log. See SPEC.md, docs/plan/, docs/guide/, and docs/user-guide.md and docs/admin-guide.md. Phases 1 (control plane),
-2 (first worker), 3 (independent review, CI gate, GitHub sync) and 4 (planning, QA, parallel work, metrics,
-hardening) are done; Phase 5 (scale and diversify, Anthropic-only: docs/plan/phase-5.md) is in progress. Axiom is product-agnostic: no SOC/security-product concepts in this repo;
+2 (first worker), 3 (independent review, CI gate, GitHub sync), 4 (planning, QA, parallel work, metrics,
+hardening) and 5 (always-on: schedules, reminders, notifications; Anthropic-only; docs/plan/phase-5.md) are done,
+with Phase 5's hand-driven baselines deferred. Axiom is product-agnostic: no SOC/security-product concepts in this repo;
 customer projects live in their own repos.
 
 ## Commands

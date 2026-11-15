@@ -1,6 +1,6 @@
 # Phase 5 plan: scale and diversify (Anthropic only)
 
-Status: **approved 2026-11-13**, with the defaults for Q1–Q9. Added at approval: the end-to-end sequence
+Status: **complete 2026-11-15**, except T7 (hand-driven baselines, deferred by the human). Approved 2026-11-13, with the defaults for Q1–Q9. Added at approval: the end-to-end sequence
 diagrams (section 4.6) and a schedule that spends the expiring credits first (section 7).
 Change of scope: SPEC's Phase 5 started with a Codex runtime for cross-model review. This plan drops that
 dependency and builds Phase 5 on Claude and the Anthropic platform only. Codex stays possible later, behind the

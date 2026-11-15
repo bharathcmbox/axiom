@@ -143,7 +143,7 @@ around $200/month for the prototype.
 
 ## 10. Phases (each ends with a working demo)
 
-Status: Phases 1–4 are complete and Phase 5 is under way; see [docs/plan/](docs/plan/) and the [executive summary](docs/exec-summary.md).
+Status: Phases 1–5 are complete (Phase 5's hand-driven baselines are deferred); see [docs/plan/](docs/plan/) and the [executive summary](docs/exec-summary.md).
 
 1. **Control plane skeleton.** Schema, agent registry, task + execution state machines, leases,
    event log, REST API, Docker Compose, tests. *Exit:* drive tasks through every state by hand;
