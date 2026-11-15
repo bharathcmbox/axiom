@@ -37,7 +37,9 @@ malformed contract once and passed when run again.
      reasonable record, but a different one from every other run.
 - **No-go for developers for now.** A developer needs to write and push. On Managed Agents that means a writable
   GitHub token given to Anthropic's git proxy, and Axiom's checks on the result (ADR-007, ADR-014) moved to read a
-  branch the agent pushed. The self-hosted sandbox (private beta) would keep execution local and may change this.
+  branch the agent pushed. Self-hosted sandboxes (public beta since 2026-05-19) keep tool execution on our own
+  machines, and self-hosted Managed Agents (the whole service, through account teams since 2026-11-12) keep
+  sessions there too; either may change this.
 
 ## Consequences
 - The runtime interface is proven, and Managed Agents is ready for an experiment on real reviews once the key's
